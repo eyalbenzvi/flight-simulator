@@ -95,9 +95,10 @@ function buildCities() {
   const base = new THREE.BoxGeometry(1, 1, 1); base.translate(0, 0.5, 0); base.setAttribute('color', new THREE.BufferAttribute(new Float32Array(base.attributes.position.count * 3).fill(1), 3));
   const LP = [], boxes = new Map(), houses = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3(), cc = new THREE.Color(), { w, h, d } = BLD;
   const BK = 6000, push = (map, x, z, v) => { const k = Math.floor(x / BK) + ':' + Math.floor(z / BK); let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
+  planLandmarks();                                   // landmarks first, so the blocks keep off their ground
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const o = (j * w + i) * 4; if (!d[o + 3]) continue; const ht = d[o], st = d[o + 1] & 7, szc = d[o + 1] >> 3, szk = 0.7 + 0.13 * szc, sd = d[o + 2] / 255, s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1;
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40)) continue;
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z)) continue;
     const y = heightAt(x, z);
     if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
     else { const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk, pal = PAL[st] || PAL[1];

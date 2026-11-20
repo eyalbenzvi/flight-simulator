@@ -35,11 +35,19 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 | `src/01-geography.js` | 1–4 | Math helpers, noise, the lon/lat tables for coast, rift, ridge; `rawHeight`, `waterLevel`; airports, runways; `CITIES` (legacy list, still used for road routing and minarets); height grid `HGT`, `heightAt`, `groundAt`; `terrainColor` |
 | `src/02-scene-terrain.js` | 5 | Renderer, camera, lights, noise and field textures, terrain and water shaders, `buildTerrain`, `buildWater` |
 | `src/03-world.js` | 6, 7, 7b, 7c | Airports; `buildCities` (from the raster); landmarks; roads and traffic; camera-local trees (`updateScatter`); ponds, industry, ships; Hebrew sky labels; Nahalal, pivot fields, railways and trains; rivers |
+| `src/03b-landmarks.js` | 7d | `LANDMARKS`: what each city of 60,000+ is known for, as [lon, lat, kind, options]; `LMK_KIND` builders (tower, stadium, mosque, port, …); `planLandmarks` (before `buildCities`, reserves ground via `landmarkAt`) and `buildCityLandmarks` (three merged meshes per city, culled with the city blocks) |
 | `src/04-sky.js` | 8 | Sky shader, clouds, sun glare, time of day (`TOD`, `applyTOD`), shared uniforms `ENV` |
 | `src/05-aircraft.js` | 9 | `PLANES` specs, the four 3D models, flight deck, `selectPlane` |
 | `src/06-flight.js` | 10, 11 | State `S`, `spawn`, flight-law helpers (`pitchFor`, `rollFor`), `updateControls` (autoland, autopilot, assisted and manual laws), `physics`, `updateSystems`, cameras |
 | `src/07-hud-and-modes.js` | 12, 12b, 12d, 12e | PFD, minimap, hints, key guide; settings (`SAVE`), smoke trails, air traffic, weather, photo mode; Easy mode (`arcadeStep`), translations (`L`, `TRD`, `applyLang`); obstacle hash, explosion, level buttons |
 | `src/08-app.js` | 13–17 | Audio (`Snd`), input (`action`), menus, main `loop`, boot (`init`) |
+
+## Canvas textures survive a GPU reset
+
+Android browsers can wipe 2D canvases after a GPU reset or while the tab sleeps, which used to leave a black minimap and invisible
+place names. `setupCanvasGuard` (in `src/08-app.js`) saves every canvas used as a texture, and the baked map image, as a PNG at start-up
+and repaints them on `contextrestored`, on `webglcontextrestored`, when the page comes back into view, and when a reference pixel of
+the map image changes (checked every 3 s). A canvas texture created after start-up is not covered: create textures during `init`.
 
 ## Flight modes (`S.mode`, set only through `setMode`)
 

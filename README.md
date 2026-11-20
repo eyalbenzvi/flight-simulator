@@ -15,7 +15,7 @@ With GitHub Pages enabled on the repository root, the same file is the live site
 | Path | What it is |
 | --- | --- |
 | `index.html` | Markup and CSS; loads the scripts in `src/` in order |
-| `src/01-geography.js` … `src/08-app.js` | The simulator, split by subsystem (see `CLAUDE.md`) |
+| `src/01-geography.js` … `src/08-app.js` | The simulator, split by subsystem (see `CLAUDE.md`); `src/03b-landmarks.js` holds the city landmarks |
 | `src/data.js` | **Generated.** Settlement raster (base64 PNG) and the list of localities |
 | `src/roads.js` | **Generated.** The road network from OpenStreetMap |
 | `data/` | The same data as plain files, plus previews |

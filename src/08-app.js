@@ -143,6 +143,32 @@ function refreshMenu() {
 }
 function openMenu() { if (!S.started) return; S.paused = true; for (const k in keys) keys[k] = false; refreshMenu(); $('menu').style.display = 'flex'; $('menu').scrollTop = 0; }
 function closeMenu() { S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
+/** Android browsers can wipe 2D canvases after a GPU reset (memory pressure, a heavy settings change) or while the tab sleeps.
+    Every canvas the scene keeps as a texture, and the baked map image, would come back blank: a black minimap and invisible
+    place names. Each one is saved once as a PNG and repainted when its canvas, or the WebGL context, is restored, and a
+    reference pixel of the map image is checked every few seconds and whenever the page comes back into view. */
+const GUARD = { list: [], busy: false };
+function setupCanvasGuard() {
+  const byCanvas = new Map(), add = (c, tex) => {
+    if (!(c instanceof HTMLCanvasElement) || c === pfdC || c === mapC || !c.width || !c.height) return;
+    let e = byCanvas.get(c); if (!e) { e = { c, texs: [], blob: null }; byCanvas.set(c, e); GUARD.list.push(e); c.toBlob(b => e.blob = b); c.addEventListener('contextrestored', () => repaintCanvas(e)); }
+    if (tex && !e.texs.includes(tex)) e.texs.push(tex); };
+  const scan = m => { if (!m) return; for (const k in m) { const v = m[k]; if (v && v.isTexture) add(v.image, v); } if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k].value; if (v && v.isTexture) add(v.image, v); } };
+  scene.traverse(o => { if (Array.isArray(o.material)) o.material.forEach(scan); else scan(o.material); });
+  add(mapImg, null);
+  // the reference pixel: the middle of the map image is land, never transparent
+  const mx = mapImg.getContext('2d'); GUARD.ref = [mapImg.width >> 1, mapImg.height >> 1]; GUARD.refA = mx.getImageData(GUARD.ref[0], GUARD.ref[1], 1, 1).data[3];
+  renderer.domElement.addEventListener('webglcontextrestored', repaintAll);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(checkCanvases, 300); });
+  setInterval(checkCanvases, 3000);
+}
+function checkCanvases() { if (GUARD.busy || !GUARD.refA) return; const a = mapImg.getContext('2d').getImageData(GUARD.ref[0], GUARD.ref[1], 1, 1).data[3]; if (a !== GUARD.refA) repaintAll(); }
+function repaintAll() { GUARD.busy = true; Promise.all(GUARD.list.map(repaintCanvas)).then(() => { GUARD.busy = false; mapLbl = null; drawMap(); }); }
+function repaintCanvas(e) {
+  if (!e.blob) return Promise.resolve();
+  return createImageBitmap(e.blob).then(bmp => { const x = e.c.getContext('2d'); x.save(); x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = 'copy'; x.drawImage(bmp, 0, 0); x.restore(); bmp.close && bmp.close();
+    for (const t of e.texs) t.needsUpdate = true; }).catch(() => {});
+}
 function buildMenu() {
   FREE = [
     { label: 'Takeoff: Ben Gurion Airport', type: 'ground', rw: RUNWAYS[0] },
@@ -193,15 +219,15 @@ function loop(now) {
   }
   ENV.uTime.value = TNOW; if (TR) TR.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * DEG / 2));
   if (run || !S.started) for (const s of clouds.children) { s.position.x += 6 * dt; if (s.position.x > X1 + 12000) s.position.x = X0 - 12000; }
-  for (const m of cityMeshes) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
+  for (const m of [...cityMeshes, ...LMK.meshes]) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
   renderer.render(scene, camera);
 }
 
 // ---------- 17. Boot ----------
 function init() {
-  buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
-  buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode);
+  buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
+  buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
   const pick = k => { selectPlane(k); spawn(FREE[0]); $('toast').style.display = 'none'; planeCards($('sPlanes'), pick); };
   planeCards($('sPlanes'), pick); startPick = pick;
