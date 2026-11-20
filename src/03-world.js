@@ -87,30 +87,41 @@ const bldAt = (i, j) => (i < 0 || j < 0 || i >= BLD.w || j >= BLD.h) ? 0 : BLD.d
 /** How built-up the ground is around a point (0…1), from the raster. */
 function urbanAt(x, z) { const i = Math.floor((x - X0) / 60), j = Math.floor((z - Z0) / 60); let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (bldAt(i + di, j + dj)) n++; return Math.min(1, n / 5); }
 /** Every settlement is built from the raster: apartment blocks and towers in the cities, stone houses in Arab towns, red roofs in kibbutzim and moshavim. */
+const FIT_OFFS = [[0, 0], [18, 0], [-18, 0], [0, 18], [0, -18], [13, 13], [-13, 13], [13, -13], [-13, -13]];
 function buildCities() {
   bldMat = windowize(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }));
   const houseMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const PAL = { 1: [0xd9dde0, 0xc9ced4, 0xe8e4da, 0xdcd8cc, 0xcfd6dc], 2: [0xe2d6b8, 0xd8c9a3, 0xe9dfc6, 0xcdbf9c], 4: [0x9db2c6, 0xb4c2cf, 0x8fa6ba] };
   const base = new THREE.BoxGeometry(1, 1, 1); base.translate(0, 0.5, 0); base.setAttribute('color', new THREE.BufferAttribute(new Float32Array(base.attributes.position.count * 3).fill(1), 3));
   const LP = [], boxes = new Map(), houses = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3(), cc = new THREE.Color(), { w, h, d } = BLD;
-  const push = (map, x, z, v) => { const k = Math.floor(x / 12000) + ':' + Math.floor(z / 12000); let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
+  const BK = 6000, push = (map, x, z, v) => { const k = Math.floor(x / BK) + ':' + Math.floor(z / BK); let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const o = (j * w + i) * 4; if (!d[o + 3]) continue; const ht = d[o], st = d[o + 1] & 7, szc = d[o + 1] >> 3, szk = 0.7 + 0.13 * szc, sd = d[o + 2] / 255, s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1;
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || g.field) continue;
-    if (AIRPORTS.some(ap => Math.hypot(x - ap.x, z - ap.z) < ap.R + 150)) continue; const y = heightAt(x, z);
-    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; if (nearRoad(hx, hz, 13)) continue; push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40)) continue;
+    const y = heightAt(x, z);
+    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
     else { const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk, pal = PAL[st] || PAL[1];
-      if (nearRoad(x, z, Math.hypot(bw, bd) / 2)) continue;
-      push(boxes, x, z, [x, y - 8, z, bw, ht + 8, bd, 0, pal[(s3 * pal.length) | 0]]); addObst(x, z, bw, bd, 0, y - 8, y + ht); }
+      // a block that touches a road is nudged off it, then shrunk; only if nothing fits is it left out (cities have a street every block or two)
+      let bx = x, bz = z, f = 1; const r0 = Math.max(bw, bd) * 0.6;
+      if (nearRoad(x, z, r0)) { f = 0; for (const k of [0.75, 0.55]) { for (const [ox, oz] of FIT_OFFS) if (!nearRoad(x + ox, z + oz, r0 * k)) { bx = x + ox; bz = z + oz; f = k; break; } if (f) break; } if (!f) continue; }
+      const by = bx === x && bz === z ? y : heightAt(bx, bz), w2 = bw * f, d2 = bd * f;
+      push(boxes, bx, bz, [bx, by - 8, bz, w2, ht + 8, d2, 0, pal[(s3 * pal.length) | 0]]); addObst(bx, bz, w2, d2, 0, by - 8, by + ht); }
     if (sd < 0.75) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
-  const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * 12000, cz = (bz + 0.5) * 12000; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), 9800)]; };
+  // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
+  for (const l of LOCS) { const x = lon2x(l[2]), z = lat2z(l[3]), i0 = Math.floor((x - X0) / 60), j0 = Math.floor((z - Z0) / 60); let any = false;
+    for (let dj = -4; dj <= 4 && !any; dj++) for (let di = -4; di <= 4; di++) if (bldAt(i0 + di, j0 + dj)) { any = true; break; }
+    if (any || groundAt(x, z).water || airfieldAt(x, z, 60)) continue;
+    const R = rng(Math.round(l[2] * 9973 + l[3] * 7919)), n = clamp(Math.round(6 + l[4] * 4), 6, 22);
+    for (let k = 0; k < n; k++) { const a = k * 2.39996 + R() * 0.4, r = 22 + 15 * Math.sqrt(k) + R() * 6, hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r; if (nearRoad(hx, hz, 10)) continue;
+      push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 11 + R() * 6, 8 + R() * 3, 10 + R() * 5, Math.floor(R() * 4) * 0.785, 0.93 + R() * 0.07]); } }
+  const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 400)]; };
   for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
     list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, far: HIRES ? 27000 : 14000 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 22000 : 11000 }; scene.add(im); cityMeshes.push(im); }
   for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, far: HIRES ? 13000 : 7000 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : 6000 }; scene.add(im); cityMeshes.push(im); }
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
   cityLights = new THREE.Points(lg, new THREE.PointsMaterial({ size: 30, map: lightDot(), color: 0xffc46b, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   cityLights.visible = false; scene.add(cityLights);
@@ -182,6 +193,23 @@ const ROADS = [
 const ROADNUM = ['2', '4', '1', '6', '90', '90', '40', '25', '31', '60', '65', '4', '85', '75', '', '34', '98', '', '', '40', '99', '', '20', '5', '443', '38', '71'], ROADLBL = [];
 ROADS.push([2, [[34.795, 32.115], [34.797, 32.07], [34.79, 32.03], [34.79, 31.99]]], [2, [[34.82, 32.11], [34.90, 32.115], [35.0, 32.11], [35.17, 32.105]]], [1, [[34.98, 31.87], [35.08, 31.88], [35.17, 31.85], [35.205, 31.83]]],
   [1, [[34.99, 31.84], [34.99, 31.75], [34.97, 31.66], [34.90, 31.60]]], [1, [[35.29, 32.61], [35.40, 32.56], [35.50, 32.50]]]);
+/** Half-widths in game metres: motorway and trunk, primary, secondary (wider than life so they read from the air). */
+const ROAD_HW = { 0: 6, 1: 9, 2: 16 };
+let ROADLINES = null;
+/** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
+    (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
+function roadLines() {
+  if (ROADLINES) return ROADLINES; ROADLINES = []; const cov = new Set(), C = 800, ck = (x, z) => Math.floor(x / C) * 100003 + Math.floor(z / C);
+  for (const [cls, ref, e] of OSM_ROADS) { const D = []; let lo = e[0], la = e[1], px = 0, pz = 0;
+    for (let i = 0; i < e.length; i += 2) { if (i) { lo += e[i]; la += e[i + 1]; } const x = lon2x(lo / 1e4), z = lat2z(la / 1e4);
+      if (D.length) { const n = Math.ceil(Math.hypot(x - px, z - pz) / 45); for (let k = 1; k < n; k++) D.push([px + (x - px) * k / n, pz + (z - pz) * k / n]); }
+      D.push([x, z]); px = x; pz = z; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) cov.add(ck(x + a * C, z + b * C)); }
+    ROADLINES.push({ cls, ref, D }); }
+  // a hand-drawn road keeps only the stretches the OSM extract does not cover (it reaches a few km past the borders)
+  ROADS.forEach(([cls, pts], i) => { let run = []; const flush = () => { if (run.length > 12) ROADLINES.push({ cls, ref: ROADNUM[i] || '', D: run }); run = []; };
+    for (const p of splinePath(pts, 45)) { if (cov.has(ck(p[0], p[1]))) flush(); else run.push(p); } flush(); });
+  return ROADLINES;
+}
 /** Road and railway corridors, so nothing is built on a road. Every centreline segment (the same splines the road meshes use)
     goes into 400 m buckets, padded by its half-width plus the largest object radius we ever ask about. */
 let ROADIDX = null; const RIDX_C = 400, RIDX_PAD = 300;
@@ -189,7 +217,7 @@ function roadIndex() {
   ROADIDX = new Map(); const add = (D, hw) => { for (let i = 0; i + 1 < D.length; i++) { const [ax, az] = D[i], [bx, bz] = D[i + 1], seg = [ax, az, bx, bz, hw], e = hw + RIDX_PAD;
     for (let cz = Math.floor((Math.min(az, bz) - e) / RIDX_C); cz <= Math.floor((Math.max(az, bz) + e) / RIDX_C); cz++) for (let cx = Math.floor((Math.min(ax, bx) - e) / RIDX_C); cx <= Math.floor((Math.max(ax, bx) + e) / RIDX_C); cx++) {
       const k = cx * 100003 + cz; let a = ROADIDX.get(k); if (!a) ROADIDX.set(k, a = []); a.push(seg); } } };
-  for (const [cls, pts] of ROADS) add(splinePath(pts, 45), cls === 2 ? 24 : 10);
+  for (const r of roadLines()) add(r.D, ROAD_HW[r.cls]);
   for (const pts of RAIL_LINES) add(splinePath(pts, 45), 5);
 }
 /** True when a round object of radius r (metres) centred at x, z would touch a road or railway, with a 4 m verge. */
@@ -205,24 +233,27 @@ function buildRoads() {
   const tex = { 1: mk(32, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#34363a'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#d8d6cc'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
     2: mk(64, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#303236'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#5f7a45'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#e4e2d8'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
   const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
-  ROADS.forEach(([cls, pts], ri) => {
-    const D = splinePath(pts, 45), hw = cls === 2 ? 24 : 10, { P, U, N, I } = G[cls]; let prev = -1, path = [], len = 0;
-    const mid = D[D.length >> 1]; if (ROADNUM[ri]) ROADLBL.push({ x: mid[0], z: mid[1], n: ROADNUM[ri], cls });
+  for (const { cls, D } of roadLines()) {
+    const hw = ROAD_HW[cls], { P, U, N, I } = G[cls === 2 ? 2 : 1]; let prev = -1, path = [], len = 0;
     for (let i = 0; i < D.length; i++) {
       const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
-      if (g.water || g.field) { prev = -1; if (path.length > 4) roadPaths.push(path); path = []; continue; }
+      if (g.water || airfieldAt(px, pz, ROAD_HW[cls])) { prev = -1; if (path.length > 4) roadPaths.push(path); path = []; continue; }
       const k = P.length / 3; len += i ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
       for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 2.2 + cls * 0.2, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
       if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1);
       prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
     }
     if (path.length > 4) roadPaths.push(path);
-  });
+  }
+  // route-number shields for the map: the middle of each numbered road longer than about 7 km, one per number within 36 km
+  for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
+    if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
   for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
   // traffic: light points that drive along the roads (headlights at night)
   const n = 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { const p = roadPaths[(R() * roadPaths.length) | 0]; cars.push({ p, s: R() * (p.length - 2), v: (R() < 0.5 ? -1 : 1) * (22 + R() * 12) / 45 }); }
+  const cum = []; let tot = 0; for (const p of roadPaths) cum.push(tot += p.length);          // cars spread by road length
+  for (let i = 0; i < n; i++) { const t = R() * tot; let lo = 0, hi = cum.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < t) lo = m + 1; else hi = m; } const p = roadPaths[lo]; cars.push({ p, s: R() * (p.length - 2), v: (R() < 0.5 ? -1 : 1) * (22 + R() * 12) / 45 }); }
   const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(tp, 3));
   traffic = { cars, pts: new THREE.Points(tg, new THREE.PointsMaterial({ size: 9, map: lightDot(), color: 0xf4f1e6, transparent: true, opacity: 0.9, depthWrite: false, fog: false })) };
   traffic.pts.frustumCulled = false; scene.add(traffic.pts);
@@ -265,7 +296,7 @@ function updateScatter() {
       const stoneV = (lon > 35.03 && lon < 35.45 && lat > 31.32 && lat < 32.55) || (lon < 34.52 && lat < 31.6) || lon > 35.72 || (lat > 32.75 && lat < 32.98 && lon > 35.15 && lon < 35.42) || arid > 0.55;
       const vd = Math.hypot(gx - (vx * 14 + 7), gz - (vz * 14 + 7)), vill = false && urban < 0.2 && (stoneV ? arid < 0.8 && farm < 0.9 : farm > 0.35) && hash2(vx * 5.1 + 2, vz * 3.7 + 5) < (stoneV ? 0.2 : 0.27) && vd < 4.4;
       if (vill) {
-        const g = groundAt(x, z); if (g.water || g.field || nearRoad(x, z, 14)) continue; const y = triHeight(x, z);
+        const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 14) || nearRoad(x, z, 14)) continue; const y = triHeight(x, z);
         if (vd < 0.6) { p.set(x, y, z); q.set(0, 0, 0, 1); if (stoneV && nm < 40) { sc.set(40, 40, 40); m4.compose(p, q, sc); mm.setMatrixAt(nm++, m4); } else if (!stoneV && nw < 40) { sc.set(11, 24, 11); m4.compose(p, q, sc); wm.setMatrixAt(nw++, m4); } continue; }
         if (h > (stoneV ? 0.7 : 0.55)) continue;
         e.set(0, Math.floor(hash2(vx, vz) * 4) * 0.4 + (stoneV ? h * 3 : 0), 0); q.setFromEuler(e); p.set(x, y - 1, z);
@@ -274,7 +305,7 @@ function updateScatter() {
         continue;
       }
       const pr = wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr || nt >= 3200) continue;
-      const g = groundAt(x, z); if (g.water || g.field || nearRoad(x, z, 6)) continue;
+      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6)) continue;
       const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = arid > 0.6, ht = (shrub ? 3 + k * 3 : 11 + k * 12) * fade, wd = (shrub ? 5 + k * 4 : 5 + k * 5) * fade;
       p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
       tm.setColorAt(nt++, shrub ? col.setRGB(0.36 + k * 0.1, 0.40 + k * 0.08, 0.22) : col.setRGB(0.10 + k * 0.08, 0.24 + k * 0.12, 0.08 + k * 0.05));
@@ -288,7 +319,7 @@ function buildDetails() {
   // --- ponds: Dead Sea evaporation pans, fish ponds, salt pans, greenhouses ---
   const P = [], C = [], I = [], col = new THREE.Color();
   const ponds = (lon, lat, cols, rows, w, d, pal, rot) => { const cx = lon2x(lon), cz = lat2z(lat), R = rng(Math.round(lon * 977 + lat * 131)), ca = Math.cos(rot), sa = Math.sin(rot);
-    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || g.field || nearRoad(x, z, Math.hypot(w, d) / 2)) continue;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || airfieldAt(x, z, Math.hypot(w, d) / 2) || nearRoad(x, z, Math.hypot(w, d) / 2)) continue;
       const y = triHeight(x, z) + 2.5, k = P.length / 3; col.setHex(pal[(R() * pal.length) | 0]);
       for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) { const ox = sx * w / 2, oz = sz * d / 2; P.push(x + ox * ca - oz * sa, y, z + ox * sa + oz * ca); C.push(col.r, col.g, col.b); }
       I.push(k, k + 1, k + 2, k + 2, k + 1, k + 3); } };
@@ -339,7 +370,7 @@ function bakeMap() {
   const hi = document.createElement('canvas'); hi.width = mapImg.width * 2; hi.height = mapImg.height * 2;
   const x = hi.getContext('2d'), W = hi.width, H = hi.height, mx = v => (v - X0) / (X1 - X0) * W, mz = v => (v - Z0) / (Z1 - Z0) * H;
   x.imageSmoothingQuality = 'high'; x.drawImage(mapImg, 0, 0, W, H); mapImg = hi; x.lineJoin = 'round';
-  for (const p of roadPaths) { x.strokeStyle = p[0][3] === 2 ? 'rgba(255,236,170,.95)' : 'rgba(240,240,235,.6)'; x.lineWidth = p[0][3] === 2 ? 2.4 : 1.3; x.beginPath(); p.forEach((q, i) => i ? x.lineTo(mx(q[0]), mz(q[2])) : x.moveTo(mx(q[0]), mz(q[2]))); x.stroke(); }
+  for (const c of [0, 1, 2]) for (const p of roadPaths) { if (p[0][3] !== c) continue; x.strokeStyle = c === 2 ? 'rgba(255,236,170,.95)' : c === 1 ? 'rgba(240,240,235,.7)' : 'rgba(230,230,225,.38)'; x.lineWidth = c === 2 ? 2.2 : c === 1 ? 1.2 : 0.8; x.beginPath(); p.forEach((q, i) => i ? x.lineTo(mx(q[0]), mz(q[2])) : x.moveTo(mx(q[0]), mz(q[2]))); x.stroke(); }
   x.fillStyle = 'rgba(238,232,220,.8)'; const sx = W / BLD.w, sy = H / BLD.h; for (let j = 0; j < BLD.h; j++) for (let i = 0; i < BLD.w; i++) if (BLD.d[(j * BLD.w + i) * 4 + 3]) x.fillRect(i * sx, j * sy, sx + 0.35, sy + 0.35);      // the real outline of every settlement
 }
 
@@ -431,7 +462,7 @@ function buildIsrael() {
   const ARAB = new Set(['Nazareth', 'Acre', 'Umm al-Fahm', 'Sakhnin', 'Shefa-Amr', 'Rahat', 'Jericho', 'Bethlehem', 'Hebron', 'Ramallah', 'Nablus', 'Jenin', 'Tulkarm', 'Qalqilya', 'Gaza', 'Khan Yunis', 'Rafah', 'Aqaba', 'Amman', 'Irbid', 'Madaba', 'Karak', 'Tyre', 'Quneitra']);
   const mins = [], domes = [];
   for (const c of CITIES) { if (!ARAB.has(c.name)) continue; const n = clamp(Math.round(c.n / 22), 2, 12), cx = lon2x(c.lon), cz = lat2z(c.lat);
-    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || g.field || nearRoad(x, z, 22)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
+    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 22) || nearRoad(x, z, 22)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   // Jaffa and East Jerusalem get a few too
   for (const [lo, la] of [[34.752, 32.052], [34.755, 32.049], [35.236, 31.781], [35.228, 31.787], [35.242, 31.775]]) { const x = lon2x(lo), z = lat2z(la), g = groundAt(x, z); if (!g.water) { mins.push([x, g.h, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   inst(GEO.minaret, mins, [42, 42, 42]);
@@ -463,7 +494,7 @@ function buildIsrael() {
     put(GEO.tower, new THREE.MeshLambertMaterial({ vertexColors: true }), cx, y0, cz).scale.set(13, 28, 13); }
   // --- centre-pivot irrigation circles in the north-western Negev ---
   { const P = [], C = [], col = new THREE.Color(), pal = [0x4f8a3a, 0x67a046, 0x3f7430, 0x8a9a4a, 0x7a6a48];
-    for (let t = 0; t < 400 && P.length < 60 * 24 * 9; t++) { const lon = 34.40 + R() * 0.42, lat = 31.16 + R() * 0.32, x = lon2x(lon), z = lat2z(lat), r = 150 + R() * 90, g = groundAt(x, z); if (g.water || g.field || ZONE[zoneAt(x, z) + 2] > 0.1 || nearRoad(x, z, r)) continue;
+    for (let t = 0; t < 400 && P.length < 60 * 24 * 9; t++) { const lon = 34.40 + R() * 0.42, lat = 31.16 + R() * 0.32, x = lon2x(lon), z = lat2z(lat), r = 150 + R() * 90, g = groundAt(x, z); if (g.water || airfieldAt(x, z, r) || ZONE[zoneAt(x, z) + 2] > 0.1 || nearRoad(x, z, r)) continue;
       const hs = [triHeight(x + r, z), triHeight(x - r, z), triHeight(x, z + r), triHeight(x, z - r)], hi = Math.max(...hs), lo = Math.min(...hs); if (hi - lo > 7) continue; col.setHex(pal[(R() * pal.length) | 0]); const y = hi + 1.6;
       for (let k = 0; k < 24; k++) { const a = k / 24 * 6.283, b = (k + 1) / 24 * 6.283, sh = 0.85 + 0.15 * ((k >> 1) % 2); P.push(x, y, z, x + Math.cos(b) * r, y, z + Math.sin(b) * r, x + Math.cos(a) * r, y, z + Math.sin(a) * r); for (let v = 0; v < 3; v++) C.push(col.r * sh, col.g * sh, col.b * sh); } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeVertexNormals();
@@ -473,7 +504,7 @@ function buildIsrael() {
   for (const pts of RAIL_LINES) {
     const D = splinePath(pts, 45); let prev = -1, path = [];
     for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
-      if (g.water || g.field) { prev = -1; if (path.length > 30) RAIL.paths.push(path); path = []; continue; }
+      if (g.water || airfieldAt(px, pz, 5)) { prev = -1; if (path.length > 30) RAIL.paths.push(path); path = []; continue; }
       const k = P.length / 3; for (const s of [-1, 1]) { const vx = px + nx * 5 * s, vz = pz + nz * 5 * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 3, vz); N.push(0, 1, 0); }
       if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1); prev = k; path.push([px, triHeight(px, pz) + 5.2, pz]); }
     if (path.length > 30) RAIL.paths.push(path); }

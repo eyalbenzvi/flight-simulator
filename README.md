@@ -17,9 +17,11 @@ With GitHub Pages enabled on the repository root, the same file is the live site
 | `index.html` | Markup and CSS; loads the scripts in `src/` in order |
 | `src/01-geography.js` … `src/08-app.js` | The simulator, split by subsystem (see `CLAUDE.md`) |
 | `src/data.js` | **Generated.** Settlement raster (base64 PNG) and the list of localities |
+| `src/roads.js` | **Generated.** The road network from OpenStreetMap |
 | `data/` | The same data as plain files, plus previews |
 | `tools/build.py` | Inlines everything into one self-contained `dist/index.html` |
 | `tools/make_estimate.py`, `tools/ghsl2bld.py` | The data pipeline that produces `src/data.js` |
+| `tools/osm2roads.py` | Builds `src/roads.js` from an OpenStreetMap extract |
 | `tools/smoke_test.py` | Headless load-and-fly test |
 
 ## Build a single file
@@ -43,6 +45,16 @@ python3 tools/make_estimate.py     # data/estimate.png, data/locs.json
 python3 tools/ghsl2bld.py          # src/data.js, data/buildings.png
 ```
 
+## Rebuild the road network
+
+Download the Israel and Palestine extract into `raw/` and convert it (motorways, trunk, primary and secondary roads):
+
+```
+curl -o raw/israel_and_palestine.osm.pbf https://download.openstreetmap.fr/extracts/asia/israel_and_palestine.osm.pbf
+pip install osmium
+python3 tools/osm2roads.py          # src/roads.js
+```
+
 ## Test
 
 ```
@@ -58,9 +70,11 @@ python3 tools/smoke_test.py dist/index.html
 - Localities (names, coordinates, population): Israel Central Bureau of Statistics, via `arikw/israeli-localities`.
 - Jurisdiction borders: Israel Ministry of Interior open data, via `tzagim/geojson-israel`.
 - Places outside Israel: GeoNames `cities1000`, via the `reverse_geocoder` package.
+- Roads in Israel and Palestine: © OpenStreetMap contributors, available under the Open Database License (ODbL 1.0),
+  <https://www.openstreetmap.org/copyright>. Roads beyond them (Jordan, Lebanon, Sinai) are hand-drawn.
 - Rendering: Three.js r128.
 
 Check each source's licence terms before redistributing the data. No licence has been chosen for this repository's own code yet.
 
-Terrain, roads, rivers, forests and landmarks are hand-modelled approximations, not survey data. The map is compressed 4:1
+Terrain, rivers, forests and landmarks are hand-modelled approximations, not survey data. The map is compressed 4:1
 horizontally. Not for navigation.

@@ -193,7 +193,7 @@ function loop(now) {
   }
   ENV.uTime.value = TNOW; if (TR) TR.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * DEG / 2));
   if (run || !S.started) for (const s of clouds.children) { s.position.x += 6 * dt; if (s.position.x > X1 + 12000) s.position.x = X0 - 12000; }
-  for (const m of cityMeshes) m.visible = Math.hypot(camera.position.x - m.userData.x, camera.position.z - m.userData.z) < m.userData.far;   // distance cull
+  for (const m of cityMeshes) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
   renderer.render(scene, camera);
 }

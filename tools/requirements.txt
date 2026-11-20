@@ -3,3 +3,4 @@ pillow
 rasterio
 reverse_geocoder
 playwright
+osmium

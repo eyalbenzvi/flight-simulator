@@ -171,6 +171,17 @@ function heightAt(x, z) {
 }
 const _g = { h: 0, water: false, field: false };
 /** Surface the aircraft can touch: terrain, pavement level on an airfield, or a water surface. */
+/** The airfield proper: runways with their overruns and parallel taxiway, the taxiway to the terminal, and the apron. Buildings, roads
+    and trees keep off it. It is much smaller than ap.R (the circle the ground is levelled in and where touching down is allowed): the
+    runways are at real scale while the map around them is compressed 4:1, so the circle covers several real towns (Lod, Or Yehuda…). */
+function airfieldAt(x, z, pad = 0) {
+  const seg = (ax, az, bx, bz, r) => { const dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0, 1); return Math.hypot(x - ax - dx * t, z - az - dz * t) < r + pad; };
+  for (const rw of RUNWAYS) { if (rw.x === undefined) continue; const ap = AIRPORTS[rw.ap], e = rw.len / 2 + 450;
+    if (seg(rw.x - rw.dx * e, rw.z - rw.dz * e, rw.x + rw.dx * e, rw.z + rw.dz * e, rw.w / 2 + 230)) return true;
+    if (seg(rw.x, rw.z, ap.x + ap.term[0], ap.z + ap.term[1], 70)) return true; }
+  for (const ap of AIRPORTS) { if (ap.x === undefined) continue; const s = ap.big ? 1 : 0.45; if (Math.abs(x - ap.x - ap.term[0]) < 310 * s + 140 + pad && Math.abs(z - ap.z - ap.term[1]) < 210 * s + 160 + pad) return true; }
+  return false;
+}
 function groundAt(x, z) {
   let h = heightAt(x, z); _g.water = false; _g.field = false;
   for (const ap of AIRPORTS) if (Math.hypot(x - ap.x, z - ap.z) < ap.R) { _g.field = true; h = ap.elev; }

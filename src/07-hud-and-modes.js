@@ -160,7 +160,7 @@ function drawMap() {
   M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = big ? 'rgba(0,10,20,.28)' : 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
   if (z > 1.4) {                                       // zoomed in: redraw the roads as sharp lines over the baked image
     M.lineJoin = M.lineCap = 'round';
-    for (const p of roadPaths) { const mw = p[0][3] === 2; M.strokeStyle = mw ? 'rgba(255,236,170,.95)' : 'rgba(240,240,235,.75)'; M.lineWidth = px(mw ? 2.2 : 1.3); M.beginPath();
+    for (const c of [0, 1, 2]) for (const p of roadPaths) { if (p[0][3] !== c) continue; M.strokeStyle = c === 2 ? 'rgba(255,236,170,.95)' : c === 1 ? 'rgba(240,240,235,.8)' : 'rgba(230,230,225,.5)'; M.lineWidth = px(c === 2 ? 2.2 : c === 1 ? 1.4 : 0.9); M.beginPath();
       p.forEach((q, i) => i ? M.lineTo(mx(q[0]), mz(q[2])) : M.moveTo(mx(q[0]), mz(q[2]))); M.stroke(); } }
   M.lineWidth = px(1.2); M.strokeStyle = '#ff66ee';                                     // ILS approach feathers
   for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * 9000), ey = mz(rw.tz - rw.dz * 9000);
