@@ -11,9 +11,10 @@ const PICK_SITES = [
   ['Ein Gedi', 'עין גדי', 35.387, 31.462], ['Sde Boker', 'שדה בוקר', 34.784, 30.874], ['Makhtesh Ramon', 'מכתש רמון', 34.8, 30.58], ['Timna Park', 'פארק תמנע', 34.955, 29.78],
   ['Coral Beach, Eilat', 'חוף האלמוגים, אילת', 34.918, 29.508], ['Ashkelon National Park', 'הגן הלאומי אשקלון', 34.546, 31.664], ['Beit She\'an', 'בית שאן העתיקה', 35.503, 32.503], ['Golan Heights', 'רמת הגולן', 35.75, 33.0]
 ];
-/** Familiar English names the locality list spells otherwise. */
-const PICK_ALIAS = { 'צפת': 'Safed Tzfat', 'עכו': 'Acre', 'באר שבע': 'Beersheba', 'תל אביב-יפו': 'Jaffa', 'נוף הגליל': 'Nazareth Illit', 'הרצליה': 'Herzliya', 'כפר סבא': 'Kfar Saba', 'רעננה': 'Raanana', 'קריית גת': 'Kiryat Gat',
-  'קריית שמונה': 'Kiryat Shmona', 'מודיעין-מכבים-רעות': 'Modiin', 'ראשון לציון': 'Rishon LeZion', 'נס ציונה': 'Nes Ziona', 'בית שמש': 'Beit Shemesh', 'פתח תקווה': 'Petah Tikva' };
+/** Familiar names and abbreviations the locality list spells otherwise, separated by |. */
+const PICK_ALIAS = { 'צפת': 'Safed|Tzfat', 'עכו': 'Acre', 'באר שבע': 'Beersheba|ב"ש', 'תל אביב-יפו': 'Jaffa|ת"א|תל אביב יפו|יפו', 'ירושלים': 'י-ם', 'נוף הגליל': 'Nazareth Illit|נצרת עילית', 'הרצליה': 'Herzliya', 'כפר סבא': 'Kfar Saba|כפ"ס',
+  'רעננה': 'Raanana', 'קריית גת': 'Kiryat Gat', 'קריית שמונה': 'Kiryat Shmona|ק"ש', 'מודיעין-מכבים-רעות': 'Modiin', 'ראשון לציון': 'Rishon LeZion|ראשל"צ', 'נס ציונה': 'Nes Ziona', 'בית שמש': 'Beit Shemesh',
+  'פתח תקווה': 'Petah Tikva|פ"ת', 'רמת גן': 'ר"ג', 'בני ברק': 'ב"ב', 'רמת השרון': 'רמה"ש' };
 const PICK = { open: false, where: 'start', pt: null, name: null, alt: 1, hdg: 0, s: 1, ox: 0, oy: 0, ptr: new Map(), moved: false, pinch: 0, rer: null, idx: null };
 const PICK_ALTS = [300, 1000, 2500], PICK_HDGS = [0, 90, 180, 270];
 /** Search key: no vowel points or punctuation, and English spellings folded together (Qiryat / Kiryat, Eilat / Elat, Tzfat / Zefat). */
@@ -24,15 +25,14 @@ const pickSkel = n => n.split(' ').map(w => w[0] + w.slice(1).replace(/[aeiouy\u
 function pickIndex() {
   if (PICK.idx) return PICK.idx;
   PICK.idx = LOCS.map(l => ({ en: l[1], he: l[0], lon: l[2], lat: l[3], pop: l[4], site: false })).concat(PICK_SITES.map(p => ({ en: p[0], he: p[1], lon: p[2], lat: p[3], pop: 150, site: true })));
-  for (const e of PICK.idx) { const al = PICK_ALIAS[e.he]; if (al && !e.site) e.en2 = al; }
-  for (const e of PICK.idx) { e.ne = pickNorm(e.en + (e.en2 ? ' ' + e.en2 : '')); e.nh = pickNorm(e.he); e.se = pickSkel(e.ne); e.sh = pickSkel(e.nh); }
+    for (const e of PICK.idx) { e.ne = pickNorm(e.en); e.nh = pickNorm(e.he); e.al = !e.site && PICK_ALIAS[e.he] ? PICK_ALIAS[e.he].split('|').map(pickNorm) : []; e.se = pickSkel(e.ne); e.sh = pickSkel(e.nh); }
   return PICK.idx;
 }
 /** Search results, best first: the name starts with the text, then a word in it does, then it contains it; bigger places first. */
 function pickSearch(q) {
   q = pickNorm(q); if (!q) return []; const qs = pickSkel(q);
   const score = (n, q) => n.startsWith(q) ? 0 : (' ' + n).includes(' ' + q) ? 1 : n.includes(q) ? 2 : 9, out = [];
-  for (const e of pickIndex()) { let sc = Math.min(score(e.ne, q), score(e.nh, q)); if (sc === 9 && qs.length > 1) sc = Math.min(score(e.se, qs), score(e.sh, qs)) + 3; if (sc < 9) out.push([sc, e]); }
+  for (const e of pickIndex()) { let sc = Math.min(score(e.ne, q), score(e.nh, q), ...e.al.map(a => score(a, q))); if (sc === 9 && qs.length > 1) sc = Math.min(score(e.se, qs), score(e.sh, qs)) + 3; if (sc < 9) out.push([sc, e]); }
   return out.sort((a, b) => a[0] - b[0] || b[1].pop - a[1].pop).slice(0, 8).map(a => a[1]);
 }
 /** The name of a point on the map: a site or town it is in or near, else its coordinates. */

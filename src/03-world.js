@@ -297,11 +297,11 @@ function roadJunctions() {
     const t = ((cx - ax) * e2z - (cz - az) * e2x) / den, u = ((cx - ax) * e1z - (cz - az) * e1x) / den; if (t < 0 || t > 1 || u < 0 || u > 1) continue;
     const W = A.hw >= B.hw ? A : B; add(ax + e1x * t, az + e1z * t, W.hw, Math.max(A.hw, B.hw) === Math.min(A.hw, B.hw) ? 0 : 1); }
   // T-junctions: the end of a road that lies on another road
-  L.forEach((r, li) => { for (const [ex, ez] of [r.D[0], r.D[r.D.length - 1]]) { const a = grid.get(Math.floor(ex / C) * 100003 + Math.floor(ez / C)); if (!a) continue; let best = null;
+  L.forEach((r, li) => { for (const [ei, [ex, ez]] of [r.D[0], r.D[r.D.length - 1]].entries()) { const a = grid.get(Math.floor(ex / C) * 100003 + Math.floor(ez / C)); if (!a) continue; let best = null;
     for (let p = 0; p < a.length; p += 2) { if (a[p] === li) continue; const B = L[a[p]], [ax, az] = B.D[a[p + 1]], [bx, bz] = B.D[a[p + 1] + 1], dx = bx - ax, dz = bz - az;
       const t = clamp(((ex - ax) * dx + (ez - az) * dz) / (dx * dx + dz * dz || 1), 0, 1), px = ax + dx * t, pz = az + dz * t, d = Math.hypot(ex - px, ez - pz);
       if (d < B.hw + 2 && (!best || d < best.d)) best = { d, px, pz, B }; }
-    if (best) add(best.px, best.pz, best.B.hw, 1); } });      // on the through road, at its width (a wider road ending on it would leave a round bulb)
+    if (best) { add(best.px, best.pz, best.B.hw, 1); if (best.B.hw < r.hw) r['e' + ei] = best.B.hw; } } });      // on the through road, at its width (a wider road ending on it would leave a round bulb)
   // one patch per junction (crossings found in several cells, both ends of a short link), off water and airfields
   const P = [], N = [], I = [], seen = new Map(), S2 = 20;
   for (const [x, z, hw] of J) { const k = Math.round(x / S2) * 100003 + Math.round(z / S2); if (seen.has(k)) continue; seen.set(k, 1);
@@ -322,7 +322,8 @@ function buildRoads() {
     2: mk(64, x => { x.fillStyle = '#958f7e'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#66686b'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#6f8a52'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#c9c9c4'; x.fillRect(28, 0, 1, 64); x.fillRect(35, 0, 1, 64);
       x.fillStyle = '#eeece4'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
   const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
-  for (const [li, { cls, D, dual }] of roadLines().entries()) {
+  roadJunctions();          // first: it also notes where a wide road ends on a narrower one (e0, e1), so that end can taper to fit
+  for (const [li, { cls, D, dual, e0, e1 }] of roadLines().entries()) {
     // where a road meets water or an airfield it is cut (runways are full size on the compressed map, so they cover real roads);
     // a short stub left beside an airfield is dropped rather than drawn as a road that ends in a field
     const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, roadHW(cls, dual)) ? 2 : 0), runs = [];
@@ -332,8 +333,9 @@ function buildRoads() {
     for (const [i0, i1] of runs) { let prev = -1, path = [], len = 0;
       for (let i = i0; i <= i1; i++) {
         const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl;
+        const tp = Math.min(e0 !== undefined ? i / 3 : 1, e1 !== undefined ? (D.length - 1 - i) / 3 : 1), hwI = tp < 1 ? lerp(i < 3 && e0 !== undefined ? e0 : e1, hw, Math.max(tp, 0)) : hw;
         const k = P.length / 3; len += i > i0 ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
-        for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + lift, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
+        for (const s of [-1, 1]) { const vx = px + nx * hwI * s, vz = pz + nz * hwI * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + lift, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
         if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k);
         prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
       }
@@ -341,7 +343,6 @@ function buildRoads() {
   }
   for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
-  roadJunctions();
   // route-number shields for the map: the middle of each numbered road longer than about 7 km, one per number within 36 km
   for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
     if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
