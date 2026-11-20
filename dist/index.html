@@ -75,13 +75,21 @@ body.touch #legend{display:none!important}
 #thrT span{position:absolute;left:0;right:0;top:5px;text-align:center;font-size:11px;color:var(--ink)}
 #ctx{position:absolute;right:calc(14px + var(--sr));bottom:calc(164px + var(--sb));display:flex;flex-direction:column;gap:7px;align-items:flex-end}
 #ctx button{min-width:64px;padding:11px 8px;background:rgba(9,15,22,.55)} #ctx button.hot{border-color:var(--sand);color:var(--sand)}
+#ctx button.ready{border-color:var(--green);color:var(--green);background:rgba(20,70,40,.6)} #ctx button.off{opacity:.5;border-style:dashed}
+#ctx button.active{border-color:var(--mag);color:var(--mag);background:rgba(70,20,70,.6)} #ctx button.on{border-color:var(--green);color:var(--green)}
+#landP{padding:5px 10px;font-size:13px;line-height:1.4;text-align:center;border-inline-start:3px solid var(--dim);max-width:min(92vw,440px)}
+#landP.ready{border-inline-start-color:var(--green)} #landP.ready b{color:var(--green)} #landP.active{border-inline-start-color:var(--mag)} #landP.active b{color:var(--mag)} #landP.info{border-inline-start-color:var(--sand)}
+#landP .chips2{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:4px;font-size:12px}
+#landP .chips2 span{padding:1px 7px;border-radius:9px;border:1px solid var(--line);white-space:nowrap} #landP .chips2 .on{color:var(--green);border-color:var(--green)}
+#landP .chips2 .off{color:var(--amber);border-color:var(--amber)} #landP .chips2 .mid{color:var(--sand)} #landP .chips2 .tag{color:var(--dim);border-style:dashed}
+body.touch #landP{font-size:12px;padding:4px 8px}
 body.touch #sys,body.arc #sys{display:none}
 body.arc #legend{font-size:15px;gap:5px 14px}
 body.touch #map{height:min(20vh,160px)} body.touch #map.big{height:min(56vh,480px)}
 body.touch #top{max-width:calc(100vw - 190px - var(--sl) - var(--sr))}
 body.touch #hint{font-size:13px} body.touch #mission,body.touch #strip{font-size:13.5px;padding:5px 9px} body.touch #strip b{font-size:15px} body.touch #strip span{margin:0 6px 0 1px}
 body.touch #pfd{bottom:calc(150px + var(--sb));width:min(70vw,320px)}
-body.touch #toast{top:calc(min(20vh,160px) + 22px + var(--st));font-size:14px;padding:6px 12px}
+body.touch #toast{top:calc(min(20vh,160px) + 120px + var(--st));font-size:14px;padding:6px 12px}
 body.touch #alert{top:36%}
 body.touch #mission{white-space:normal;line-height:1.25}
 @media (orientation:landscape){ body.touch #pfd{bottom:calc(8px + var(--sb));width:min(32vw,290px)} body.touch #ctx{bottom:calc(16px + var(--sb));right:calc(72px + var(--sr));flex-direction:row;align-items:flex-end} body.touch #map{height:min(34vh,160px)}
@@ -90,12 +98,14 @@ body.touch #mission{white-space:normal;line-height:1.25}
 @media (orientation:portrait){
   body.touch #top{max-width:calc(100vw - 2 * (min(20vh,160px) * 0.545 + 24px) - var(--sl) - var(--sr))}
   body.touch.nopfd #hint{margin-top:56px} body.touch:not(.nopfd) #hint{margin-top:90px}
+  body.touch.nopfd #landP{margin-top:56px} body.touch:not(.nopfd) #landP{margin-top:90px} body.touch #landP:not([hidden]) ~ #hint{margin-top:4px}
   /* the enlarged map opens centred, below the level button and between the action buttons and the stick */
-  body.touch #map.big{right:auto;left:50%;transform:translateX(-50%);top:calc(104px + var(--st));height:min(56vh,480px,calc((100vw - 172px) * 1.8375),calc(100vh - 290px))}
+  body.touch #map.big{right:auto;left:50%;transform:translateX(-50%);top:calc(104px + var(--st));height:min(56vh,480px,calc((100vw - 172px) * 1.8375),calc(100vh - 300px))}
 }
 @media (max-width:340px){ body.touch #strip{font-size:12px;padding:4px 7px} body.touch #strip b{font-size:13.5px} body.touch #strip span{margin:0 4px 0 1px} }
 @media (max-width:900px){ body:not(.touch) #pfd{left:auto;right:calc(10px + var(--sr));transform:none} }
-#hud:has(#map.big) #hint,#hud:has(#map.big) #place{display:none}
+#hud:has(#map.big) #hint,#hud:has(#map.big) #place,#hud:has(#map.big) #landP{display:none}
+@media (orientation:landscape) and (max-width:700px){ body.touch #ctx{gap:5px} body.touch #ctx button{min-width:50px;padding:9px 6px;font-size:12.5px} }
 /* --- overlays --- */
 .ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:calc(16px + var(--st)) 14px calc(16px + var(--sb));overflow:auto;touch-action:pan-y;
   background:radial-gradient(ellipse at 50% 30%,rgba(20,44,70,.86),rgba(4,7,11,.95))}
@@ -134,6 +144,7 @@ details{margin-top:14px} summary{cursor:pointer;color:var(--dim);font-size:13.5p
   </div>
   <div id="top">
     <div id="strip" class="panel"></div>
+    <div id="landP" class="panel" hidden dir="auto"></div>
     <div id="hint" dir="auto"></div>
     <div id="place" dir="auto"></div>
   </div>
@@ -1777,16 +1788,38 @@ function updateControls(dt) {
   } else if (S.land) {
     // ---- AUTOLAND: follow the ILS, configure, flare, brake to a stop ----
     const rw = S.land; yt = 0;
-    if (!air) { S.thr = 0; S.brake = true; pt = 0; rt = centreline(); if (S.V < 1.5) { S.land = null; S.landed = true; toast('Landed at ' + AIRPORTS[rw.ap].name); } }
+    if (!air) { S.landPh = 'rollout'; S.thr = 0; S.brake = true; pt = 0; rt = centreline(); if (S.V < 1.5) { S.land = null; S.landed = true; Snd.chime(700, 0.3); toast(L('Landed at ' + AIRPORTS[rw.ap].name + '. Push the power up to take off again', 'נחתנו ב' + apName(AIRPORTS[rw.ap]) + '. כדי להמריא שוב מעלים את ההספק'), 6); } }
     else {
       const il = ilsOf(rw, true);
-      if (!il) { S.land = null; S.holdAlt = null; toast('Autoland cancelled: off the approach path'); }
-      else {
+      if (S.landPh === 'rollout') { S.thr = 0; rt = rollFor(0); pt = clamp((0.03 - S.pitch) * 1.6 / PL.pitch, -1, 1); }     // a bounce after touching down: hold it level and let it settle
+      // capture the final approach once lined up inside the approach cone; if blown off it, fly back round to the approach
+      else if (S.landPh !== 'final' && il && il.along > 1500 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
+      if (S.landPh === 'final' && il && il.along > 800 && il.along < 4000 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
+      if (S.landPh === 'final' && !il) { S.landPh = 'intercept'; S.landJoin = false; }
+      if (S.landPh === 'rollout') {}
+      else if (S.landPh !== 'final') {
+        // ---- to the approach. From in front of the runway with room to turn: a localizer intercept, steering for the runway heading
+        //      corrected by up to 60° in proportion to the distance off the centreline (the gain keeps the turn within 25° of bank).
+        //      From beside or behind it: first fly to an entry point far out on the extended centreline. Height follows the glide path. ----
+        const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
+        const R = S.V * S.V / (G * Math.tan(25 * DEG)), entry = Math.max(9000, 2.5 * R + 5000);       // R: turn radius at 25° of bank
+        if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) S.landJoin = false;
+        else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 2500 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
+        let hT;
+        if (S.landJoin) hT = rw.hdg - clamp(cross / (1.5 * R) * 60, -60, 60);
+        else hT = Math.atan2(rw.tx - rw.dx * entry - S.pos.x, -(rw.tz - rw.dz * entry - S.pos.z)) / DEG;
+        const bl = !S.landJoin && S.ra < 250 ? 10 : 25; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -bl, bl) * DEG);     // low down, climb before turning hard
+        const gsAlt = rw.elev + GEAR_H + ((S.landJoin ? Math.max(along, 0) : entry) + 300) * Math.tan(3 * DEG);
+        const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12, S.pos.z + S.vel.z * 12).h) + (S.landJoin ? clamp(along * 0.025, 40, 180) : 180);     // terrain clearance, less close to the runway
+        pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, 0.09));
+        const dT = Math.hypot(rx, rz), vT = S.vs0 * (dT < 20000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
+        if (dT < 14000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
+      } else {
         if (il.along < 10000) S.gear = true;
         S.flapIdx = Math.max(S.flapIdx, fi(il.along < 5500 ? 3 : il.along < 8000 ? 2 : il.along < 12000 ? 1 : 0));
         const hT = rw.hdg - clamp(il.cross * 0.03, -35, 35); rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -25, 25) * DEG);
         const vT = S.vs0 * 1.3; S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 12;
-        if (S.ra < 12) { S.thr = 0; S.brake = false; rt = rollFor(0); pt = clamp((0.07 - S.pitch) * 1.6 / PL.pitch, -1, 1); } else pt = pitchFor(clamp(-3 - il.gs * 1.5, -7, 1) * DEG);
+        if (S.ra < 12) { S.thr = 0; S.brake = false; rt = rollFor(0); pt = clamp((0.07 - S.pitch) * 1.6 / PL.pitch, -1, 1); } else pt = pitchFor(clamp(-3 - il.gs * 1.5, -9, 1) * DEG);     // up to 9° down when high (valley airfields)
       }
     }
   } else if (S.ap.on) {
@@ -1981,6 +2014,48 @@ function ilsOf(rw, toTouchdown) {
     return { rw, along, cross, loc: Math.atan2(cross, Math.max(along + 300, 1)) / DEG, gs: Math.atan2(S.pos.y - GEAR_H - rw.elev, Math.max(along + 300, 1)) / DEG - 3 };
   return null;
 }
+const LAND_RANGE = 20000;                 // automatic landing can start this far from the runway (game metres)
+const AP_HE = { LLBG: 'נתב״ג', LLHA: 'חיפה', LLER: 'רמון', LLIB: 'ראש פינה', LLMZ: 'מצדה', LLBS: 'באר שבע' };
+const apName = ap => L(ap.name, AP_HE[ap.code] || ap.name);
+const kmTxt = m => (m / 1000).toFixed(m < 9950 ? 1 : 0) + L(' km', ' ק״מ');
+const dirTxt = brg => { const i = Math.round(brg / 45) % 8; return L(['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][i], ['צפונה', 'לצפון-מזרח', 'מזרחה', 'לדרום-מזרח', 'דרומה', 'לדרום-מערב', 'מערבה', 'לצפון-מערב'][i]); };
+const relArrow = rel => '↑↗→↘↓↙←↖'[Math.round((((rel % 360) + 360) % 360) / 45) % 8];
+/** Where an automatic landing would go: the nearest runway with an instrument approach, its distance and bearing, and whether it is in range. */
+function landTarget() {
+  let best = null;
+  for (const rw of RUNWAYS) { if (!rw.ils) continue; const d = Math.hypot(S.pos.x - rw.tx, S.pos.z - rw.tz); if (!best || d < best.dist) best = { rw, ap: AIRPORTS[rw.ap], dist: d }; }
+  if (best) { best.brg = (Math.atan2(best.rw.tx - S.pos.x, -(best.rw.tz - S.pos.z)) / DEG + 360) % 360; best.inRange = best.dist < LAND_RANGE; }
+  return best;
+}
+/** The landing panel under the speed strip, and the state of the landing buttons: is landing possible, is it running, what is automatic. */
+function landPanel(touchUI) {
+  const air = !S.onGround, t = landTarget(), auto = S.assist || !!S.land, el = $('landP');
+  let cls = '', main = '';
+  if (S.crashed || S.trick || PH.on || !t) cls = '';
+  else if (S.land) {
+    const rw = S.land, d = Math.hypot(S.pos.x - rw.tx, S.pos.z - rw.tz);
+    const ph = !air ? L('braking to a stop', 'בלימה עד עצירה') : S.ra < 15 ? L('touching down', 'נגיעה במסלול') : S.landPh === 'final' ? L('on final approach', 'בגישה הסופית') : L('flying to the approach path', 'טסים אל קו הגישה (הקו הסגול במפה)');
+    cls = 'active'; main = '<b>' + L('Automatic landing', 'נחיתה אוטומטית') + '</b> · ' + apName(AIRPORTS[rw.ap]) + ' · ' + kmTxt(d) + '<br>' + ph;
+  } else if (air && t.inRange) {
+    cls = 'ready'; main = '<b>' + relArrow(t.brg - S.hdg) + ' ' + apName(t.ap) + ' ' + kmTxt(t.dist) + '</b> · ' + L('automatic landing available: ', 'אפשר לנחות אוטומטית: ') + (touchUI ? L('tap Land', 'לוחצים "נחיתה"') : L('press L', 'לוחצים L'));
+  } else if (air && S.arc && S.ra < 300) {
+    cls = 'info'; main = L('Easy level: you can land on any open ground. Slow down and come down gently', 'ברמה קלה אפשר לנחות בכל שטח פתוח: מאטים ויורדים בעדינות');
+  }
+  let chips = '';
+  if (cls && cls !== 'info' && !(S.arc && !S.land)) {
+    const gp = S.gearPos, g = PL.fixedGear ? L('fixed gear', 'גלגלים קבועים') : (gp > 0.98 ? '▼ ' : gp < 0.02 ? '▲ ' : '… ') + L(gp > 0.98 ? 'gear down' : gp < 0.02 ? 'gear up' : 'gear moving', gp > 0.98 ? 'גלגלים למטה' : gp < 0.02 ? 'גלגלים למעלה' : 'גלגלים בתנועה');
+    chips = '<span class="' + (gp > 0.98 || PL.fixedGear ? 'on' : gp < 0.02 ? 'off' : 'mid') + '">' + g + '</span>' + (FLAPS.length > 1 ? '<span>' + L('flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°</span>' : '') +
+      (S.brake ? '<span class="on">' + L('brakes on', 'בלמים') + '</span>' : '') + '<span class="tag">' + (auto ? L('automatic', 'אוטומטי') : L('manual: G gear, F flaps', 'ידני')) + '</span>';
+  }
+  const html = cls ? '<div>' + main + '</div>' + (chips ? '<div class="chips2">' + chips + '</div>' : '') : '';
+  if (html !== el._h) { el._h = html; el.innerHTML = html; el.hidden = !cls; el.className = 'panel ' + cls; }
+  if (!touchUI) return;
+  const set = (id, txt, c) => { const b = $(id); if (b.textContent !== txt) b.textContent = txt; if (b.className !== c) b.className = c; };
+  const cl = $('cLand'); cl.hidden = !(air && !S.trick && !S.crashed);
+  set('cLand', S.land ? L('Cancel landing', 'ביטול נחיתה') : L('Land', 'נחיתה'), S.land ? 'active' : t && t.inRange ? 'ready' : 'off');
+  const gp = S.gearPos; set('cGear', L('Gear', 'גלגלים') + (gp > 0.98 ? ' ▼' : gp < 0.02 ? ' ▲' : ' …'), gp > 0.98 ? 'on' : '');
+  set('cFlap', L('Flaps', 'מדפים') + ' ' + FLAPS[S.flapIdx] + '°', S.flapIdx > 0 ? 'on' : ''); set('cBrake', L('Brake', 'בלם'), S.brake ? 'on' : '');
+}
 function nearestILS() {
   let best = null;
   for (const rw of RUNWAYS) { if (!rw.ils) continue; const i = ilsOf(rw); if (i && (!best || i.along < best.along)) best = i; }
@@ -2155,6 +2230,7 @@ function drawMap() {
   // the aircraft: clamped to the visible part of the map, so it points the way back when panned away
   const m = px(3), px0 = clamp(mx(S.pos.x), vx0 + m, vx1 - m), py0 = clamp(mz(S.pos.z), vy0 + m, vy1 - m), h = S.hdg * DEG, len = Math.max(34 / z, px(40)), a = Math.max(px(9), 5 / z);
   M.strokeStyle = '#ffd21f'; M.lineWidth = px(1.6); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(h) * len, py0 - Math.cos(h) * len); M.stroke();
+  if (S.land) { M.strokeStyle = '#ff66ee'; M.lineWidth = px(1.6); M.setLineDash([px(5), px(4)]); M.beginPath(); M.moveTo(px0, py0); M.lineTo(mx(S.land.tx), mz(S.land.tz)); M.stroke(); M.setLineDash([]); }
   if (S.ap.on) { const b = S.ap.hdg * DEG; M.strokeStyle = '#ff66ee'; M.setLineDash([px(4), px(4)]); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(b) * len, py0 - Math.cos(b) * len); M.stroke(); M.setLineDash([]); }
   M.save(); M.translate(px0, py0); M.rotate(h); M.scale(a / 7, a / 7); M.fillStyle = '#ffd21f'; M.strokeStyle = '#000'; M.lineWidth = 1; M.beginPath(); M.moveTo(0, -7); M.lineTo(5, 5); M.lineTo(0, 2); M.lineTo(-5, 5); M.closePath(); M.fill(); M.stroke(); M.restore();
   // fixed to the frame: north marker, and the zoom factor while zoomed
@@ -2166,7 +2242,7 @@ function hintText() {
   const T = document.body.classList.contains('touch'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓', ft = m => (Math.round(m * FT / 50) * 50).toLocaleString('en') + ' ft';
   if (S.crashed) return '';
   if (S.trick) return S.trick.type === 'loop' ? 'Looping…' : 'Rolling…';
-  if (S.land) return S.onGround ? L('Autoland: braking', 'נחיתה אוטומטית: בולמים') : L('Autoland to ' + AIRPORTS[S.land.ap].name + '. Hands off', 'נחיתה אוטומטית. לא נוגעים');
+  if (S.land) return S.onGround ? '' : L('Hands off: the aircraft lands itself. ' + (T ? 'Tap Cancel landing' : 'Press L') + ' to take over', 'לא נוגעים: המטוס נוחת לבד. כדי להשתלט: ' + (T ? '"ביטול נחיתה"' : 'L'));
   if (S.ap.on) return 'Autopilot on. The stick moves its altitude and heading targets';
   if (S.arc) {
     if (S.onGround) return A.v > 3 ? L('Here we go!', 'יוצאים לדרך!') : T ? L('Push the speed lever up. It takes off by itself', 'מרימים את ידית המהירות. המטוס ממריא לבד') : L('Hold Shift to go. It takes off by itself', 'מחזיקים Shift. המטוס ממריא לבד');
@@ -2182,7 +2258,6 @@ function hintText() {
   if (S.assist) {
     if (S.prot) return S.prot;
     if (AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50) && S.gear) return T ? 'Over the airport: hold the stick toward Descend to land' : 'Over the airport: hold ' + dn + ' to land';
-    if (!S.toClimb && S.airTime > 45 && nearestILS()) return T ? 'Runway ahead: tap Land' : 'Runway ahead: press L to land';
     // otherwise say what the aircraft is doing
     if (S.toClimb) return 'Climbing out. Gear and flaps are automatic';
     if (S.holdAlt !== null) return 'Holding ' + ft(S.holdAlt);
@@ -2197,7 +2272,7 @@ function drawLegend() {
   const el = $('legend'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓'; el.style.display = S.legend ? 'grid' : 'none'; el.textContent = '';
   if (S.arc) { for (const [k, en, he] of [[up, 'Up', 'למעלה'], [dn, 'Down', 'למטה'], ['← →', 'Turn', 'פנייה'], ['Shift', 'Faster', 'מהר יותר'], ['Ctrl', 'Slower', 'לאט יותר'], ['X', 'Roll', 'גלגול'], ['Z', 'Loop', 'לולאה'], ['Space', 'Brake', 'בלם'], ['L', 'Land for me', 'נחיתה אוטומטית'], ['C', 'Change view', 'החלפת מבט'], ['Esc', 'Menu', 'תפריט']]) {
       const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; b.dir = 'ltr'; sp.textContent = L(en, he); el.appendChild(b); el.appendChild(sp); } return; }
-  const rows = [[up, S.assist ? 'Climb' : 'Nose up'], [dn, S.assist ? 'Descend' : 'Nose down'], ['← →', S.assist ? 'Turn' : 'Roll'], ['Shift / Ctrl', 'Power up / down'], ['0 – 9', 'Set power'], ['B / Space', 'Brake'], ['L', 'Land automatically']];
+  const rows = [[up, S.assist ? 'Climb' : 'Nose up'], [dn, S.assist ? 'Descend' : 'Nose down'], ['← →', S.assist ? 'Turn' : 'Roll'], ['Shift / Ctrl', 'Power up / down'], ['0 – 9', 'Set power'], ['B / Space', 'Brake'], ['L', 'Land automatically (within 20 km of an airport)']];
   if (!S.assist) rows.push(['G', 'Landing gear'], ['F', 'Flaps']);
   rows.push(['Esc', 'Menu'], ['K', 'Hide this']);
   for (const [k, t] of rows) { const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; sp.textContent = t; el.appendChild(b); el.appendChild(sp); }
@@ -2205,12 +2280,13 @@ function drawLegend() {
 function drawSys() {
   const touchUI = document.body.classList.contains('touch'), air = !S.onGround;
   const auto = S.thr >= 0 && S.boost > S.thr + 0.01, t = auto ? S.boost : S.thr, thrTxt = t < -0.01 ? 'REV ' + Math.round(-t * 100) + '%' : (auto ? 'AUTO ' : '') + Math.round(t * 100) + '%';
+  landPanel(touchUI);
   if (touchUI) { $('thrTf').style.height = clamp(S.thr, 0, 1) * 100 + '%'; $('thrPct').textContent = thrTxt; }
   else {
     $('sThr').textContent = thrTxt; $('sThr').className = t < -0.01 || auto ? 'warnc' : '';
     $('thrFill').style.width = Math.abs(t) * 100 + '%'; $('thrFill').style.background = t < 0 ? 'var(--amber)' : 'var(--cyan)';
-    $('sFlap').textContent = FLAPS.length < 2 ? 'NONE' : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '');
-    const gp = S.gearPos, ge = $('sGear'); ge.textContent = PL.fixedGear ? 'FIXED' : gp > 0.98 ? '▼ DOWN' : gp < 0.02 ? '▲ UP' : 'IN TRANSIT'; ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
+    const AU = S.assist || S.land ? ' · AUTO' : ''; $('sFlap').textContent = FLAPS.length < 2 ? 'NONE' : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '') + AU;
+    const gp = S.gearPos, ge = $('sGear'); ge.textContent = (PL.fixedGear ? 'FIXED' : gp > 0.98 ? '▼ DOWN' : gp < 0.02 ? '▲ UP' : 'IN TRANSIT') + (PL.fixedGear ? '' : AU); ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
     const ae = $('sAp'); ae.textContent = S.land ? 'LAND ' + S.land.label : S.ap.on ? Math.round(S.ap.alt * FT / 10) * 10 + ' ft / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : 'OFF'; ae.className = S.ap.on || S.land ? 'mg' : '';
     $('sMode').textContent = S.arc ? 'EASY' : S.assist ? 'ASSISTED' : 'MANUAL'; $('sMode').className = S.assist ? 'ok' : 'warnc';
   }
@@ -2223,8 +2299,6 @@ function drawSys() {
   else if (!S.assist && !S.gear && !S.onGround && !S.crashed && S.ra < 220 && S.vel.y < -1) { al.textContent = 'GEAR UP'; al.style.display = blink ? 'block' : 'none'; }
   else al.style.display = 'none';
   if (touchUI) {   // only the buttons that matter right now
-    const ils = air && !S.trick && (S.land || nearestILS());
-    $('cLand').hidden = !ils; $('cLand').textContent = S.land ? 'Cancel' : 'Land';
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
@@ -2530,16 +2604,18 @@ function action(code) {
   if (code === 'KeyZ') return startTrick('loop');
   if (code === 'KeyH') { setMode((S.mode + 1) % 3); toast(L(LV[S.mode][0], LV[S.mode][1]) + ': ' + L(LVD[S.mode][0], LVD[S.mode][1]), 4.5); return; }
   if (code === 'KeyL') {
-    if (S.land) { S.land = null; S.holdAlt = null; toast('Autoland off'); }
-    else if (S.onGround) toast('Autoland works in the air, near a runway');
-    else { const il = nearestILS(); if (!il) toast('No runway in range: fly to a magenta line on the map'); else { S.land = il.rw; S.ap.on = false; S.trick = null; toast('Autoland: ' + AIRPORTS[il.rw.ap].name + ' runway ' + il.rw.name); } }
+    if (S.land) { S.land = null; S.holdAlt = null; toast(L('Automatic landing cancelled. You are flying', 'הנחיתה האוטומטית בוטלה. אתם מטיסים')); }
+    else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
+    else { const t = landTarget();
+      if (!t || !t.inRange) toast(L('No airport within 20 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 20 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
+      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
-  if (code === 'KeyG' && PL.fixedGear) return toast('This aircraft has fixed landing gear');
-  if (code === 'KeyF' && FLAPS.length < 2) return toast('This aircraft has no flaps');
-  if (S.assist && (code === 'KeyG' || code === 'KeyF')) return toast((code === 'KeyG' ? 'Gear is' : 'Flaps are') + ' automatic in assisted flight');
-  if (code === 'KeyG') { if (S.onGround) toast('Gear stays down on the ground'); else S.gear = !S.gear; }
-  else if (code === 'KeyF') S.flapIdx = (S.flapIdx + 1) % FLAPS.length;
+  if (code === 'KeyG' && PL.fixedGear) return toast(L('This aircraft has fixed landing gear', 'למטוס הזה גלגלים קבועים'));
+  if (code === 'KeyF' && FLAPS.length < 2) return toast(L('This aircraft has no flaps', 'למטוס הזה אין מדפים'));
+  if ((S.assist || S.land) && (code === 'KeyG' || code === 'KeyF')) return toast(code === 'KeyG' ? L('Landing gear is automatic now: it comes down by itself before landing', 'הגלגלים אוטומטיים עכשיו: הם יורדים לבד לפני הנחיתה') : L('Flaps are automatic now', 'המדפים אוטומטיים עכשיו'), 4);
+  if (code === 'KeyG') { if (S.onGround) toast(L('The gear stays down on the ground', 'על הקרקע הגלגלים נשארים למטה')); else { S.gear = !S.gear; toast(S.gear ? L('Gear coming down', 'גלגלים יורדים') : L('Gear going up', 'גלגלים עולים')); } }
+  else if (code === 'KeyF') { S.flapIdx = (S.flapIdx + 1) % FLAPS.length; toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }
   else if (code === 'KeyP') {
     if (S.ap.on) { S.ap.on = false; toast('Autopilot off'); }
     else if (S.onGround || S.ra < 60) toast('Autopilot needs 200 ft above ground');

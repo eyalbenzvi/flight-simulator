@@ -56,6 +56,13 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - 1 Medium (`S.assist`): real physics with flight-path hold, automatic gear and flaps, stall and terrain protection.
 - 2 Expert: real physics, rate command with flight-path hold when the stick is released, manual gear and flaps.
 - Autoland (`S.land`) and the autopilot (`S.ap.on`) always run on the physics path, also from Easy mode.
+- Automatic landing (L key / Land button) starts anywhere within `LAND_RANGE` (20 km) of the nearest runway with an ILS (`landTarget`).
+  Phases in `S.landPh`: `intercept` (fly to an entry point on the extended centreline, or, with `S.landJoin`, a localizer intercept
+  onto it, glide-path height, terrain clearance), `final` (the ILS law, captured when lined up and not more than 5° high; going round
+  if far too high close in), `rollout` (after touchdown, also through a bounce). Tested from 70 random starts at all six airports.
+- `landPanel` (in `src/07-hud-and-modes.js`) drives the landing panel under the speed strip and the touch button states: Land is
+  green when an airport is in range, dimmed when not (tapping says where the nearest one is), magenta while landing; the chips say
+  whether gear and flaps are automatic (Easy, Medium, autoland) or manual (Expert, keys G and F).
 - Pitch input is positive = nose up in every mode; `SAVE.inv` flips it for people who want a real stick.
 
 ## Roads

@@ -75,16 +75,18 @@ function action(code) {
   if (code === 'KeyZ') return startTrick('loop');
   if (code === 'KeyH') { setMode((S.mode + 1) % 3); toast(L(LV[S.mode][0], LV[S.mode][1]) + ': ' + L(LVD[S.mode][0], LVD[S.mode][1]), 4.5); return; }
   if (code === 'KeyL') {
-    if (S.land) { S.land = null; S.holdAlt = null; toast('Autoland off'); }
-    else if (S.onGround) toast('Autoland works in the air, near a runway');
-    else { const il = nearestILS(); if (!il) toast('No runway in range: fly to a magenta line on the map'); else { S.land = il.rw; S.ap.on = false; S.trick = null; toast('Autoland: ' + AIRPORTS[il.rw.ap].name + ' runway ' + il.rw.name); } }
+    if (S.land) { S.land = null; S.holdAlt = null; toast(L('Automatic landing cancelled. You are flying', 'הנחיתה האוטומטית בוטלה. אתם מטיסים')); }
+    else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
+    else { const t = landTarget();
+      if (!t || !t.inRange) toast(L('No airport within 20 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 20 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
+      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
-  if (code === 'KeyG' && PL.fixedGear) return toast('This aircraft has fixed landing gear');
-  if (code === 'KeyF' && FLAPS.length < 2) return toast('This aircraft has no flaps');
-  if (S.assist && (code === 'KeyG' || code === 'KeyF')) return toast((code === 'KeyG' ? 'Gear is' : 'Flaps are') + ' automatic in assisted flight');
-  if (code === 'KeyG') { if (S.onGround) toast('Gear stays down on the ground'); else S.gear = !S.gear; }
-  else if (code === 'KeyF') S.flapIdx = (S.flapIdx + 1) % FLAPS.length;
+  if (code === 'KeyG' && PL.fixedGear) return toast(L('This aircraft has fixed landing gear', 'למטוס הזה גלגלים קבועים'));
+  if (code === 'KeyF' && FLAPS.length < 2) return toast(L('This aircraft has no flaps', 'למטוס הזה אין מדפים'));
+  if ((S.assist || S.land) && (code === 'KeyG' || code === 'KeyF')) return toast(code === 'KeyG' ? L('Landing gear is automatic now: it comes down by itself before landing', 'הגלגלים אוטומטיים עכשיו: הם יורדים לבד לפני הנחיתה') : L('Flaps are automatic now', 'המדפים אוטומטיים עכשיו'), 4);
+  if (code === 'KeyG') { if (S.onGround) toast(L('The gear stays down on the ground', 'על הקרקע הגלגלים נשארים למטה')); else { S.gear = !S.gear; toast(S.gear ? L('Gear coming down', 'גלגלים יורדים') : L('Gear going up', 'גלגלים עולים')); } }
+  else if (code === 'KeyF') { S.flapIdx = (S.flapIdx + 1) % FLAPS.length; toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }
   else if (code === 'KeyP') {
     if (S.ap.on) { S.ap.on = false; toast('Autopilot off'); }
     else if (S.onGround || S.ra < 60) toast('Autopilot needs 200 ft above ground');
