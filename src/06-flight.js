@@ -30,7 +30,7 @@ function spawn(def) {
     S.q.setFromEuler(eul.set(0, -h * DEG, 0, 'YXZ')); S.thr = S.n1 = 0; S.gear = true; S.gearPos = 1; S.flapIdx = fi(1); S.flapDeg = FLAPS[S.flapIdx]; S.onGround = true; S.airTime = 0;
   } else {
     let x, z, alt, hdg = def.hdg, gamma = 0, V = (def.spd || 120) / 120 * PL.vc; const f = fi(def.flaps || 0), gear = !!def.gear || !!PL.fixedGear;
-    if (def.type === 'approach') { const rw = def.rw; x = rw.tx - rw.dx * def.dist; z = rw.tz - rw.dz * def.dist; alt = rw.elev + GEAR_H + (def.dist + 300) * Math.tan(3 * DEG); hdg = rw.hdg; gamma = -3 * DEG;
+    if (def.type === 'approach') { const rw = def.rw; x = rw.tx - rw.dx * def.dist; z = rw.tz - rw.dz * def.dist; alt = rw.elev + GEAR_H + gsHeight(def.dist + 300); hdg = rw.hdg; gamma = -3 * DEG;
       V = 1.3 * Math.sqrt(2 * MASS * G / (1.225 * SW * (CL0 + CLA * ASTALL + 0.03 * FLAPS[f]))); }
     else { x = def.x !== undefined ? def.x : lon2x(def.lon); z = def.z !== undefined ? def.z : lat2z(def.lat); alt = def.agl ? groundAt(x, z).h + def.agl : def.alt; }
     const d = dirOf(hdg), tr = trimFor(V, alt, gamma, FLAPS[f], gear);
@@ -91,8 +91,8 @@ function updateControls(dt) {
       const il = ilsOf(rw, true);
       if (S.landPh === 'rollout') { S.thr = 0; rt = rollFor(0); pt = clamp((0.03 - S.pitch) * 1.6 / PL.pitch, -1, 1); }     // a bounce after touching down: hold it level and let it settle
       // capture the final approach once lined up inside the approach cone; if blown off it, fly back round to the approach
-      else if (S.landPh !== 'final' && il && il.along > 1500 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
-      if (S.landPh === 'final' && il && il.along > 800 && il.along < 4000 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
+      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
+      if (S.landPh === 'final' && il && il.along > 300 && il.along < 1600 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
       if (S.landPh === 'final' && !il) { S.landPh = 'intercept'; S.landJoin = false; }
       if (S.landPh === 'rollout') {}
       else if (S.landPh !== 'final') {
@@ -100,21 +100,21 @@ function updateControls(dt) {
         //      corrected by up to 60° in proportion to the distance off the centreline (the gain keeps the turn within 25° of bank).
         //      From beside or behind it: first fly to an entry point far out on the extended centreline. Height follows the glide path. ----
         const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
-        const R = S.V * S.V / (G * Math.tan(25 * DEG)), entry = Math.max(9000, 2.5 * R + 5000);       // R: turn radius at 25° of bank
+        const R = S.V * S.V / (G * Math.tan(25 * DEG)) * hsAt(S.ra), entry = Math.max(gsDist(420), 2.5 * R + 1500);       // R: turn radius at 25° of bank, on the map
         if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) S.landJoin = false;
-        else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 2500 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
+        else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 800 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
         let hT;
         if (S.landJoin) hT = rw.hdg - clamp(cross / (1.5 * R) * 60, -60, 60);
         else hT = Math.atan2(rw.tx - rw.dx * entry - S.pos.x, -(rw.tz - rw.dz * entry - S.pos.z)) / DEG;
         const bl = !S.landJoin && S.ra < 250 ? 10 : 25; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -bl, bl) * DEG);     // low down, climb before turning hard
-        const gsAlt = rw.elev + GEAR_H + ((S.landJoin ? Math.max(along, 0) : entry) + 300) * Math.tan(3 * DEG);
-        const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12, S.pos.z + S.vel.z * 12).h) + (S.landJoin ? clamp(along * 0.025, 40, 180) : 180);     // terrain clearance, less close to the runway
+        const gsAlt = rw.elev + GEAR_H + gsHeight((S.landJoin ? Math.max(along, 0) : entry) + 300);
+        const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12 * hsAt(S.ra), S.pos.z + S.vel.z * 12 * hsAt(S.ra)).h) + (S.landJoin ? clamp(along * 0.06, 40, 180) : 180);     // terrain clearance, less close to the runway
         pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, 0.09));
-        const dT = Math.hypot(rx, rz), vT = S.vs0 * (dT < 20000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
-        if (dT < 14000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
+        const dT = realDist(rx, rz), vT = S.vs0 * (dT < 25000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
+        if (dT < 15000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
       } else {
-        if (il.along < 10000) S.gear = true;
-        S.flapIdx = Math.max(S.flapIdx, fi(il.along < 5500 ? 3 : il.along < 8000 ? 2 : il.along < 12000 ? 1 : 0));
+        const hR = S.pos.y - GEAR_H - rw.elev; if (hR < 700) S.gear = true;     // configure by height on the glide path
+        S.flapIdx = Math.max(S.flapIdx, fi(hR < 230 ? 3 : hR < 400 ? 2 : hR < 650 ? 1 : 0));
         const hT = rw.hdg - clamp(il.cross * 0.03, -35, 35); rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -25, 25) * DEG);
         const vT = S.vs0 * 1.3; S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 12;
         if (S.ra < 12) { S.thr = 0; S.brake = false; rt = rollFor(0); pt = clamp((0.07 - S.pitch) * 1.6 / PL.pitch, -1, 1); } else pt = pitchFor(clamp(-3 - il.gs * 1.5, -9, 1) * DEG);     // up to 9° down when high (valley airfields)
@@ -139,7 +139,7 @@ function updateControls(dt) {
     if (overField && S.gear) {                                                   // over an airfield with the gear down: automatic flare, idle at touchdown
       if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.2, S.ra * 0.2) / Math.max(S.V, 40)); if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
     } else {                                                                     // open country: stay 40 m above the ground and out-climb rising terrain ahead
-      const hv = Math.hypot(S.vel.x, S.vel.z) || 1, ux = S.vel.x / hv, uz = S.vel.z / hv, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
+      const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
       let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
       const tMax = clamp(330 / PL.up, 11, 40);      // sluggish aircraft look further ahead; races follow gates that already clear the ground
       for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h - base) / d); }
@@ -220,7 +220,7 @@ function physics(dt) {
     const side = S.vel.dot(right); S.vel.addScaledVector(right, -side * (1 - Math.exp(-10 * dt)));      // tyres resist sideslip
     const sp = S.vel.length(), dec = (0.015 + (S.brake ? 0.42 : 0)) * G * dt; if (sp > dec) S.vel.multiplyScalar((sp - dec) / sp); else S.vel.set(0, 0, 0);
   }
-  S.pos.addScaledVector(S.vel, dt);
+  { const hs = hsAt(S.ra); S.pos.x += S.vel.x * dt * hs; S.pos.y += S.vel.y * dt; S.pos.z += S.vel.z * dt * hs; }     // a quarter of the true speed across the compressed map when aloft
   // --- ground contact ---
   const g = groundAt(S.pos.x, S.pos.z), floor = g.h + GEAR_H;
   if (S.pos.y <= floor) {
@@ -249,7 +249,7 @@ function updateSystems(dt) {
   if (!S.onGround && S.airTime > 3) {
     if (S.ra < 300 && S.vel.y < -Math.max(S.ra / 7, S.gear ? 9 : 5)) gp = true;
     const nearField = S.gear && AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R + 7000);
-    if (!nearField) for (const t of [5, 10]) if (groundAt(S.pos.x + S.vel.x * t, S.pos.z + S.vel.z * t).h > S.pos.y + S.vel.y * t - 40) terr = true;
+    if (!nearField) { const hs = hsAt(S.ra); for (const t of [5, 10]) if (groundAt(S.pos.x + S.vel.x * t * hs, S.pos.z + S.vel.z * t * hs).h > S.pos.y + S.vel.y * t - 40) terr = true; }
   }
   S.terr = terr; S.gpws = gp || terr;
   // Easy mode: landing gear and flaps look after themselves

@@ -255,6 +255,12 @@ function tab(t, x) {
 
 // ---------- 2. Geography model (lon/lat driven) ----------
 const LON0 = 33.6, LON1 = 36.4, LAT0 = 29.2, LAT1 = 33.6, KX = 23750, KZ = 27700;
+/** The map is compressed 4:1 horizontally (real heights). Aloft the aircraft crosses it at a quarter of its true speed, so flight times
+    and distances match the real country, and climbs and descents keep their true angle against the (equally compressed) terrain.
+    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends between 15 and 120 m. */
+const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(15, 120, ra);
+/** Real distance in metres for a world offset: the compression undone with the true metres per degree at 31.4°N. */
+const REAL_X = 111320 * Math.cos(31.4 * Math.PI / 180) / KX, REAL_Z = 110950 / KZ, realDist = (dx, dz) => Math.hypot(dx * REAL_X, dz * REAL_Z);
 // Terrain grid: 173 m cells on computers, 277 m on phones and tablets (the heaviest setting that still loads and runs comfortably there)
 const HIRES = !(window.matchMedia && window.matchMedia('(pointer:coarse)').matches), NX = HIRES ? 384 : 240, NZ = HIRES ? 704 : 440, FAR = 400000;
 const lon2x = l => (l - 35) * KX, lat2z = l => -(l - 31.4) * KZ, x2lon = x => x / KX + 35, z2lat = z => 31.4 - z / KZ;
@@ -1740,7 +1746,7 @@ function spawn(def) {
     S.q.setFromEuler(eul.set(0, -h * DEG, 0, 'YXZ')); S.thr = S.n1 = 0; S.gear = true; S.gearPos = 1; S.flapIdx = fi(1); S.flapDeg = FLAPS[S.flapIdx]; S.onGround = true; S.airTime = 0;
   } else {
     let x, z, alt, hdg = def.hdg, gamma = 0, V = (def.spd || 120) / 120 * PL.vc; const f = fi(def.flaps || 0), gear = !!def.gear || !!PL.fixedGear;
-    if (def.type === 'approach') { const rw = def.rw; x = rw.tx - rw.dx * def.dist; z = rw.tz - rw.dz * def.dist; alt = rw.elev + GEAR_H + (def.dist + 300) * Math.tan(3 * DEG); hdg = rw.hdg; gamma = -3 * DEG;
+    if (def.type === 'approach') { const rw = def.rw; x = rw.tx - rw.dx * def.dist; z = rw.tz - rw.dz * def.dist; alt = rw.elev + GEAR_H + gsHeight(def.dist + 300); hdg = rw.hdg; gamma = -3 * DEG;
       V = 1.3 * Math.sqrt(2 * MASS * G / (1.225 * SW * (CL0 + CLA * ASTALL + 0.03 * FLAPS[f]))); }
     else { x = def.x !== undefined ? def.x : lon2x(def.lon); z = def.z !== undefined ? def.z : lat2z(def.lat); alt = def.agl ? groundAt(x, z).h + def.agl : def.alt; }
     const d = dirOf(hdg), tr = trimFor(V, alt, gamma, FLAPS[f], gear);
@@ -1801,8 +1807,8 @@ function updateControls(dt) {
       const il = ilsOf(rw, true);
       if (S.landPh === 'rollout') { S.thr = 0; rt = rollFor(0); pt = clamp((0.03 - S.pitch) * 1.6 / PL.pitch, -1, 1); }     // a bounce after touching down: hold it level and let it settle
       // capture the final approach once lined up inside the approach cone; if blown off it, fly back round to the approach
-      else if (S.landPh !== 'final' && il && il.along > 1500 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
-      if (S.landPh === 'final' && il && il.along > 800 && il.along < 4000 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
+      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
+      if (S.landPh === 'final' && il && il.along > 300 && il.along < 1600 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
       if (S.landPh === 'final' && !il) { S.landPh = 'intercept'; S.landJoin = false; }
       if (S.landPh === 'rollout') {}
       else if (S.landPh !== 'final') {
@@ -1810,21 +1816,21 @@ function updateControls(dt) {
         //      corrected by up to 60° in proportion to the distance off the centreline (the gain keeps the turn within 25° of bank).
         //      From beside or behind it: first fly to an entry point far out on the extended centreline. Height follows the glide path. ----
         const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
-        const R = S.V * S.V / (G * Math.tan(25 * DEG)), entry = Math.max(9000, 2.5 * R + 5000);       // R: turn radius at 25° of bank
+        const R = S.V * S.V / (G * Math.tan(25 * DEG)) * hsAt(S.ra), entry = Math.max(gsDist(420), 2.5 * R + 1500);       // R: turn radius at 25° of bank, on the map
         if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) S.landJoin = false;
-        else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 2500 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
+        else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 800 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
         let hT;
         if (S.landJoin) hT = rw.hdg - clamp(cross / (1.5 * R) * 60, -60, 60);
         else hT = Math.atan2(rw.tx - rw.dx * entry - S.pos.x, -(rw.tz - rw.dz * entry - S.pos.z)) / DEG;
         const bl = !S.landJoin && S.ra < 250 ? 10 : 25; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -bl, bl) * DEG);     // low down, climb before turning hard
-        const gsAlt = rw.elev + GEAR_H + ((S.landJoin ? Math.max(along, 0) : entry) + 300) * Math.tan(3 * DEG);
-        const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12, S.pos.z + S.vel.z * 12).h) + (S.landJoin ? clamp(along * 0.025, 40, 180) : 180);     // terrain clearance, less close to the runway
+        const gsAlt = rw.elev + GEAR_H + gsHeight((S.landJoin ? Math.max(along, 0) : entry) + 300);
+        const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12 * hsAt(S.ra), S.pos.z + S.vel.z * 12 * hsAt(S.ra)).h) + (S.landJoin ? clamp(along * 0.06, 40, 180) : 180);     // terrain clearance, less close to the runway
         pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, 0.09));
-        const dT = Math.hypot(rx, rz), vT = S.vs0 * (dT < 20000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
-        if (dT < 14000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
+        const dT = realDist(rx, rz), vT = S.vs0 * (dT < 25000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
+        if (dT < 15000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
       } else {
-        if (il.along < 10000) S.gear = true;
-        S.flapIdx = Math.max(S.flapIdx, fi(il.along < 5500 ? 3 : il.along < 8000 ? 2 : il.along < 12000 ? 1 : 0));
+        const hR = S.pos.y - GEAR_H - rw.elev; if (hR < 700) S.gear = true;     // configure by height on the glide path
+        S.flapIdx = Math.max(S.flapIdx, fi(hR < 230 ? 3 : hR < 400 ? 2 : hR < 650 ? 1 : 0));
         const hT = rw.hdg - clamp(il.cross * 0.03, -35, 35); rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -25, 25) * DEG);
         const vT = S.vs0 * 1.3; S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 12;
         if (S.ra < 12) { S.thr = 0; S.brake = false; rt = rollFor(0); pt = clamp((0.07 - S.pitch) * 1.6 / PL.pitch, -1, 1); } else pt = pitchFor(clamp(-3 - il.gs * 1.5, -9, 1) * DEG);     // up to 9° down when high (valley airfields)
@@ -1849,7 +1855,7 @@ function updateControls(dt) {
     if (overField && S.gear) {                                                   // over an airfield with the gear down: automatic flare, idle at touchdown
       if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.2, S.ra * 0.2) / Math.max(S.V, 40)); if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
     } else {                                                                     // open country: stay 40 m above the ground and out-climb rising terrain ahead
-      const hv = Math.hypot(S.vel.x, S.vel.z) || 1, ux = S.vel.x / hv, uz = S.vel.z / hv, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
+      const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
       let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
       const tMax = clamp(330 / PL.up, 11, 40);      // sluggish aircraft look further ahead; races follow gates that already clear the ground
       for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h - base) / d); }
@@ -1930,7 +1936,7 @@ function physics(dt) {
     const side = S.vel.dot(right); S.vel.addScaledVector(right, -side * (1 - Math.exp(-10 * dt)));      // tyres resist sideslip
     const sp = S.vel.length(), dec = (0.015 + (S.brake ? 0.42 : 0)) * G * dt; if (sp > dec) S.vel.multiplyScalar((sp - dec) / sp); else S.vel.set(0, 0, 0);
   }
-  S.pos.addScaledVector(S.vel, dt);
+  { const hs = hsAt(S.ra); S.pos.x += S.vel.x * dt * hs; S.pos.y += S.vel.y * dt; S.pos.z += S.vel.z * dt * hs; }     // a quarter of the true speed across the compressed map when aloft
   // --- ground contact ---
   const g = groundAt(S.pos.x, S.pos.z), floor = g.h + GEAR_H;
   if (S.pos.y <= floor) {
@@ -1959,7 +1965,7 @@ function updateSystems(dt) {
   if (!S.onGround && S.airTime > 3) {
     if (S.ra < 300 && S.vel.y < -Math.max(S.ra / 7, S.gear ? 9 : 5)) gp = true;
     const nearField = S.gear && AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R + 7000);
-    if (!nearField) for (const t of [5, 10]) if (groundAt(S.pos.x + S.vel.x * t, S.pos.z + S.vel.z * t).h > S.pos.y + S.vel.y * t - 40) terr = true;
+    if (!nearField) { const hs = hsAt(S.ra); for (const t of [5, 10]) if (groundAt(S.pos.x + S.vel.x * t * hs, S.pos.z + S.vel.z * t * hs).h > S.pos.y + S.vel.y * t - 40) terr = true; }
   }
   S.terr = terr; S.gpws = gp || terr;
   // Easy mode: landing gear and flaps look after themselves
@@ -2016,13 +2022,21 @@ function updateCamera(dt) {
 // ---------- 12. Instruments ----------
 const pfdC = document.getElementById('pfd'), P = pfdC.getContext('2d'), mapC = document.getElementById('map'), M = mapC.getContext('2d');
 const FONT = '"DIN Alternate","Bahnschrift","Roboto Condensed","Arial Narrow",sans-serif';
+/** The glide path is 3° in real terms. The horizontal scale changes with height (hsAt), so on the map its profile is curved: the world
+    distance from touchdown to height h is the integral of hsAt / tan 3°. GSX tabulates it every 5 m up to 3000 m. */
+const GS_T = Math.tan(3 * DEG), GSX = [];
+function gsTable() { if (GSX.length) return; let x = 0; GSX.push(0); for (let h = 5; h <= 3000; h += 5) { x += hsAt(h - 2.5) * 5 / GS_T; GSX.push(x); } }
+/** Height of the glide path above the runway at a world distance from touchdown, and the inverse. */
+function gsHeight(xw) { gsTable(); if (xw <= 0) return 0; let lo = 0, hi = GSX.length - 1; if (xw >= GSX[hi]) return 3000; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (GSX[m] < xw) lo = m; else hi = m; } return (lo + (xw - GSX[lo]) / (GSX[hi] - GSX[lo])) * 5; }
+function gsDist(h) { gsTable(); const i = clamp(h / 5, 0, GSX.length - 1), k = Math.floor(i); return GSX[k] + (GSX[Math.min(k + 1, GSX.length - 1)] - GSX[k]) * (i - k); }
 function ilsOf(rw, toTouchdown) {
   const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
   if (along > (toTouchdown ? -rw.len * 0.7 : 150) && along < 15000 && Math.abs(cross) < Math.max(along, 0) * 0.4 + 200)
-    return { rw, along, cross, loc: Math.atan2(cross, Math.max(along + 300, 1)) / DEG, gs: Math.atan2(S.pos.y - GEAR_H - rw.elev, Math.max(along + 300, 1)) / DEG - 3 };
+  { const h = S.pos.y - GEAR_H - rw.elev, gh = gsHeight(along + 300);     // gs: degrees above the glide path, in real terms
+    return { rw, along, cross, loc: Math.atan2(cross, Math.max(along + 300, 1)) / DEG, gs: Math.atan2(h - gh, Math.max(gh / GS_T, 60)) / DEG }; }
   return null;
 }
-const LAND_RANGE = 20000;                 // automatic landing can start this far from the runway (game metres)
+const LAND_RANGE = 40000;                 // automatic landing can start this far from the runway (real metres)
 const AP_HE = { LLBG: 'נתב״ג', LLHA: 'חיפה', LLER: 'רמון', LLIB: 'ראש פינה', LLMZ: 'מצדה', LLBS: 'באר שבע' };
 const apName = ap => L(ap.name, AP_HE[ap.code] || ap.name);
 const kmTxt = m => (m / 1000).toFixed(m < 9950 ? 1 : 0) + L(' km', ' ק״מ');
@@ -2031,7 +2045,7 @@ const relArrow = rel => '↑↗→↘↓↙←↖'[Math.round((((rel % 360) + 36
 /** Where an automatic landing would go: the nearest runway with an instrument approach, its distance and bearing, and whether it is in range. */
 function landTarget() {
   let best = null;
-  for (const rw of RUNWAYS) { if (!rw.ils) continue; const d = Math.hypot(S.pos.x - rw.tx, S.pos.z - rw.tz); if (!best || d < best.dist) best = { rw, ap: AIRPORTS[rw.ap], dist: d }; }
+  for (const rw of RUNWAYS) { if (!rw.ils) continue; const d = realDist(S.pos.x - rw.tx, S.pos.z - rw.tz); if (!best || d < best.dist) best = { rw, ap: AIRPORTS[rw.ap], dist: d }; }     // dist: real metres
   if (best) { best.brg = (Math.atan2(best.rw.tx - S.pos.x, -(best.rw.tz - S.pos.z)) / DEG + 360) % 360; best.inRange = best.dist < LAND_RANGE; }
   return best;
 }
@@ -2041,7 +2055,7 @@ function landPanel(touchUI) {
   let cls = '', main = '';
   if (S.crashed || S.trick || PH.on || !t) cls = '';
   else if (S.land) {
-    const rw = S.land, d = Math.hypot(S.pos.x - rw.tx, S.pos.z - rw.tz);
+    const rw = S.land, d = realDist(S.pos.x - rw.tx, S.pos.z - rw.tz);
     const ph = !air ? L('braking to a stop', 'בלימה עד עצירה') : S.ra < 15 ? L('touching down', 'נגיעה במסלול') : S.landPh === 'final' ? L('on final approach', 'בגישה הסופית') : L('flying to the approach path', 'טסים אל קו הגישה (הקו הסגול במפה)');
     cls = 'active'; main = '<b>' + L('Automatic landing', 'נחיתה אוטומטית') + '</b> · ' + apName(AIRPORTS[rw.ap]) + ' · ' + kmTxt(d) + '<br>' + ph;
   } else if (air && t.inRange) {
@@ -2219,7 +2233,7 @@ function drawMap() {
     for (const c of [0, 1, 2]) for (const p of roadPaths) { if (p[0][3] !== c) continue; M.strokeStyle = c === 2 ? 'rgba(255,236,170,.95)' : c === 1 ? 'rgba(240,240,235,.8)' : 'rgba(230,230,225,.5)'; M.lineWidth = px(c === 2 ? 2.2 : c === 1 ? 1.4 : 0.9); M.beginPath();
       p.forEach((q, i) => i ? M.lineTo(mx(q[0]), mz(q[2])) : M.moveTo(mx(q[0]), mz(q[2]))); M.stroke(); } }
   M.lineWidth = px(1.2); M.strokeStyle = '#ff66ee';                                     // ILS approach feathers
-  for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * 9000), ey = mz(rw.tz - rw.dz * 9000);
+  for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * gsDist(450)), ey = mz(rw.tz - rw.dz * gsDist(450));
     M.beginPath(); M.moveTo(x, y); M.lineTo(ex, ey); M.stroke(); }
   M.fillStyle = '#fff'; for (const ap of AIRPORTS) { const s = Math.max(px(4), 2.5 / z); M.fillRect(mx(ap.x) - s / 2, mz(ap.z) - s / 2, s, s); }
   M.textBaseline = 'middle'; M.textAlign = 'left'; M.lineJoin = 'round';
@@ -2376,7 +2390,7 @@ function buildFun() {
   [[34.83, 32.05, 5200, 900, 1], [35.0, 32.86, 4200, 700, -1], [35.2, 31.74, 6000, 1900, 1], [34.98, 29.72, 4500, 800, -1], [35.55, 32.8, 5000, 500, 1], [34.75, 31.3, 5500, 1200, -1], [34.86, 32.4, 7000, 1500, 1]].forEach(([lo, la, r, alt, dir], i) => {
     const g = new THREE.Group(); g.add(new THREE.Mesh(body, wht)); const w = new THREE.Mesh(wing, wht); w.position.set(0, -1, 1); g.add(w); const f = new THREE.Mesh(fin, tails[i % 4]); f.position.set(0, 4.5, 14.5); g.add(f); scene.add(g);
     AIT.push({ g, cx: lon2x(lo), cz: lat2z(la), r, alt, dir, a: R() * 6.283 }); });
-  RUNWAYS.forEach(rw => { if (rw.ap > 2) LANDTESTS.push({ label: 'Approach: ' + AIRPORTS[rw.ap].name + ' airstrip', type: 'approach', rw, dist: 6000, flaps: 3, gear: true }); });
+  RUNWAYS.forEach(rw => { if (rw.ap > 2) LANDTESTS.push({ label: 'Approach: ' + AIRPORTS[rw.ap].name + ' airstrip', type: 'approach', rw, dist: 2300, flaps: 3, gear: true }); });
   // photo mode: drag to orbit, wheel or the buttons to zoom
   canvas.addEventListener('pointerdown', e => { if (PH.on) PH.drag = [e.clientX, e.clientY]; });
   window.addEventListener('pointermove', e => { if (PH.on && PH.drag) { PH.az -= (e.clientX - PH.drag[0]) * 0.006; PH.el = clamp(PH.el + (e.clientY - PH.drag[1]) * 0.005, -0.3, 1.4); PH.drag = [e.clientX, e.clientY]; } });
@@ -2384,7 +2398,7 @@ function buildFun() {
   canvas.addEventListener('wheel', e => { if (PH.on) PH.d = clamp(PH.d * (e.deltaY > 0 ? 1.12 : 0.89), 0.5, 12); }, { passive: true });
   $('phDone').addEventListener('click', () => action('KeyO')); $('phIn').addEventListener('click', () => PH.d = clamp(PH.d * 0.75, 0.5, 12)); $('phOut').addEventListener('click', () => PH.d = clamp(PH.d * 1.33, 0.5, 12));
 }
-function updateAIT(dt) { for (const a of AIT) { a.a += a.dir * 105 / a.r * dt; const c = Math.cos(a.a), s = Math.sin(a.a); a.g.position.set(a.cx + c * a.r, a.alt, a.cz + s * a.r); a.g.rotation.set(0, Math.atan2(s * a.dir, -c * a.dir), -a.dir * 0.3, 'YXZ'); } }
+function updateAIT(dt) { for (const a of AIT) { a.a += a.dir * 105 * HSCALE / a.r * dt; const c = Math.cos(a.a), s = Math.sin(a.a); a.g.position.set(a.cx + c * a.r, a.alt, a.cz + s * a.r); a.g.rotation.set(0, Math.atan2(s * a.dir, -c * a.dir), -a.dir * 0.3, 'YXZ'); } }
 // weather is layered on top of the time of day
 const tmpC = new THREE.Color();
 function applyWeather() {
@@ -2460,12 +2474,12 @@ function arcadeStep(dt) {
     if (ud < -0.05) A.out = false;
     if (!S.trick && S.ra < 260) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
-      for (const t of [2, 4, 7]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t, gz = S.pos.z - Math.cos(A.psi) * A.v * t, gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + 70 - S.pos.y) / (A.v * t)); }
+      for (const t of [2, 4, 7]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + 70 - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
     if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -(0.1 + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground
     A.phi += (A.turn / PL.aTurn * PL.aBank * DEG - A.phi) * Math.min(1, 6 * dt);
     G2 = A.gam + (S.trick && S.trick.type === 'loop' ? S.trick.ang : 0); const cg = Math.cos(G2);
-    S.pos.x += Math.sin(A.psi) * cg * A.v * dt; S.pos.y += Math.sin(G2) * A.v * dt; S.pos.z -= Math.cos(A.psi) * cg * A.v * dt;
+    const hs = hsAt(S.ra); S.pos.x += Math.sin(A.psi) * cg * A.v * dt * hs; S.pos.y += Math.sin(G2) * A.v * dt; S.pos.z -= Math.cos(A.psi) * cg * A.v * dt * hs;     // a quarter of the true speed across the map when aloft
     const g = groundAt(S.pos.x, S.pos.z), floor = g.h + GEAR_H;
     if (S.pos.y <= floor) {            // the ground is forgiving: touch down gently anywhere; otherwise skim or bounce, never crash
       S.pos.y = floor; S.trick = null; G2 = 0;
@@ -2622,7 +2636,7 @@ function action(code) {
     if (S.land) { S.land = null; S.holdAlt = null; toast(L('Automatic landing cancelled. You are flying', 'הנחיתה האוטומטית בוטלה. אתם מטיסים')); }
     else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
     else { const t = landTarget();
-      if (!t || !t.inRange) toast(L('No airport within 20 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 20 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
+      if (!t || !t.inRange) toast(L('No airport within 40 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 40 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
       else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
@@ -2768,9 +2782,9 @@ function buildMenu() {
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
   LANDTESTS = [
-    { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 7500, flaps: 3, gear: true },
-    { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 7000, flaps: 3, gear: true },
-    { label: 'Approach: Eilat Ramon', type: 'approach', rw: RUNWAYS[3], dist: 7500, flaps: 3, gear: true }
+    { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
+    { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 2600, flaps: 3, gear: true },
+    { label: 'Approach: Eilat Ramon', type: 'approach', rw: RUNWAYS[3], dist: 2700, flaps: 3, gear: true }
   ];
 }
 
@@ -2808,13 +2822,27 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 
+/** Keep the screen on while flying: phones would otherwise dim and lock while the pilot only watches. The Screen Wake Lock API where
+    there is one (the browser drops the lock when the page is hidden, so it is asked for again on return); elsewhere (older iOS) a tiny
+    muted video that keeps playing does the same. */
+const WAKE = { lock: null, video: null };
+function keepAwake() {
+  if (document.visibilityState !== 'visible') return;
+  if ('wakeLock' in navigator) { if (!WAKE.lock) navigator.wakeLock.request('screen').then(l => { WAKE.lock = l; l.addEventListener('release', () => { WAKE.lock = null; }); }).catch(() => {}); return; }
+  try { if (!WAKE.video) { const c = document.createElement('canvas'); c.width = c.height = 2; const x = c.getContext('2d'); setInterval(() => { x.fillStyle = Date.now() % 2000 < 1000 ? '#000' : '#010101'; x.fillRect(0, 0, 2, 2); }, 1000);
+      const v = WAKE.video = document.createElement('video'); v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.loop = true; v.srcObject = c.captureStream(1);
+      v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none'; document.body.appendChild(v); }
+    WAKE.video.play().catch(() => {}); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (S.started && document.visibilityState === 'visible') keepAwake(); });
+
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
   const fly = $('fly'); fly.disabled = false; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
-  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
+  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (!S.arc && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
   $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
   $('modeB').addEventListener('click', e => { OPEN.pause.add('lv'); openMenu(); e.currentTarget.blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself

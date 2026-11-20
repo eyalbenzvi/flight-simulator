@@ -29,6 +29,12 @@ function tab(t, x) {
 
 // ---------- 2. Geography model (lon/lat driven) ----------
 const LON0 = 33.6, LON1 = 36.4, LAT0 = 29.2, LAT1 = 33.6, KX = 23750, KZ = 27700;
+/** The map is compressed 4:1 horizontally (real heights). Aloft the aircraft crosses it at a quarter of its true speed, so flight times
+    and distances match the real country, and climbs and descents keep their true angle against the (equally compressed) terrain.
+    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends between 15 and 120 m. */
+const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(15, 120, ra);
+/** Real distance in metres for a world offset: the compression undone with the true metres per degree at 31.4°N. */
+const REAL_X = 111320 * Math.cos(31.4 * Math.PI / 180) / KX, REAL_Z = 110950 / KZ, realDist = (dx, dz) => Math.hypot(dx * REAL_X, dz * REAL_Z);
 // Terrain grid: 173 m cells on computers, 277 m on phones and tablets (the heaviest setting that still loads and runs comfortably there)
 const HIRES = !(window.matchMedia && window.matchMedia('(pointer:coarse)').matches), NX = HIRES ? 384 : 240, NZ = HIRES ? 704 : 440, FAR = 400000;
 const lon2x = l => (l - 35) * KX, lat2z = l => -(l - 31.4) * KZ, x2lon = x => x / KX + 35, z2lat = z => 31.4 - z / KZ;

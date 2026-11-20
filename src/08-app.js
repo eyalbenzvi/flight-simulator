@@ -78,7 +78,7 @@ function action(code) {
     if (S.land) { S.land = null; S.holdAlt = null; toast(L('Automatic landing cancelled. You are flying', 'הנחיתה האוטומטית בוטלה. אתם מטיסים')); }
     else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
     else { const t = landTarget();
-      if (!t || !t.inRange) toast(L('No airport within 20 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 20 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
+      if (!t || !t.inRange) toast(L('No airport within 40 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 40 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
       else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
@@ -224,9 +224,9 @@ function buildMenu() {
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
   LANDTESTS = [
-    { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 7500, flaps: 3, gear: true },
-    { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 7000, flaps: 3, gear: true },
-    { label: 'Approach: Eilat Ramon', type: 'approach', rw: RUNWAYS[3], dist: 7500, flaps: 3, gear: true }
+    { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
+    { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 2600, flaps: 3, gear: true },
+    { label: 'Approach: Eilat Ramon', type: 'approach', rw: RUNWAYS[3], dist: 2700, flaps: 3, gear: true }
   ];
 }
 
@@ -264,13 +264,27 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 
+/** Keep the screen on while flying: phones would otherwise dim and lock while the pilot only watches. The Screen Wake Lock API where
+    there is one (the browser drops the lock when the page is hidden, so it is asked for again on return); elsewhere (older iOS) a tiny
+    muted video that keeps playing does the same. */
+const WAKE = { lock: null, video: null };
+function keepAwake() {
+  if (document.visibilityState !== 'visible') return;
+  if ('wakeLock' in navigator) { if (!WAKE.lock) navigator.wakeLock.request('screen').then(l => { WAKE.lock = l; l.addEventListener('release', () => { WAKE.lock = null; }); }).catch(() => {}); return; }
+  try { if (!WAKE.video) { const c = document.createElement('canvas'); c.width = c.height = 2; const x = c.getContext('2d'); setInterval(() => { x.fillStyle = Date.now() % 2000 < 1000 ? '#000' : '#010101'; x.fillRect(0, 0, 2, 2); }, 1000);
+      const v = WAKE.video = document.createElement('video'); v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.loop = true; v.srcObject = c.captureStream(1);
+      v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none'; document.body.appendChild(v); }
+    WAKE.video.play().catch(() => {}); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (S.started && document.visibilityState === 'visible') keepAwake(); });
+
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
   const fly = $('fly'); fly.disabled = false; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
-  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
+  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (!S.arc && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
   $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
   $('modeB').addEventListener('click', e => { OPEN.pause.add('lv'); openMenu(); e.currentTarget.blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself

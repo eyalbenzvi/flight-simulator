@@ -17,6 +17,12 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 
 - 1 unit = 1 m, but the map is compressed 4:1 horizontally (elevation is real). `KX = 23750`, `KZ = 27700` world metres per
   degree. `lon2x`, `lat2z`, `x2lon`, `z2lat` convert. North = −Z, East = +X, Up = +Y.
+- Scale in motion: aloft the aircraft crosses the map at a quarter of its true speed (`HSCALE`, `hsAt(ra)` blends from full scale
+  below 15 m to a quarter above 120 m), so flight times and distances match the real country and climb and descent angles against the
+  terrain are true. Anything that predicts a position from the velocity (terrain look-ahead, GPWS, turn radii) multiplies by `hsAt`.
+  Distances shown to the player are real (`realDist`), never world metres. Runways, buildings and other objects are full size.
+- The glide path is 3° in real terms; on the map it is curved (`gsHeight`, `gsDist`, tabulated from `hsAt`). `ilsOf().gs` is degrees
+  above it in real terms.
 - Map window: lon 33.6–36.4, lat 29.2–33.6. Terrain grid `NX × NZ` is 384 × 704 on desktop, 240 × 440 on touch devices
   (`HIRES`). The outer ring of vertices is stretched to the horizon.
 - Aircraft body axes: nose −Z, right +X, up +Y. Attitude is the quaternion `S.q`; `readAttitude()` derives `S.pitch`,
@@ -58,6 +64,7 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - On the start screen a choice only selects (`START`); in the pause menu a start point or aircraft starts at once.
 - Settings are rows of option buttons (`settingsRows`, `aria-pressed`), every choice visible; never a button that cycles.
 - The level chip in flight opens the menu at the difficulty levels; only the H key switches level directly.
+- The screen is kept on while flying (`keepAwake`: the Screen Wake Lock API, or a tiny muted video where it is missing).
 - Touch targets are at least 44 px; icon buttons get localized `aria-label`s in `applyLang`, which also sets `<html lang>`.
 - Every user-facing string is bilingual (`L('English', 'עברית')`, or `TRD` for data labels). Aviation instruments (PFD, ft, kt) stay as they are.
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
@@ -70,7 +77,7 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - 1 Medium (`S.assist`): real physics with flight-path hold, automatic gear and flaps, stall and terrain protection.
 - 2 Expert: real physics, rate command with flight-path hold when the stick is released, manual gear and flaps.
 - Autoland (`S.land`) and the autopilot (`S.ap.on`) always run on the physics path, also from Easy mode.
-- Automatic landing (L key / Land button) starts anywhere within `LAND_RANGE` (20 km) of the nearest runway with an ILS (`landTarget`).
+- Automatic landing (L key / Land button) starts anywhere within `LAND_RANGE` (40 km, real) of the nearest runway with an ILS (`landTarget`).
   Phases in `S.landPh`: `intercept` (fly to an entry point on the extended centreline, or, with `S.landJoin`, a localizer intercept
   onto it, glide-path height, terrain clearance), `final` (the ILS law, captured when lined up and not more than 5° high; going round
   if far too high close in), `rollout` (after touchdown, also through a bounce). Tested from 70 random starts at all six airports.
