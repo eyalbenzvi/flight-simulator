@@ -18,8 +18,8 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 
 - 1 unit = 1 m, but the map is compressed 4:1 horizontally (elevation is real). `KX = 23750`, `KZ = 27700` world metres per
   degree. `lon2x`, `lat2z`, `x2lon`, `z2lat` convert. North = −Z, East = +X, Up = +Y.
-- Scale in motion: aloft the aircraft crosses the map at a quarter of its true speed (`HSCALE`, `hsAt(ra)` blends from full scale
-  below 15 m to a quarter above 120 m), so flight times and distances match the real country and climb and descent angles against the
+- Scale in motion: aloft the aircraft crosses the map at a quarter of its true speed (`HSCALE`, `hsAt(ra)` blends smoothly, on a log scale
+  of height, from full scale at 30 m to a quarter at 1,500 m, so a low jet does not seem to leap forward near the ground), so flight times and distances match the real country and climb and descent angles against the
   terrain are true. Anything that predicts a position from the velocity (terrain look-ahead, GPWS, turn radii) multiplies by `hsAt`.
   Distances shown to the player are real (`realDist`), never world metres. Runways, buildings and other objects are full size.
 - The glide path is 3° in real terms; on the map it is curved (`gsHeight`, `gsDist`, tabulated from `hsAt`). `ilsOf().gs` is degrees
@@ -92,7 +92,9 @@ Re-run these numbers after changing `PLANES` (the analytical part is a few lines
 
 ## Flight modes (`S.mode`, set only through `setMode`)
 
-- 0 Easy (`S.arc`): `arcadeStep` replaces the physics. The stick steers the flight path directly, the lever sets speed,
+- 0 Easy (`S.arc`): `arcadeStep` replaces the physics. Speed changes come from the real thrust and drag (`arcadeAccel`, with gear and flap drag), so take-off runs and
+  rollouts are realistic (airliner: lift-off after about 1.1 km and 26 s, touchdown at about 133 kt, stops in about 700 m). The slowest speed
+  `arcVmin()` follows the automatic flaps. After landing with the power at idle the brakes come on by themselves. The stick steers the flight path directly, the lever sets speed,
   release flies straight and level, there is an automatic flare near the ground. Crashes: water, hillside, too fast, buildings.
 - 1 Medium (`S.assist`): real physics with flight-path hold, automatic gear and flaps, stall and terrain protection.
 - 2 Expert: real physics, rate command with flight-path hold when the stick is released, manual gear and flaps.

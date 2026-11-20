@@ -31,11 +31,11 @@ function tab(t, x) {
 const LON0 = 33.6, LON1 = 36.4, LAT0 = 29.2, LAT1 = 33.6, KX = 23750, KZ = 27700;
 /** The map is compressed 4:1 horizontally (real heights). Aloft the aircraft crosses it at a quarter of its true speed, so flight times
     and distances match the real country, and climbs and descents keep their true angle against the (equally compressed) terrain.
-    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends between 15 and 120 m. */
+    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends smoothly from 30 m to 1500 m above the ground. */
 /** International Standard Atmosphere: density (kg/m³) and speed of sound (m/s) at an altitude, troposphere and lower stratosphere. */
 const _isa = { rho: 1.225, a: 340.3 };
 function isa(h) { h = Math.max(h, -500); const T = Math.max(216.65, 288.15 - 0.0065 * h); _isa.rho = h < 11000 ? 1.225 * Math.pow(T / 288.15, 4.2559) : 0.36392 * Math.exp(-(h - 11000) / 6341.6); _isa.a = 20.0468 * Math.sqrt(T); return _isa; }
-const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(15, 120, ra);
+const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(0, 1, (Math.log(Math.max(ra, 0) + 10) - Math.log(40)) / (Math.log(1510) - Math.log(40)));     // a smooth blend from 30 m to 1500 m, no sudden change of pace
 /** Real distance in metres for a world offset: the compression undone with the true metres per degree at 31.4°N. */
 const REAL_X = 111320 * Math.cos(31.4 * Math.PI / 180) / KX, REAL_Z = 110950 / KZ, realDist = (dx, dz) => Math.hypot(dx * REAL_X, dz * REAL_Z);
 // Terrain grid: 173 m cells on computers, 277 m on phones and tablets (the heaviest setting that still loads and runs comfortably there)

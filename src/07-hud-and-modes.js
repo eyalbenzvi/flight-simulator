@@ -405,10 +405,17 @@ function photoCamera() {
 // What makes flying fun for a child: the aircraft goes exactly where the stick points, at once; nothing has to be managed;
 // nothing ends the flight; and the ground is a place to land, not a wall. So in Easy mode there is no stall, no crash and
 // no systems: the stick steers the flight path itself, the lever sets the speed, and letting go always flies straight and level.
-Object.assign(PLANES.airliner, { aTurn: 0.34, aPitch: 0.40, aG: 50, aBank: 42, aVmax: 220, aAcc: 16 });
-Object.assign(PLANES.bizjet, { aTurn: 0.45, aPitch: 0.50, aG: 55, aBank: 48, aVmax: 245, aAcc: 20 });
-Object.assign(PLANES.fighter, { aTurn: 0.85, aPitch: 0.95, aG: 80, aBank: 78, aVmax: 480, aAcc: 55 });
-Object.assign(PLANES.stunt, { aTurn: 0.95, aPitch: 1.05, aG: 80, aBank: 72, aVmax: 95, aAcc: 11 });
+// Easy mode: turn rate, pitch rate, steepest path (deg), bank, top speed (m/s, within the type's limits). Acceleration comes from thrust and drag (arcadeAccel).
+Object.assign(PLANES.airliner, { aTurn: 0.30, aPitch: 0.30, aG: 20, aBank: 35, aVmax: 175 });
+Object.assign(PLANES.bizjet, { aTurn: 0.40, aPitch: 0.40, aG: 26, aBank: 45, aVmax: 170 });
+Object.assign(PLANES.fighter, { aTurn: 0.80, aPitch: 0.90, aG: 70, aBank: 75, aVmax: 400 });
+Object.assign(PLANES.stunt, { aTurn: 0.95, aPitch: 1.05, aG: 45, aBank: 72, aVmax: 92 });
+/** Easy mode speed changes follow the type's real thrust and drag, and gravity on a climb or a descent: no fixed rates. */
+function arcadeAccel(v, gam, ground) {
+  const at = isa(S.pos.y), q = 0.5 * at.rho * v * v, W = PL.mass * G, cl = ground ? 0.3 : Math.min(W * Math.cos(gam) / Math.max(q * PL.S, 1), 2);
+  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * v);
+  return { up: Math.max(0.3, (T - D) / PL.mass - G * Math.sin(gam)), dn: Math.max(0.3, D / PL.mass + G * Math.sin(gam)) };
+}
 const A = { psi: 0, gam: 0, phi: 0, turn: 0, v: 0, sync: true, msgT: 0 };
 const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים',
@@ -422,8 +429,10 @@ function setMode(m) {
   S.mode = m; S.arc = m === 0; S.assist = m !== 2; S.holdAlt = null; S.gamHold = null; S.toClimb = false; A.sync = true; SAVE.mode = m; persist();
   document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1]); if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc); S.legSig = '';
 }
+/* Easy's slowest speed: 1.18 x the stall speed for the flaps now set (automatic in Easy), so full flaps allow a real approach speed */
+function arcVmin() { const clm = PL.cl0 + PL.cla * PL.ast; return PL.vs * Math.sqrt(clm / (clm + 0.03 * S.flapDeg)) * 1.18; }
 function arcSync() {
-  const V = S.vel.length(), vMin = PL.vs * 1.15; readAttitude(); A.v = V; A.psi = V > 5 ? Math.atan2(S.vel.x, -S.vel.z) : S.hdg * DEG; A.gam = V > 5 && !S.onGround ? Math.asin(clamp(S.vel.y / V, -1, 1)) : 0; A.phi = S.bank; A.turn = 0; A.sync = false; A.out = false;
+  const V = S.vel.length(), vMin = arcVmin(); readAttitude(); A.v = V; A.psi = V > 5 ? Math.atan2(S.vel.x, -S.vel.z) : S.hdg * DEG; A.gam = V > 5 && !S.onGround ? Math.asin(clamp(S.vel.y / V, -1, 1)) : 0; A.phi = S.bank; A.turn = 0; A.sync = false; A.out = false;
   S.thr = S.onGround ? clamp(V / (PL.aVmax * 0.6), 0, 1) : clamp((V - vMin) / (PL.aVmax - vMin), 0, 1);
 }
 function arcSay(en, he) { if (TNOW > A.msgT) { A.msgT = TNOW + 4; toast(L(en, he)); } }
@@ -433,25 +442,28 @@ function arcadeStep(dt) {
   if (touch.on) { ud -= touch.y; lr += touch.x; } ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;
   const up = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, dn = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;
   if (up) S.thr += 0.4 * dt; if (dn) S.thr -= 0.4 * dt; S.thr = clamp(S.thr, 0, 1); S.brake = !!(keys.KeyB || keys.Space);
-  const vMin = PL.vs * 1.15, vMax = PL.aVmax; let G2 = 0;
+  const vMin = arcVmin(), vMax = PL.aVmax; let G2 = 0;
   if (S.onGround) {
     // on the ground: the lever drives, the stick steers, and it lifts off by itself once it is fast enough
-    const vT = S.brake ? 0 : S.thr * vMax * 0.6, a = (vT > A.v ? PL.aAcc : S.brake ? 30 : 12) * dt; A.v += clamp(vT - A.v, -a, a);
+    const ac = arcadeAccel(A.v, 0, true), vT = S.brake ? 0 : S.thr * vMax * 0.6, a = (vT > A.v ? ac.up : S.brake ? 4.4 : ac.dn + (S.landed && S.thr < 0.05 ? 2.8 : 0)) * dt;   /* after landing with the power at idle the brakes come on by themselves */
+    A.v += clamp(vT - A.v, -a, a);
     A.psi += lr * 0.7 * clamp(A.v / 8, 0, 1) * dt; A.gam = 0; A.phi *= Math.exp(-8 * dt); A.turn = 0;
     const sx = Math.sin(A.psi) * A.v * dt, sz = -Math.cos(A.psi) * A.v * dt; S.pos.x += sx; S.pos.z += sz; let g = groundAt(S.pos.x, S.pos.z);
     if (g.water) { S.pos.x -= sx; S.pos.z -= sz; A.v = 0; g = groundAt(S.pos.x, S.pos.z); arcSay('That is water. Turn around', 'זה מים. צריך להסתובב'); }
     S.pos.y = g.h + GEAR_H; S.airTime = 0;
-    if (A.v > vMin * 0.8 && (S.thr > 0.4 || ud > 0.1)) { S.onGround = false; A.gam = 0.12; A.out = true; S.landed = false; }
+    if (A.v > PL.vs * 1.1 && (S.thr > 0.4 || ud > 0.1)) { S.onGround = false; A.gam = 0.04; A.out = true; S.landed = false; }     // rotate a little above the stall speed
   } else {
     S.airTime += dt;
-    const vT = lerp(vMin, vMax, S.thr), a = (vT > A.v ? PL.aAcc : 14) * dt; A.v += clamp(vT - A.v, -a, a);
+    const ac = arcadeAccel(A.v, A.gam, false), vT = lerp(vMin, vMax, S.thr), a = (vT > A.v ? ac.up : ac.dn) * dt; A.v += clamp(vT - A.v, -a, a);
+    if (A.gam > 0 && A.v < vMin) A.v = Math.max(A.v - ac.dn * dt * 0.2, vMin * 0.97);       // Easy has no stall: near the stall speed the nose comes down instead (below)
     const tk = S.trick;
     if (tk) { tk.t += dt; const T = tk.type === 'roll' ? 1.1 : (PL.aPitch > 0.8 ? 3.6 : 6), k = Math.min(tk.t / T, 1), e = k * k * (3 - 2 * k); tk.ang = (tk.type === 'roll' ? tk.dir : 1) * e * Math.PI * 2;
       if (k >= 1) { S.trick = null; Snd.chime(820, 0.25); toast(tk.type === 'roll' ? L('Roll!', 'גלגול!') : L('Loop!', 'לולאה!')); } }
     A.turn += (lr * PL.aTurn * clamp(1.25 - A.v / vMax * 0.55, 0.6, 1) - A.turn) * Math.min(1, 5 * dt); A.psi += A.turn * dt;
     const gm = PL.aG * DEG, back = PL.aPitch * 0.45 * dt;
-    if (Math.abs(ud) > 0.05) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 150) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
+    if (Math.abs(ud) > 0.05) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 450) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
     if (ud < -0.05) A.out = false;
+    if (A.v < vMin * 1.06 && A.gam > 0.03) A.gam = Math.max(0.03, A.gam - 0.3 * dt);         // too slow to keep climbing: the nose lowers by itself
     if (!S.trick && S.ra < 260) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
       for (const t of [2, 4, 7]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + 70 - S.pos.y) / (A.v * t)); }
@@ -467,7 +479,7 @@ function arcadeStep(dt) {
       if (gw) return crash(L('The aircraft hit the water.', 'המטוס פגע במים'));
       if (rise > 9) return crash(L('Flew into a hillside.', 'התנגשות בצלע הר'));
       if (A.gam < -0.3) return crash(L('Hit the ground too steeply. Come down gently to land.', 'פגיעה תלולה מדי בקרקע. כדי לנחות יורדים בעדינות'));
-      if (A.v > vMin * 1.9) return crash(L('Too fast to land. Slow down first.', 'מהר מדי לנחיתה. קודם מאטים'));
+      if (A.v > PL.vs * 1.6) return crash(L('Too fast to land. Slow down first.', 'מהר מדי לנחיתה. קודם מאטים'));
       S.onGround = true; A.gam = 0; S.landed = true; S.thr = 0; S.shake = 0.25; Snd.chime(700, 0.25); toast(L('Landed!', 'נחתנו!'));
     }
   }

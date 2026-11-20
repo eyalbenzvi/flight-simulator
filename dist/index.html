@@ -56,6 +56,7 @@ body.touch #score{left:calc(10px + var(--sl));top:calc(60px + var(--st));height:
 body.touch #sys{top:calc(96px + var(--st))}
 #pop{position:absolute;left:50%;top:17%;transform:translateX(-50%);color:var(--sand);font-size:19px;font-weight:700;text-shadow:0 1px 3px #000,0 0 10px rgba(0,0,0,.8);opacity:0;transition:opacity .25s;white-space:nowrap}
 #rain{position:absolute;inset:-40px;display:none;opacity:.22;background:repeating-linear-gradient(104deg,transparent 0 7px,rgba(200,215,235,.5) 7px 8px,transparent 8px 19px);animation:rain .28s linear infinite}
+.ldSpin{width:44px;height:44px;margin:18px auto 22px;border:4px solid rgba(232,201,126,.25);border-top-color:var(--sand);border-radius:50%;animation:ldSpin 1s linear infinite} @keyframes ldSpin{to{transform:rotate(360deg)}}
 @keyframes rain{to{transform:translate(-14px,38px)}}
 @media (prefers-reduced-motion:reduce){#rain{animation:none}}
 #photoBar{position:absolute;left:50%;bottom:calc(14px + var(--sb));transform:translateX(-50%);display:none;align-items:center;gap:8px;padding:8px 12px;font-size:13.5px;white-space:nowrap}
@@ -186,13 +187,22 @@ details.sec[open] summary{margin-bottom:7px}
 
 <div id="start" class="ov">
   <div class="card panel">
-    <div class="mh"><h1></h1><button id="langB" class="pill" lang="">English</button></div>
+    <div class="mh"><h1></h1><button id="langB" class="pill" lang="" style="visibility:hidden">English</button></div>
     <div id="rule"></div>
     <p id="intro"></p>
     <div id="sBody"></div>
     <div class="foot"><span id="sSum" class="sum"></span><button id="fly" class="go" disabled>…</button></div>
   </div>
 </div>
+<script>
+/* Shown while the scripts load and the world is built (a few seconds on a phone): the title, a loading line and a spinner, in the saved language */
+(function () { var he = true; try { he = (JSON.parse(localStorage.getItem('ifs-save') || '{}').lang || 'he') === 'he'; } catch (e) {}
+  var q = function (s) { return document.querySelector(s); }; document.documentElement.lang = he ? 'he' : 'en'; q('#start .card').dir = he ? 'rtl' : 'ltr';
+  q('#start h1').textContent = he ? 'סימולטור טיסה מעל ישראל' : 'ISRAEL FLIGHT SIMULATOR';
+  q('#intro').textContent = he ? 'בונים את המפה של ישראל: ישובים, כבישים ואתרים. זה לוקח כמה שניות.' : 'Building the map of Israel: towns, roads and sites. This takes a few seconds.';
+  q('#sBody').innerHTML = '<div class="ldSpin" role="progressbar" aria-label="' + (he ? 'טוען' : 'Loading') + '"></div>';
+  q('#fly').textContent = he ? 'טוען…' : 'Loading…'; })();
+</script>
 
 <div id="menu" class="ov" style="display:none">
   <div class="card panel">
@@ -265,11 +275,11 @@ function tab(t, x) {
 const LON0 = 33.6, LON1 = 36.4, LAT0 = 29.2, LAT1 = 33.6, KX = 23750, KZ = 27700;
 /** The map is compressed 4:1 horizontally (real heights). Aloft the aircraft crosses it at a quarter of its true speed, so flight times
     and distances match the real country, and climbs and descents keep their true angle against the (equally compressed) terrain.
-    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends between 15 and 120 m. */
+    On and near the ground, where runways and buildings are full size, it moves at full scale: hsAt blends smoothly from 30 m to 1500 m above the ground. */
 /** International Standard Atmosphere: density (kg/m³) and speed of sound (m/s) at an altitude, troposphere and lower stratosphere. */
 const _isa = { rho: 1.225, a: 340.3 };
 function isa(h) { h = Math.max(h, -500); const T = Math.max(216.65, 288.15 - 0.0065 * h); _isa.rho = h < 11000 ? 1.225 * Math.pow(T / 288.15, 4.2559) : 0.36392 * Math.exp(-(h - 11000) / 6341.6); _isa.a = 20.0468 * Math.sqrt(T); return _isa; }
-const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(15, 120, ra);
+const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(0, 1, (Math.log(Math.max(ra, 0) + 10) - Math.log(40)) / (Math.log(1510) - Math.log(40)));     // a smooth blend from 30 m to 1500 m, no sudden change of pace
 /** Real distance in metres for a world offset: the compression undone with the true metres per degree at 31.4°N. */
 const REAL_X = 111320 * Math.cos(31.4 * Math.PI / 180) / KX, REAL_Z = 110950 / KZ, realDist = (dx, dz) => Math.hypot(dx * REAL_X, dz * REAL_Z);
 // Terrain grid: 173 m cells on computers, 277 m on phones and tablets (the heaviest setting that still loads and runs comfortably there)
@@ -2672,10 +2682,17 @@ function photoCamera() {
 // What makes flying fun for a child: the aircraft goes exactly where the stick points, at once; nothing has to be managed;
 // nothing ends the flight; and the ground is a place to land, not a wall. So in Easy mode there is no stall, no crash and
 // no systems: the stick steers the flight path itself, the lever sets the speed, and letting go always flies straight and level.
-Object.assign(PLANES.airliner, { aTurn: 0.34, aPitch: 0.40, aG: 50, aBank: 42, aVmax: 220, aAcc: 16 });
-Object.assign(PLANES.bizjet, { aTurn: 0.45, aPitch: 0.50, aG: 55, aBank: 48, aVmax: 245, aAcc: 20 });
-Object.assign(PLANES.fighter, { aTurn: 0.85, aPitch: 0.95, aG: 80, aBank: 78, aVmax: 480, aAcc: 55 });
-Object.assign(PLANES.stunt, { aTurn: 0.95, aPitch: 1.05, aG: 80, aBank: 72, aVmax: 95, aAcc: 11 });
+// Easy mode: turn rate, pitch rate, steepest path (deg), bank, top speed (m/s, within the type's limits). Acceleration comes from thrust and drag (arcadeAccel).
+Object.assign(PLANES.airliner, { aTurn: 0.30, aPitch: 0.30, aG: 20, aBank: 35, aVmax: 175 });
+Object.assign(PLANES.bizjet, { aTurn: 0.40, aPitch: 0.40, aG: 26, aBank: 45, aVmax: 170 });
+Object.assign(PLANES.fighter, { aTurn: 0.80, aPitch: 0.90, aG: 70, aBank: 75, aVmax: 400 });
+Object.assign(PLANES.stunt, { aTurn: 0.95, aPitch: 1.05, aG: 45, aBank: 72, aVmax: 92 });
+/** Easy mode speed changes follow the type's real thrust and drag, and gravity on a climb or a descent: no fixed rates. */
+function arcadeAccel(v, gam, ground) {
+  const at = isa(S.pos.y), q = 0.5 * at.rho * v * v, W = PL.mass * G, cl = ground ? 0.3 : Math.min(W * Math.cos(gam) / Math.max(q * PL.S, 1), 2);
+  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * v);
+  return { up: Math.max(0.3, (T - D) / PL.mass - G * Math.sin(gam)), dn: Math.max(0.3, D / PL.mass + G * Math.sin(gam)) };
+}
 const A = { psi: 0, gam: 0, phi: 0, turn: 0, v: 0, sync: true, msgT: 0 };
 const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים',
@@ -2689,8 +2706,10 @@ function setMode(m) {
   S.mode = m; S.arc = m === 0; S.assist = m !== 2; S.holdAlt = null; S.gamHold = null; S.toClimb = false; A.sync = true; SAVE.mode = m; persist();
   document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1]); if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc); S.legSig = '';
 }
+/* Easy's slowest speed: 1.18 x the stall speed for the flaps now set (automatic in Easy), so full flaps allow a real approach speed */
+function arcVmin() { const clm = PL.cl0 + PL.cla * PL.ast; return PL.vs * Math.sqrt(clm / (clm + 0.03 * S.flapDeg)) * 1.18; }
 function arcSync() {
-  const V = S.vel.length(), vMin = PL.vs * 1.15; readAttitude(); A.v = V; A.psi = V > 5 ? Math.atan2(S.vel.x, -S.vel.z) : S.hdg * DEG; A.gam = V > 5 && !S.onGround ? Math.asin(clamp(S.vel.y / V, -1, 1)) : 0; A.phi = S.bank; A.turn = 0; A.sync = false; A.out = false;
+  const V = S.vel.length(), vMin = arcVmin(); readAttitude(); A.v = V; A.psi = V > 5 ? Math.atan2(S.vel.x, -S.vel.z) : S.hdg * DEG; A.gam = V > 5 && !S.onGround ? Math.asin(clamp(S.vel.y / V, -1, 1)) : 0; A.phi = S.bank; A.turn = 0; A.sync = false; A.out = false;
   S.thr = S.onGround ? clamp(V / (PL.aVmax * 0.6), 0, 1) : clamp((V - vMin) / (PL.aVmax - vMin), 0, 1);
 }
 function arcSay(en, he) { if (TNOW > A.msgT) { A.msgT = TNOW + 4; toast(L(en, he)); } }
@@ -2700,25 +2719,28 @@ function arcadeStep(dt) {
   if (touch.on) { ud -= touch.y; lr += touch.x; } ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;
   const up = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, dn = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;
   if (up) S.thr += 0.4 * dt; if (dn) S.thr -= 0.4 * dt; S.thr = clamp(S.thr, 0, 1); S.brake = !!(keys.KeyB || keys.Space);
-  const vMin = PL.vs * 1.15, vMax = PL.aVmax; let G2 = 0;
+  const vMin = arcVmin(), vMax = PL.aVmax; let G2 = 0;
   if (S.onGround) {
     // on the ground: the lever drives, the stick steers, and it lifts off by itself once it is fast enough
-    const vT = S.brake ? 0 : S.thr * vMax * 0.6, a = (vT > A.v ? PL.aAcc : S.brake ? 30 : 12) * dt; A.v += clamp(vT - A.v, -a, a);
+    const ac = arcadeAccel(A.v, 0, true), vT = S.brake ? 0 : S.thr * vMax * 0.6, a = (vT > A.v ? ac.up : S.brake ? 4.4 : ac.dn + (S.landed && S.thr < 0.05 ? 2.8 : 0)) * dt;   /* after landing with the power at idle the brakes come on by themselves */
+    A.v += clamp(vT - A.v, -a, a);
     A.psi += lr * 0.7 * clamp(A.v / 8, 0, 1) * dt; A.gam = 0; A.phi *= Math.exp(-8 * dt); A.turn = 0;
     const sx = Math.sin(A.psi) * A.v * dt, sz = -Math.cos(A.psi) * A.v * dt; S.pos.x += sx; S.pos.z += sz; let g = groundAt(S.pos.x, S.pos.z);
     if (g.water) { S.pos.x -= sx; S.pos.z -= sz; A.v = 0; g = groundAt(S.pos.x, S.pos.z); arcSay('That is water. Turn around', 'זה מים. צריך להסתובב'); }
     S.pos.y = g.h + GEAR_H; S.airTime = 0;
-    if (A.v > vMin * 0.8 && (S.thr > 0.4 || ud > 0.1)) { S.onGround = false; A.gam = 0.12; A.out = true; S.landed = false; }
+    if (A.v > PL.vs * 1.1 && (S.thr > 0.4 || ud > 0.1)) { S.onGround = false; A.gam = 0.04; A.out = true; S.landed = false; }     // rotate a little above the stall speed
   } else {
     S.airTime += dt;
-    const vT = lerp(vMin, vMax, S.thr), a = (vT > A.v ? PL.aAcc : 14) * dt; A.v += clamp(vT - A.v, -a, a);
+    const ac = arcadeAccel(A.v, A.gam, false), vT = lerp(vMin, vMax, S.thr), a = (vT > A.v ? ac.up : ac.dn) * dt; A.v += clamp(vT - A.v, -a, a);
+    if (A.gam > 0 && A.v < vMin) A.v = Math.max(A.v - ac.dn * dt * 0.2, vMin * 0.97);       // Easy has no stall: near the stall speed the nose comes down instead (below)
     const tk = S.trick;
     if (tk) { tk.t += dt; const T = tk.type === 'roll' ? 1.1 : (PL.aPitch > 0.8 ? 3.6 : 6), k = Math.min(tk.t / T, 1), e = k * k * (3 - 2 * k); tk.ang = (tk.type === 'roll' ? tk.dir : 1) * e * Math.PI * 2;
       if (k >= 1) { S.trick = null; Snd.chime(820, 0.25); toast(tk.type === 'roll' ? L('Roll!', 'גלגול!') : L('Loop!', 'לולאה!')); } }
     A.turn += (lr * PL.aTurn * clamp(1.25 - A.v / vMax * 0.55, 0.6, 1) - A.turn) * Math.min(1, 5 * dt); A.psi += A.turn * dt;
     const gm = PL.aG * DEG, back = PL.aPitch * 0.45 * dt;
-    if (Math.abs(ud) > 0.05) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 150) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
+    if (Math.abs(ud) > 0.05) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 450) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
     if (ud < -0.05) A.out = false;
+    if (A.v < vMin * 1.06 && A.gam > 0.03) A.gam = Math.max(0.03, A.gam - 0.3 * dt);         // too slow to keep climbing: the nose lowers by itself
     if (!S.trick && S.ra < 260) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
       for (const t of [2, 4, 7]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + 70 - S.pos.y) / (A.v * t)); }
@@ -2734,7 +2756,7 @@ function arcadeStep(dt) {
       if (gw) return crash(L('The aircraft hit the water.', 'המטוס פגע במים'));
       if (rise > 9) return crash(L('Flew into a hillside.', 'התנגשות בצלע הר'));
       if (A.gam < -0.3) return crash(L('Hit the ground too steeply. Come down gently to land.', 'פגיעה תלולה מדי בקרקע. כדי לנחות יורדים בעדינות'));
-      if (A.v > vMin * 1.9) return crash(L('Too fast to land. Slow down first.', 'מהר מדי לנחיתה. קודם מאטים'));
+      if (A.v > PL.vs * 1.6) return crash(L('Too fast to land. Slow down first.', 'מהר מדי לנחיתה. קודם מאטים'));
       S.onGround = true; A.gam = 0; S.landed = true; S.thr = 0; S.shake = 0.25; Snd.chime(700, 0.25); toast(L('Landed!', 'נחתנו!'));
     }
   }
@@ -3088,7 +3110,7 @@ function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
-  const fly = $('fly'); fly.disabled = false; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
+  const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (!S.arc && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
   $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
