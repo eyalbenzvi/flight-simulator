@@ -58,7 +58,8 @@ ponds, pivot circles, Nahalal, minarets, heliostats, turbines) checks it, so cal
 
 `drawMap` sizes the map canvas to its on-screen size × devicePixelRatio and sizes text in CSS pixels. `mapLabels` places labels by priority
 (waypoints, cities of 100k+, motorway numbers, smaller towns, regional road numbers) and drops any that would overlap; the layout is cached
-per size, zoom and language. Names in the sky (`buildLabels`) show within 2.5–10 km of game world by town size, nearest first, and a farther
+per size, zoom and language. On the enlarged map, two fingers or the mouse wheel zoom 1–8× (`MV`, `mapZoomAt`), one finger or
+the mouse pans, double-click zooms in, and a tap (not a drag, see `mapWasDragged`) opens and closes it. Names in the sky (`buildLabels`) show within 2.5–10 km of game world by town size, nearest first, and a farther
 name that would overlap a nearer one on screen is hidden.
 
 ## Settlement data

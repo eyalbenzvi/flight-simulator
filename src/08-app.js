@@ -113,7 +113,7 @@ function setupTouch() {
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
     else b.addEventListener('click', () => action(k)); });
-  $('map').addEventListener('click', () => $('map').classList.toggle('big'));
+  setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
 }
 
 // ---------- 15. Menus ----------

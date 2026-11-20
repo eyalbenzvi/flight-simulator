@@ -1766,9 +1766,11 @@ function drawPFD() {
   if (S.stallWarn) { P.fillStyle = '#ff5252'; P.font = 'bold 22px ' + FONT; P.textAlign = 'center'; P.fillText('STALL', cx, ay + 44); }
 }
 /** The minimap. The canvas is sized to its on-screen size × devicePixelRatio, so it stays sharp when enlarged on a phone.
-    Text is sized in CSS pixels, and labels are placed by priority without overlapping (see mapLabels). */
-const MAPW = 160, MAPH = 294;
+    Text is sized in CSS pixels, and labels are placed by priority without overlapping (see mapLabels).
+    The enlarged map zooms (1×–8×) with two fingers or the mouse wheel and pans with one finger or the mouse; a tap opens and closes it. */
+const MAPW = 160, MAPH = 294, MAPZMAX = 8;
 const WP_NAMES = { TLV: ['Tel Aviv', 'תל אביב'], JRS: ['Jerusalem', 'ירושלים'], HFA: ['Haifa', 'חיפה'], 'DEAD SEA': ['Dead Sea', 'ים המלח'], MASADA: ['Masada', 'מצדה'], EILAT: ['Eilat', 'אילת'] };
+const MV = { z: 1, ox: 0, oy: 0, ptr: new Map(), moved: false, multi: false, raf: 0 };   // zoom and the top-left visible point in map units
 let mapLbl = null;
 function sizeMap() {
   const ch = mapC.clientHeight; if (!ch) return 0;
@@ -1776,32 +1778,59 @@ function sizeMap() {
   if (mapC.height !== h || mapC.width !== w) { mapC.width = w; mapC.height = h; mapLbl = null; }
   return ch / MAPH;                                   // CSS pixels per map unit
 }
-/** Label layout: one list of text boxes in map units, cached until the map size, its zoom or the language changes.
+const mapZoomed = () => mapC.classList.contains('big') && MV.z > 1.001;
+function mapClampView() { MV.z = clamp(MV.z, 1, MAPZMAX); MV.ox = clamp(MV.ox, 0, MAPW - MAPW / MV.z); MV.oy = clamp(MV.oy, 0, MAPH - MAPH / MV.z); }
+/** Zoom by factor f about a point given in CSS pixels from the canvas corner, keeping the map point under it in place. */
+function mapZoomAt(cx, cy, f) { const u = mapC.clientHeight / MAPH, mx = MV.ox + cx / (u * MV.z), my = MV.oy + cy / (u * MV.z); MV.z = clamp(MV.z * f, 1, MAPZMAX); MV.ox = mx - cx / (u * MV.z); MV.oy = my - cy / (u * MV.z); mapClampView(); }
+function mapPan(dx, dy) { const u = mapC.clientHeight / MAPH; MV.ox -= dx / (u * MV.z); MV.oy -= dy / (u * MV.z); mapClampView(); }
+function mapResetView() { MV.z = 1; MV.ox = MV.oy = 0; }
+const mapRedraw = () => { if (!MV.raf) MV.raf = requestAnimationFrame(() => { MV.raf = 0; drawMap(); }); };
+/** Touch and mouse on the map. A tap toggles the enlarged map (the click handler in 08-app.js asks mapWasDragged first). */
+function setupMapGestures() {
+  const pos = e => { const r = mapC.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  mapC.addEventListener('pointerdown', e => { if (!MV.ptr.size) { MV.moved = false; MV.multi = false; } MV.ptr.set(e.pointerId, pos(e)); if (MV.ptr.size > 1) MV.multi = true; try { mapC.setPointerCapture(e.pointerId); } catch (_) {} e.stopPropagation(); });
+  mapC.addEventListener('pointermove', e => {
+    if (!MV.ptr.has(e.pointerId)) return; const big = mapC.classList.contains('big'), prev = [...MV.ptr.values()].map(p => p.slice()), p = pos(e), old = MV.ptr.get(e.pointerId);
+    if (Math.hypot(p[0] - old[0], p[1] - old[1]) > 0.5) { MV.ptr.set(e.pointerId, p); } else return;
+    const now = [...MV.ptr.values()];
+    if (now.length >= 2 && big) {
+      const [a0, b0] = prev, [a1, b1] = now, d0 = Math.hypot(a0[0] - b0[0], a0[1] - b0[1]), d1 = Math.hypot(a1[0] - b1[0], a1[1] - b1[1]);
+      const m0 = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2], m1 = [(a1[0] + b1[0]) / 2, (a1[1] + b1[1]) / 2];
+      if (d0 > 4) mapZoomAt(m1[0], m1[1], d1 / d0); mapPan(m1[0] - m0[0], m1[1] - m0[1]); MV.moved = true; mapRedraw();
+    } else if (now.length === 1 && big && !MV.multi) { const dx = p[0] - old[0], dy = p[1] - old[1]; if (MV.moved || Math.hypot(dx, dy) > 3) { MV.moved = true; if (MV.z > 1.001) { mapPan(dx, dy); mapRedraw(); } } }
+    e.stopPropagation(); });
+  const up = e => { MV.ptr.delete(e.pointerId); e.stopPropagation(); };
+  mapC.addEventListener('pointerup', up); mapC.addEventListener('pointercancel', up);
+  mapC.addEventListener('wheel', e => { if (!mapC.classList.contains('big')) return; e.preventDefault(); const [x, y] = pos(e); mapZoomAt(x, y, Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0015))); mapRedraw(); }, { passive: false });
+  mapC.addEventListener('dblclick', e => { if (mapC.classList.contains('big')) { e.preventDefault(); const [x, y] = pos(e); if (MV.z < MAPZMAX - 0.01) mapZoomAt(x, y, 2); else mapResetView(); mapRedraw(); } });
+}
+/** True (once) when the last touch on the map was a drag or a pinch, not a tap. */
+function mapWasDragged() { const m = MV.moved || MV.multi; MV.moved = MV.multi = false; return m; }
+/** Label layout: one list of text boxes in map units, cached until the map size, its zoom step or the language changes.
     Order of priority: waypoints, big cities, motorway numbers, smaller towns, regional road numbers. A label that would touch
-    another one, or leave the map, is tried on the other sides of its dot and then dropped. */
-function mapLabels(W, H, u, big) {
-  const key = big + ':' + u.toFixed(4) + ':' + SAVE.lang; if (mapLbl && mapLbl.key === key) return mapLbl.items;
+    another one, or leave the map, is tried on the other sides of its dot and then dropped. Zooming in lets smaller towns in. */
+function mapLabels(W, H, u, big, zs) {
+  const key = big + ':' + u.toFixed(4) + ':' + zs + ':' + SAVE.lang; if (mapLbl && mapLbl.key === key) return mapLbl.items;
   const items = [], boxes = [], px = v => v / u, fits = b => b.x0 >= 0 && b.y0 >= 0 && b.x1 <= W && b.y1 <= H && !boxes.some(o => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
   const mx = x => (x - X0) / (X1 - X0) * W, mz = z => (z - Z0) / (Z1 - Z0) * H, gap = px(big ? 3 : 2);
-  boxes.push({ x0: W - px(18), y0: 0, x1: W, y1: px(18) });                                       // the N marker
-  for (const ap of AIRPORTS) { const x = mx(ap.x), y = mz(ap.z); boxes.push({ x0: x - 2, y0: y - 2, x1: x + 2, y1: y + 2 }); }
-  const font = (size, bold) => (bold ? 'bold ' : '') + px(size).toFixed(3) + 'px ' + FONT;
+  for (const ap of AIRPORTS) { const x = mx(ap.x), y = mz(ap.z); boxes.push({ x0: x - px(3), y0: y - px(3), x1: x + px(3), y1: y + px(3) }); }
+  const font = (size, bold) => (bold ? 'bold ' : '') + px(size).toFixed(4) + 'px ' + FONT;
   const label = (text, x, y, size, bold, kind, sides) => {
     M.font = font(size, bold); const tw = M.measureText(text).width, th = px(size), o = px(kind === 'loc' ? 4 : 6);
     const dot = kind === 'loc' ? { x0: x - px(2.5), y0: y - px(2.5), x1: x + px(2.5), y1: y + px(2.5) } : null; if (dot && !fits(dot)) return false;
     for (const s of sides) { const lx = s === 'r' ? x + o : s === 'l' ? x - o - tw : x - tw / 2, ly = s === 'u' ? y - o - th / 2 : s === 'd' ? y + o + th / 2 : y;
       const b = { x0: lx - gap, y0: ly - th / 2 - gap, x1: lx + tw + gap, y1: ly + th / 2 + gap }; if (!fits(b)) continue;
-      boxes.push(b); if (dot) boxes.push(dot); items.push({ text, x: lx, y: ly, font: M.font, kind, dx: x, dy: y }); return true; }
+      boxes.push(b); if (dot) boxes.push(dot); items.push({ text, x: lx, y: ly, font: M.font, kind, dx: x, dy: y, b }); return true; }
     return false;
   };
   const shield = r => { const x = mx(r.x), y = mz(r.z), size = 9, th = px(size + 4); M.font = font(size, true); const w = M.measureText(r.n).width + px(5);
-    const b = { x0: x - w / 2 - gap, y0: y - th / 2 - gap, x1: x + w / 2 + gap, y1: y + th / 2 + gap }; if (!fits(b)) return; boxes.push(b); items.push({ text: r.n, x, y, w, h: th, font: M.font, kind: 'road', cls: r.cls }); };
+    const b = { x0: x - w / 2 - gap, y0: y - th / 2 - gap, x1: x + w / 2 + gap, y1: y + th / 2 + gap }; if (!fits(b)) return; boxes.push(b); items.push({ text: r.n, x, y, w, h: th, font: M.font, kind: 'road', cls: r.cls, b }); };
   // waypoints: short codes on the small map, place names on the big one
   const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]);
   for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : n; label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
   if (big) {
-    const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14));
-    const locs = LOCS.filter(l => l[4] >= 20).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
+    const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14)), minPop = Math.max(1, 20 / Math.pow(zs, 1.5));
+    const locs = LOCS.filter(l => l[4] >= minPop).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
     for (const [t, x, y, pop] of locs) if (pop >= 100 && !near(x, y)) label(t, x, y, 12, true, 'loc', ['r', 'l', 'u', 'd']);
     for (const r of ROADLBL) if (r.cls === 2) shield(r);
     for (const [t, x, y, pop] of locs) if (pop < 100 && !near(x, y)) label(t, x, y, 10.5, false, 'loc', ['r', 'l', 'u', 'd']);
@@ -1810,27 +1839,43 @@ function mapLabels(W, H, u, big) {
   mapLbl = { key, items }; return items;
 }
 function drawMap() {
-  const u = sizeMap(); if (!u) return;
-  const W = MAPW, H = MAPH, k = mapC.height / H, big = mapC.classList.contains('big'), mx = x => (x - X0) / (X1 - X0) * W, mz = z => (z - Z0) / (Z1 - Z0) * H, px = v => v / u;
-  M.setTransform(k, 0, 0, k, 0, 0); M.imageSmoothingQuality = 'high'; M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = big ? 'rgba(0,10,20,.28)' : 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
+  const u0 = sizeMap(); if (!u0) return;
+  const big = mapC.classList.contains('big'); if (!big && MV.z !== 1) mapResetView();
+  const W = MAPW, H = MAPH, k = mapC.height / H, z = MV.z, zs = Math.pow(2, Math.round(Math.log2(z) * 4) / 4), u = u0 * z, px = v => v / u;   // zs: zoom step for the label layout
+  const mx = x => (x - X0) / (X1 - X0) * W, mz = v => (v - Z0) / (Z1 - Z0) * H, vx0 = MV.ox, vy0 = MV.oy, vx1 = vx0 + W / z, vy1 = vy0 + H / z;
+  M.setTransform(1, 0, 0, 1, 0, 0); M.clearRect(0, 0, mapC.width, mapC.height);
+  M.setTransform(k * z, 0, 0, k * z, -vx0 * k * z, -vy0 * k * z); M.imageSmoothingEnabled = true; M.imageSmoothingQuality = 'high';
+  M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = big ? 'rgba(0,10,20,.28)' : 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
+  if (z > 1.4) {                                       // zoomed in: redraw the roads as sharp lines over the baked image
+    M.lineJoin = M.lineCap = 'round';
+    for (const p of roadPaths) { const mw = p[0][3] === 2; M.strokeStyle = mw ? 'rgba(255,236,170,.95)' : 'rgba(240,240,235,.75)'; M.lineWidth = px(mw ? 2.2 : 1.3); M.beginPath();
+      p.forEach((q, i) => i ? M.lineTo(mx(q[0]), mz(q[2])) : M.moveTo(mx(q[0]), mz(q[2]))); M.stroke(); } }
   M.lineWidth = px(1.2); M.strokeStyle = '#ff66ee';                                     // ILS approach feathers
   for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * 9000), ey = mz(rw.tz - rw.dz * 9000);
     M.beginPath(); M.moveTo(x, y); M.lineTo(ex, ey); M.stroke(); }
-  M.fillStyle = '#fff'; for (const ap of AIRPORTS) { const s = Math.max(px(4), 2.5); M.fillRect(mx(ap.x) - s / 2, mz(ap.z) - s / 2, s, s); }
+  M.fillStyle = '#fff'; for (const ap of AIRPORTS) { const s = Math.max(px(4), 2.5 / z); M.fillRect(mx(ap.x) - s / 2, mz(ap.z) - s / 2, s, s); }
   M.textBaseline = 'middle'; M.textAlign = 'left'; M.lineJoin = 'round';
-  for (const it of mapLabels(W, H, u, big)) {
-    M.font = it.font;
-    if (it.kind === 'road') { M.fillStyle = it.cls === 2 ? '#1d58b4' : '#2f8a45'; M.fillRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h); M.strokeStyle = 'rgba(255,255,255,.8)'; M.lineWidth = px(0.8); M.strokeRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h);
-      M.fillStyle = '#fff'; M.textAlign = 'center'; M.fillText(it.text, it.x, it.y + px(0.5)); M.textAlign = 'left'; continue; }
-    if (it.kind === 'wp') { M.fillStyle = '#55d6ff'; M.strokeStyle = 'rgba(0,0,0,.7)'; M.lineWidth = px(1); M.beginPath(); M.arc(it.dx, it.dy, px(3.5), 0, 7); M.fill(); M.stroke(); }
-    else { M.fillStyle = '#fff'; M.strokeStyle = 'rgba(0,0,0,.7)'; M.lineWidth = px(1); M.beginPath(); M.arc(it.dx, it.dy, px(2), 0, 7); M.fill(); M.stroke(); }
-    M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = px(3); M.strokeText(it.text, it.x, it.y); M.fillStyle = it.kind === 'wp' ? '#fff' : '#f2ede2'; M.fillText(it.text, it.x, it.y);
+  const items = mapLabels(W, H, u0 * zs, big, zs), sc = zs / z;     // labels laid out at the zoom step, drawn at the exact zoom
+  for (const it of items) {
+    if (it.b.x1 < vx0 || it.b.x0 > vx1 || it.b.y1 < vy0 || it.b.y0 > vy1) continue;
+    { const sx0 = (it.b.x0 - vx0) * z, sx1 = (it.b.x1 - vx0) * z, sy0 = (it.b.y0 - vy0) * z, c = 20 / u0;   // keep the corners free for the N marker and the zoom factor
+      if (sy0 < c && (sx1 > W - c || (big && z > 1.001 && sx0 < 2.2 * c))) continue; }
+    M.save(); const ax = it.kind === 'road' ? it.x : it.kind === 'loc' || it.kind === 'wp' ? it.dx : it.x, ay = it.kind === 'road' ? it.y : it.dy;
+    M.translate(ax, ay); M.scale(sc, sc); M.translate(-ax, -ay); M.font = it.font; const q = v => v / (u0 * zs);
+    if (it.kind === 'road') { M.fillStyle = it.cls === 2 ? '#1d58b4' : '#2f8a45'; M.fillRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h); M.strokeStyle = 'rgba(255,255,255,.8)'; M.lineWidth = q(0.8); M.strokeRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h);
+      M.fillStyle = '#fff'; M.textAlign = 'center'; M.fillText(it.text, it.x, it.y + q(0.5)); M.textAlign = 'left'; M.restore(); continue; }
+    M.fillStyle = it.kind === 'wp' ? '#55d6ff' : '#fff'; M.strokeStyle = 'rgba(0,0,0,.7)'; M.lineWidth = q(1); M.beginPath(); M.arc(it.dx, it.dy, q(it.kind === 'wp' ? 3.5 : 2), 0, 7); M.fill(); M.stroke();
+    M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = q(3); M.strokeText(it.text, it.x, it.y); M.fillStyle = it.kind === 'wp' ? '#fff' : '#f2ede2'; M.fillText(it.text, it.x, it.y); M.restore();
   }
-  const px0 = clamp(mx(S.pos.x), 3, W - 3), py0 = clamp(mz(S.pos.z), 3, H - 3), h = S.hdg * DEG, len = Math.max(34, px(40)), a = Math.max(px(9), 5);
+  // the aircraft: clamped to the visible part of the map, so it points the way back when panned away
+  const m = px(3), px0 = clamp(mx(S.pos.x), vx0 + m, vx1 - m), py0 = clamp(mz(S.pos.z), vy0 + m, vy1 - m), h = S.hdg * DEG, len = Math.max(34 / z, px(40)), a = Math.max(px(9), 5 / z);
   M.strokeStyle = '#ffd21f'; M.lineWidth = px(1.6); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(h) * len, py0 - Math.cos(h) * len); M.stroke();
   if (S.ap.on) { const b = S.ap.hdg * DEG; M.strokeStyle = '#ff66ee'; M.setLineDash([px(4), px(4)]); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(b) * len, py0 - Math.cos(b) * len); M.stroke(); M.setLineDash([]); }
   M.save(); M.translate(px0, py0); M.rotate(h); M.scale(a / 7, a / 7); M.fillStyle = '#ffd21f'; M.strokeStyle = '#000'; M.lineWidth = 1; M.beginPath(); M.moveTo(0, -7); M.lineTo(5, 5); M.lineTo(0, 2); M.lineTo(-5, 5); M.closePath(); M.fill(); M.stroke(); M.restore();
-  M.fillStyle = '#fff'; M.textAlign = 'center'; M.font = 'bold ' + px(12).toFixed(3) + 'px ' + FONT; M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = px(3); M.strokeText('N', W - px(9), px(9)); M.fillText('N', W - px(9), px(9));
+  // fixed to the frame: north marker, and the zoom factor while zoomed
+  const pf = v => v / u0; M.setTransform(k, 0, 0, k, 0, 0); M.textAlign = 'center'; M.font = 'bold ' + pf(12).toFixed(3) + 'px ' + FONT; M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = pf(3); M.fillStyle = '#fff';
+  M.strokeText('N', W - pf(9), pf(9)); M.fillText('N', W - pf(9), pf(9));
+  if (big && z > 1.001) { const t = z.toFixed(1) + '×'; M.font = 'bold ' + pf(11).toFixed(3) + 'px ' + FONT; M.textAlign = 'left'; M.strokeText(t, pf(7), pf(10)); M.fillText(t, pf(7), pf(10)); }
 }
 function hintText() {
   const T = document.body.classList.contains('touch'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓', ft = m => (Math.round(m * FT / 50) * 50).toLocaleString('en') + ' ft';
@@ -2238,7 +2283,7 @@ function setupTouch() {
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
     else b.addEventListener('click', () => action(k)); });
-  $('map').addEventListener('click', () => $('map').classList.toggle('big'));
+  setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
 }
 
 // ---------- 15. Menus ----------
