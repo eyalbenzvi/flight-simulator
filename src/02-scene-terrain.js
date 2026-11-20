@@ -57,6 +57,8 @@ function fieldsTexture() {
 
 /** The OpenStreetMap land cover as a one-byte-per-cell texture, sampled without filtering (the shader blurs the edges with noise). */
 function landCoverTexture() {
+  // mapped water that lies on dry ground here (the formula terrain's shores differ from the real ones, most of all at the Dead Sea) is not painted blue: the water surface itself already is
+  for (let j = 0; j < LCR.h; j++) for (let i = 0; i < LCR.w; i++) { const o = (j * LCR.w + i) * 4; if (LCR.d[o] === 9 && !groundAt(X0 + (i + 0.5) * 60, Z0 + (j + 0.5) * 60).water) LCR.d[o] = 0; }
   const n = LCR.w * LCR.h, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = LCR.d[i * 4];
   const t = new THREE.DataTexture(a, LCR.w, LCR.h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
 }

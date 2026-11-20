@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Israel Flight Simulator</title>
+<title>סימולטור טיסה מעל ישראל · Israel Flight Simulator</title>
+<meta name="description" content="טסים מעל ישראל בדפדפן: ארבעה מטוסים, שלוש רמות קושי, ערים, כבישים ואתרים אמיתיים. Fly over Israel in the browser: four aircraft, three levels, real towns, roads and sites.">
+<meta property="og:title" content="סימולטור טיסה מעל ישראל"><meta property="og:description" content="טסים מעל ישראל בדפדפן: ארבעה מטוסים, שלוש רמות קושי, ערים ואתרים אמיתיים."><meta property="og:type" content="website">
+<meta name="theme-color" content="#0b1622">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1622'/%3E%3Cpath d='M32 8l5 20 19 9v5l-19-5-2 12 6 5v4l-9-3-9 3v-4l6-5-2-12-19 5v-5l19-9z' fill='%23e9c877'/%3E%3C/svg%3E">
 <style>
 /* The simulator is a night-flight-deck interface by design, so both themes share one dark token set. */
 :root{
@@ -39,13 +43,14 @@ body.touch #modeB{left:calc(10px + var(--sl));top:calc(60px + var(--st));height:
 #mission b{color:var(--sand);font-weight:600}
 #strip b{font-weight:600;font-size:17px} #strip span{color:var(--dim);margin:0 9px 0 2px;font-size:12px}
 body.nopfd #strip{display:block} body.nopfd #pfd{display:none}
-#hint{color:var(--sand);font-size:14px;line-height:1.25;text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9)}
+#hint{color:var(--sand);font-size:14px;line-height:1.25;text-shadow:0 1px 2px #000;background:rgba(8,13,19,.62);padding:3px 10px;border-radius:12px;width:fit-content;margin-left:auto;margin-right:auto} #hint:empty{display:none}
+.about{color:var(--dim);font-size:13px;line-height:1.5}
 #place{font-size:12px;opacity:.8;text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9)}
 #map{position:absolute;right:calc(10px + var(--sr));top:calc(10px + var(--st));height:min(40vh,280px);border-radius:6px;border:1px solid var(--line);cursor:pointer}
 #map.big{height:min(62vh,540px)}
 #pfd{position:absolute;left:50%;bottom:calc(10px + var(--sb));transform:translateX(-50%);width:min(46vw,400px);border-radius:6px;border:1px solid var(--line)}
 #alert{position:absolute;left:50%;top:24%;transform:translateX(-50%);font-size:clamp(26px,6vw,46px);font-weight:700;letter-spacing:.12em;color:var(--red);text-shadow:0 0 14px rgba(255,60,60,.7);display:none;white-space:nowrap}
-#toast{position:absolute;left:50%;top:35%;transform:translateX(-50%);padding:7px 14px;font-size:15px;display:none;max-width:86vw;text-align:center}
+#toast{white-space:pre-line;position:absolute;left:50%;top:24%;transform:translateX(-50%);padding:7px 14px;font-size:15px;display:none;max-width:86vw;text-align:center}
 #nav{position:absolute;left:0;top:0;display:none;transform:translate(-50%,-50%);color:var(--sand);font-size:12px;font-weight:700;text-align:center;text-shadow:0 1px 3px #000;white-space:nowrap}
 #nav i{display:block;font-style:normal;font-size:20px;line-height:1}
 #card{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);padding:16px 20px;text-align:center;display:none;min-width:240px;max-width:88vw}
@@ -128,14 +133,14 @@ h1{font-size:clamp(28px,7vw,50px);line-height:1;margin:0 0 6px;letter-spacing:.0
 .ov p{margin:0 0 14px;color:var(--dim);font-size:15px;line-height:1.45;max-width:58ch}
 .ov h3{font-size:14px;font-weight:600;color:var(--sand);margin:16px 0 7px;letter-spacing:.03em}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:6px}
-.grid button{text-align:left} .grid button small{display:block;color:var(--dim);font-size:11.5px;line-height:1.3;margin-top:2px}
+.grid button{text-align:start} .grid button small{display:block;color:var(--dim);font-size:11.5px;line-height:1.3;margin-top:2px}
 .grid button b{font-size:15px;font-weight:600} .grid button.on{border-color:var(--sand);background:rgba(233,200,119,.15)}
 .chips{display:flex;flex-wrap:wrap;gap:5px;font-size:12.5px} .chips span{padding:3px 8px;border-radius:10px;border:1px solid var(--line);color:var(--dim)} .chips span.on{color:#17202a;background:var(--sand);border-color:var(--sand)}
 .go{font-size:18px;letter-spacing:.12em;padding:12px 30px;background:var(--sand);color:#17202a;border:none;font-weight:700} .go:hover{background:#f6dc98} .go:disabled{opacity:.5;cursor:wait}
 .mh{display:flex;justify-content:space-between;align-items:center;gap:10px} .mh h2{margin:0;font-size:26px;letter-spacing:.06em}
 details{margin-top:14px} summary{cursor:pointer;color:var(--dim);font-size:13.5px}
 /* --- menus: the same sections, buttons and footer on the start screen and the pause menu --- */
-.pill{border-radius:16px;padding:6px 14px;min-height:36px;font-size:13.5px}
+.pill{border-radius:22px;padding:6px 16px;min-height:44px;min-width:44px;font-size:13.5px}
 .ov .card{position:relative}
 .foot{position:sticky;bottom:0;z-index:2;margin:14px -22px -20px;padding:12px 22px calc(12px + var(--sb));display:flex;align-items:center;justify-content:space-between;gap:12px;
   background:rgba(8,13,19,.97);border-top:1px solid var(--line);border-radius:0 0 6px 6px}
@@ -197,7 +202,7 @@ details.sec[open] summary{margin-bottom:7px}
   </div>
 </div>
 
-<div id="start" class="ov">
+<div id="start" class="ov" role="dialog" aria-modal="true">
   <div class="card panel">
     <div class="mh"><h1></h1><button id="langB" class="pill" lang="" style="visibility:hidden">English</button></div>
     <div id="rule"></div>
@@ -223,7 +228,7 @@ details.sec[open] summary{margin-bottom:7px}
   <div id="pickFoot"></div>
 </div>
 
-<div id="menu" class="ov" style="display:none">
+<div id="menu" class="ov" style="display:none" role="dialog" aria-modal="true">
   <div class="card panel">
     <div class="mh"><h2></h2><button id="mClose" class="pill">✕</button></div>
     <div id="mBody"></div>
@@ -564,6 +569,8 @@ function fieldsTexture() {
 
 /** The OpenStreetMap land cover as a one-byte-per-cell texture, sampled without filtering (the shader blurs the edges with noise). */
 function landCoverTexture() {
+  // mapped water that lies on dry ground here (the formula terrain's shores differ from the real ones, most of all at the Dead Sea) is not painted blue: the water surface itself already is
+  for (let j = 0; j < LCR.h; j++) for (let i = 0; i < LCR.w; i++) { const o = (j * LCR.w + i) * 4; if (LCR.d[o] === 9 && !groundAt(X0 + (i + 0.5) * 60, Z0 + (j + 0.5) * 60).water) LCR.d[o] = 0; }
   const n = LCR.w * LCR.h, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = LCR.d[i * 4];
   const t = new THREE.DataTexture(a, LCR.w, LCR.h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
 }
@@ -2034,7 +2041,11 @@ const fwd = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vec
 const eul = new THREE.Euler(0, 0, 0, 'YXZ'), dq = new THREE.Quaternion(), XA = new THREE.Vector3(1, 0, 0), YA = new THREE.Vector3(0, 1, 0), ZA = new THREE.Vector3(0, 0, 1);
 let TNOW = 0, camSnap = true;
 
-function crash(why) { if (S.crashed) return; S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
+function crash(why) { if (S.crashed) return;
+  // Easy: nothing ends the flight. A bump, a word about what happened, and the aircraft is back in the air above the same spot
+  if (S.arc && !S.land && !S.ap.on && S.started) { const g = groundAt(S.pos.x, S.pos.z); S.pos.y = Math.max(S.pos.y, g.h) + 300; S.onGround = false; S.landed = false; S.trick = null; A.gam = 0.03; A.v = Math.max(A.v * 0.7, arcVmin() * 1.3); A.out = false; S.airTime = 0;
+    S.shake = 0.9; Snd.chime(240, 0.35); if (navigator.vibrate) navigator.vibrate(120); toast(L('Oops! ', 'אופס! ') + tr(why).replace(/\.$/, '') + L('. Back up we go', '. חוזרים למעלה'), 5); return; }
+  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
 let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
@@ -2063,7 +2074,7 @@ function spawn(def) {
   }
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = 0; S.boost = 0; if (S.noEngine) S.thr = S.n1 = 0;
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
-  A.sync = true; toast(tr(def.label));
+  A.sync = true; toast(def.pick ? '📍 ' + L(def.name[0], def.name[1]) : def.type === 'approach' ? L('Approach: ', 'גישה: ') + tr(def.label.replace('Approach: ', '')) : tr(def.label));
 }
 
 function readAttitude() { eul.setFromQuaternion(S.q, 'YXZ'); S.pitch = eul.x; S.bank = -eul.z; S.hdg = ((-eul.y / DEG) % 360 + 360) % 360; }
@@ -2109,7 +2120,7 @@ function updateControls(dt) {
     if (tr.type === 'roll') { rt = rollOut ? rollFor(0) : tr.dir; pt = 0.04; tr.ang += Math.abs(S.rr) * dt; }
     else { rt = 0; pt = clamp((ASTALL * 0.78 - S.alpha) * 8, 0.12, 1); tr.ang += Math.max(S.pr, 0) * dt; }
     const bad = tr.t > 45 || S.ra < 40;
-    if (bad || (tr.type === 'roll' ? rollOut && Math.abs(S.bank) < 0.1 && Math.abs(S.rr) < 0.35 : tr.ang > Math.PI * 2 - 0.25)) { S.gamHold = tr.type === 'roll' ? 0 : null; toast(bad ? 'Manoeuvre cut short' : tr.type === 'roll' ? 'Aileron roll!' : 'Loop!'); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
+    if (bad || (tr.type === 'roll' ? rollOut && Math.abs(S.bank) < 0.1 && Math.abs(S.rr) < 0.35 : tr.ang > Math.PI * 2 - 0.25)) { S.gamHold = tr.type === 'roll' ? 0 : null; toast(bad ? L('Manoeuvre cut short', 'התרגיל הופסק') : tr.type === 'roll' ? L('Aileron roll!', 'גלגול!') : L('Loop!', 'לולאה!')); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
   } else if (S.land) {
     // ---- AUTOLAND: follow the ILS, configure, flare, brake to a stop ----
     const rw = S.land; yt = 0;
@@ -2546,8 +2557,8 @@ function mapLabels(W, H, u, big, zs) {
   const shield = r => { const x = mx(r.x), y = mz(r.z), size = 9, th = px(size + 4); M.font = font(size, true); const w = M.measureText(r.n).width + px(5);
     const b = { x0: x - w / 2 - gap, y0: y - th / 2 - gap, x1: x + w / 2 + gap, y1: y + th / 2 + gap }; if (!fits(b)) return; boxes.push(b); items.push({ text: r.n, x, y, w, h: th, font: M.font, kind: 'road', cls: r.cls, b }); };
   // waypoints: short codes on the small map, place names on the big one
-  const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]);
-  for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : n; label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
+  const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]), WPS = { TLV: 'ת״א', JRS: 'י-ם', HFA: 'חיפה', 'DEAD SEA': 'ים המלח', MASADA: 'מצדה', EILAT: 'אילת' };
+  for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : L(n, WPS[n] || n); label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
   if (big) {
     const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14)), minPop = Math.max(1, 20 / Math.pow(zs, 1.5));
     const locs = LOCS.filter(l => l[4] >= minPop).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
@@ -2671,8 +2682,13 @@ function drawSys() {
 }
 
 // ---------- 12b. Settings, smoke trails, air traffic, weather, photo mode ----------
-const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick; } catch (e) { /* no storage: defaults */ } return d; })();
-function persist() { try { localStorage.setItem('ifs-save', JSON.stringify(SAVE)); } catch (e) { /* storage unavailable: settings last for this session only */ } }
+const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick;
+  d.first = !o.plane;                    // nothing saved yet: a first visit
+  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (o.stamps && typeof o.stamps === 'object') d.stamps = o.stamps; } catch (e) { /* no storage: defaults */ } return d; })();
+/** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
+function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
+  const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
+let SAVE_LAST = '';
 Object.assign(S, { names: true, noEngine: false, gamHold: null, turb: 0, lt: 5, flash: 0, legend: true });
 const WXN = ['Clear', 'Dust haze', 'Storm'], PH = { on: false, az: 0.7, el: 0.22, d: 1.5, drag: null }, AIT = [];
 let TR = null, WX = 0;
@@ -2811,7 +2827,7 @@ function arcadeStep(dt) {
     /* more than 40% lever always reaches flying speed (a child sets the lever part-way and waits); less is taxiing. With the power at idle the brakes come on by themselves, after a landing or an abandoned take-off */
     const ac = arcadeAccel(A.v, 0, true), vT = S.brake ? 0 : S.thr > 0.4 ? Math.max(S.thr * vMax * 0.6, PL.vs * 1.2) : S.thr * PL.vs, a = (vT > A.v ? Math.max(ac.up, 0.3) : S.brake ? 4.4 : ac.dn + (S.thr < 0.05 ? 2.8 : 0)) * dt;
     A.v += clamp(vT - A.v, -a, a);
-    A.psi += lr * 0.7 * clamp(A.v / 8, 0, 1) * (1 - 0.8 * clamp(A.v / 60, 0, 1)) * dt; A.gam = 0;          /* gentle steering at speed */ A.phi *= Math.exp(-8 * dt); A.turn = 0;
+    A.psi += lr * 0.7 * Math.max(clamp(A.v / 8, 0, 1), S.thr > 0.1 ? 0.5 : 0) * (1 - 0.8 * clamp(A.v / 60, 0, 1)) * dt;          /* with power on it turns on the spot too, so it can turn away from water */ A.gam = 0;          /* gentle steering at speed */ A.phi *= Math.exp(-8 * dt); A.turn = 0;
     const sx = Math.sin(A.psi) * A.v * dt, sz = -Math.cos(A.psi) * A.v * dt; S.pos.x += sx; S.pos.z += sz; let g = groundAt(S.pos.x, S.pos.z);
     if (g.water) { S.pos.x -= sx; S.pos.z -= sz; A.v = 0; g = groundAt(S.pos.x, S.pos.z); arcSay('That is water. Turn around', 'זה מים. צריך להסתובב'); }
     S.pos.y = g.h + GEAR_H; S.airTime = 0;
@@ -2833,7 +2849,7 @@ function arcadeStep(dt) {
     { const top = gm * clamp((PL.aCeil - S.pos.y) / 1500, 0, 1); if (A.gam > top) { A.gam = Math.max(top, A.gam - 1.5 * dt); if (top < 0.01 && ud > 0.1) arcSay('This is as high as it goes', 'זה הכי גבוה שאפשר'); } }      // the ceiling
     if (!S.trick && S.ra < 260 + A.v) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
-      for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
+      for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12 && !(landing && (gh - here) / (A.v * t * hsAt(S.ra)) < 0.2)) need = Math.max(need,       /* coming down to land, gently rising ground is somewhere to land, not something to climb over */ (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
     if (S.ra < 150 && !S.trick && A.v > vMin * 1.2) A.gam = Math.max(A.gam, -Math.max(S.ra - 6, 0) / 130);          // still fast: it floats just above the ground until it has slowed to landing speed
     if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -(0.1 + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground
@@ -2909,7 +2925,7 @@ function updateExplosion(dt) {
   if (t > 6) { EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; }
 }
 const LV = [['Easy', 'קל'], ['Medium', 'בינוני'], ['Expert', 'מקצועי']];
-const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. בלי הזדקרות, נוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
+const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. המטוס לא נופל, ונוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
 /** The three difficulty buttons (start screen and menu). */
 function levelButtons(el, after) {
   el.textContent = '';
@@ -2983,7 +2999,7 @@ function pickSize() {
 function pickDef() {
   const [x, z] = PICK.pt, h = PICK_HDGS[PICK.hdg], agl = PICK_ALTS[PICK.alt], d = dirOf(h), back = 2500 * hsAt(agl), sx = x - d.x * back, sz = z - d.z * back;
   let g = -1e9; for (let i = 0; i <= 8; i++) { const gi = groundAt(sx + (x - sx) * i / 8, sz + (z - sz) * i / 8); g = Math.max(g, gi.h); }
-  return { label: PICK.name[0], name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(g, -400) + agl, hdg: h, spd: 115, at: [x, z] };
+  return { label: L(PICK.name[0], PICK.name[1]), name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(g, -400) + agl, hdg: h, spd: 115, at: [x, z] };
 }
 function pickDraw() {
   if (!PICK.open) return; const c = pickC(), x = c.getContext('2d'), dpr = c.width / (c.clientWidth || 1), s = PICK.s, P = (wx, wz) => { const [ix, iy] = pickImgXY(wx, wz); return [(ix - PICK.ox) * s, (iy - PICK.oy) * s]; };
@@ -3019,7 +3035,7 @@ function pickSelect(wx, wz, name) {
 /** The bottom bar: what is chosen, height and direction (every choice visible), and the button that starts there. */
 function pickPanel() {
   const el = $('pickFoot'); el.textContent = '';
-  const t = document.createElement('div'); t.className = 'pickWhat'; t.textContent = PICK.pt ? '📍 ' + L(PICK.name[0], PICK.name[1]) : L('Tap the map or search to choose a place', 'הקישו על המפה או חפשו כדי לבחור מקום'); el.appendChild(t);
+  const t = document.createElement('div'); t.className = 'pickWhat'; t.textContent = PICK.pt ? '📍 ' + L(PICK.name[0], PICK.name[1]) : (document.body.classList.contains('touch') ? L('Tap the map or search to choose a place', 'מקישים על המפה או מחפשים, ובוחרים מקום') : L('Click the map or search to choose a place', 'לוחצים על המפה או מחפשים, ובוחרים מקום')); el.appendChild(t);
   const rows = document.createElement('div'); el.appendChild(rows);
   const row = (label, opts, cur, set) => { const r = document.createElement('div'), sp = document.createElement('span'), g = document.createElement('div'); r.className = 'seg'; sp.textContent = label; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
     opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { set(i); pickPanel(); pickDraw(); }); g.appendChild(b); }); r.append(sp, g); rows.appendChild(r); };
@@ -3035,17 +3051,19 @@ function openPicker(where, rer) {
   PICK.open = true; PICK.where = where; PICK.rer = rer; const ov = $('pick'); ov.style.display = 'flex'; ov.dir = SAVE.lang === 'he' ? 'rtl' : 'ltr';
   $('pickT').textContent = L('Choose a place', 'בחירת מקום'); $('pickClose').setAttribute('aria-label', L('Close', 'סגירה'));
   const q = $('pickQ'); q.placeholder = L('Search a town or site, e.g. Masada', 'חיפוש ישוב או אתר, למשל: מצדה'); q.value = ''; $('pickRes').textContent = ''; $('pickRes').hidden = true;
-  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה');
+  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה'); $('pickHint').textContent += ' · © OpenStreetMap';
   const sv = SAVE.pick; if (!PICK.pt && sv && sv.at) { PICK.pt = sv.at; PICK.name = sv.name; PICK.alt = sv.alt | 0; PICK.hdg = sv.hdg | 0; }
+  pickPanel();                 // the bottom bar first: it sets how much room the map has (sizing the map before it squashed the picture and shifted every tap)
   pickC().width = 0; pickSize();
   if (PICK.pt) { const lo = x2lon(PICK.pt[0]), la = z2lat(PICK.pt[1]); pickFit(lo - 0.35, la - 0.35, lo + 0.35, la + 0.35); } else pickFit(34.2, 29.45, 35.95, 33.35);
-  pickPanel(); pickDraw(); if (!document.body.classList.contains('touch')) q.focus();
+  pickDraw(); if (!document.body.classList.contains('touch')) q.focus();
 }
 function closePicker() { PICK.open = false; $('pick').style.display = 'none'; }
 function setupPicker() {
   const c = pickC(), q = $('pickQ'), res = $('pickRes'), dpr = () => c.width / (c.clientWidth || 1);
   $('pickClose').addEventListener('click', closePicker);
   window.addEventListener('resize', () => { if (PICK.open) { pickSize(); pickDraw(); } });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (PICK.open) { pickSize(); pickDraw(); } }).observe(c);       // the bar under the map changes height when a place is chosen
   const show = list => { res.textContent = ''; res.hidden = !list.length;
     for (const e of list) { const b = document.createElement('button'); b.setAttribute('role', 'option'); const n = document.createElement('b'), m = document.createElement('small'); n.textContent = L(e.en, e.he); m.textContent = (e.site ? L('site', 'אתר') + ' · ' : '') + L(e.he, e.en);
       b.append(n, m); b.addEventListener('click', () => choose(e)); res.appendChild(b); } };
@@ -3065,15 +3083,66 @@ function setupPicker() {
     const [wx, wz] = pickWorld(PICK.ox + e.offsetX * k / PICK.s, PICK.oy + e.offsetY * k / PICK.s); pickSelect(wx, wz); };
   c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
   c.addEventListener('wheel', e => { e.preventDefault(); const k = dpr(); pickZoomAt(e.offsetX * k, e.offsetY * k, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
-  c.addEventListener('dblclick', e => { const k = dpr(); pickZoomAt(e.offsetX * k, e.offsetY * k, 2); });
   for (const [id, f] of [['pickIn', 1.6], ['pickOut', 1 / 1.6]]) $(id).addEventListener('click', () => pickZoomAt(c.width / 2, c.height / 2, f));
+}
+
+// ---------- 12g. The flight passport: a stamp for every well-known place flown over ----------
+/** One sentence about each place in PICK_SITES, by its English name: [English, Hebrew]. */
+const STAMP_FACTS = {
+  'Mount Hermon': ['The highest mountain in Israel, with snow in winter and a ski site', 'ההר הגבוה בישראל. בחורף יש בו שלג ואתר סקי'],
+  'Sea of Galilee (Kinneret)': ['The lowest freshwater lake in the world, about 210 m below sea level', 'אגם המים המתוקים הנמוך בעולם, כ-210 מטר מתחת לפני הים'],
+  'Mount Tabor': ['A round mountain that stands alone in the Jezreel Valley', 'הר עגול שעומד לבדו בעמק יזרעאל'],
+  'Mount Carmel': ['A green ridge that runs down to the sea at Haifa', 'רכס ירוק שיורד אל הים בחיפה'],
+  'Rosh HaNikra': ['White chalk cliffs and sea caves on the northern border', 'צוקי קירטון לבנים ונקרות ים בגבול הצפון'],
+  'Mount Meron': ['The highest peak in the Galilee', 'הפסגה הגבוהה בגליל'],
+  'Hula Valley': ['Half a billion birds rest here on their way between Europe and Africa', 'חצי מיליארד ציפורים נודדות עוצרות כאן בדרך בין אירופה לאפריקה'],
+  'Banias': ['A spring and a waterfall at the foot of the Hermon', 'מעיין ומפל למרגלות החרמון'],
+  'Nimrod Fortress': ['A huge medieval castle on a ridge above the Banias', 'מבצר ענק מימי הביניים על רכס מעל הבניאס'],
+  'Gamla': ['An ancient town on a ridge shaped like a camel\'s hump, and a vulture colony', 'עיר עתיקה על רכס בצורת דבשת גמל, ולידה נשרים'],
+  'Mount Gilboa': ['Famous for its purple irises in spring', 'מפורסם באירוס הגלבוע הסגול שפורח באביב'],
+  'Jordan River (Yardenit)': ['Where the Jordan leaves the Kinneret on its way to the Dead Sea', 'כאן יוצא הירדן מהכנרת בדרכו לים המלח'],
+  'Akko old city': ['A walled port city with Crusader halls under its streets', 'עיר נמל מוקפת חומה, ומתחת לרחובותיה אולמות צלבניים'],
+  'Bahai Gardens': ['Nineteen garden terraces down the slope of the Carmel', 'תשע-עשרה מדרגות של גנים במורד הכרמל'],
+  'Caesarea': ['A Roman port city built by King Herod, with a theatre by the sea', 'עיר נמל רומית שבנה הורדוס, עם תיאטרון על חוף הים'],
+  'Azrieli Towers': ['Three towers in Tel Aviv: a circle, a triangle and a square', 'שלושה מגדלים בתל אביב: עגול, משולש ומרובע'],
+  'Tel Aviv Port': ['An old port that became a boardwalk by the sea', 'נמל ישן שהפך לטיילת על הים'],
+  'Jaffa Port': ['One of the oldest ports in the world, about 4,000 years old', 'אחד הנמלים העתיקים בעולם, בן כ-4,000 שנה'],
+  'Ben Gurion Airport': ['Israel\'s main airport, named after the first prime minister', 'שדה התעופה הראשי של ישראל, על שם ראש הממשלה הראשון'],
+  'Latrun': ['A hill on the road to Jerusalem, with a monastery and a tank museum', 'גבעה בדרך לירושלים, עם מנזר ומוזיאון טנקים'],
+  'Western Wall': ['The Western Wall, in the Old City of Jerusalem', 'הכותל המערבי, בעיר העתיקה בירושלים'],
+  'Herodium': ['A palace that King Herod built inside a man-made mountain', 'ארמון שהורדוס בנה בתוך הר מעשה ידי אדם'],
+  'Dead Sea': ['The lowest place on Earth, so salty that people float', 'המקום הנמוך בעולם. המים כל כך מלוחים שצפים בהם'],
+  'Masada': ['King Herod\'s fortress on a cliff above the Dead Sea', 'המבצר של הורדוס על צוק מעל ים המלח'],
+  'Ein Gedi': ['An oasis with waterfalls and ibex beside the Dead Sea', 'נווה מדבר עם מפלים ויעלים ליד ים המלח'],
+  'Sde Boker': ['The desert kibbutz where David Ben Gurion lived', 'הקיבוץ במדבר שבו גר דוד בן גוריון'],
+  'Makhtesh Ramon': ['The largest erosion crater in the world, 40 km long', 'המכתש הגדול בעולם, באורך 40 קילומטר'],
+  'Timna Park': ['Ancient copper mines and red sandstone pillars', 'מכרות נחושת עתיקים ועמודי אבן חול אדומים'],
+  'Coral Beach, Eilat': ['A coral reef in the Red Sea, full of colourful fish', 'שונית אלמוגים בים סוף, מלאה דגים צבעוניים'],
+  'Ashkelon National Park': ['Ancient city walls and the oldest arched gate in the world, by the sea', 'חומות עיר עתיקה ושער הקשת העתיק בעולם, על חוף הים'],
+  'Beit She\'an': ['A Roman city with a theatre and streets of columns', 'עיר רומית עם תיאטרון ורחובות עמודים'],
+  'Golan Heights': ['A high basalt plateau of old volcanoes', 'רמה גבוהה של בזלת והרי געש כבויים'] };
+const stampCount = () => PICK_SITES.filter(p => SAVE.stamps && SAVE.stamps[p[0]]).length;
+/** A stamp is earned by flying within 2 km (real) of the place, below 1,500 m above the ground. */
+function updateStamps() {
+  if (!S.started || S.crashed || S.onGround || S.ra > 1500) return;
+  for (const p of PICK_SITES) { if (SAVE.stamps && SAVE.stamps[p[0]]) continue; if (Math.hypot(lon2x(p[2]) - S.pos.x, lat2z(p[3]) - S.pos.z) > 500) continue;
+    (SAVE.stamps = SAVE.stamps || {})[p[0]] = 1; persist(); Snd.chime(660, 0.2); setTimeout(() => Snd.chime(880, 0.3), 160); setTimeout(() => Snd.chime(1100, 0.4), 320); if (navigator.vibrate) navigator.vibrate(60);
+    const f = STAMP_FACTS[p[0]]; toast('⭐ ' + L('New stamp: ', 'חותמת חדשה: ') + L(p[0], p[1]) + ' (' + stampCount() + '/' + PICK_SITES.length + ')' + (f ? '\n' + L(f[0], f[1]) : ''), 8); return; }
+}
+/** The passport in the menus: every place, earned ones in gold with their sentence. Choosing one opens the map on it, to start there. */
+function stampGrid(el, where, rer) {
+  const intro = document.createElement('p'); intro.style.gridColumn = '1 / -1'; intro.style.margin = '0 0 4px';
+  intro.textContent = L('Fly low over a place to collect its stamp. Choose a place to start near it.', 'טסים נמוך מעל מקום כדי לקבל את החותמת שלו. בוחרים מקום כדי להתחיל לידו.'); el.appendChild(intro);
+  for (const p of PICK_SITES) { const got = !!(SAVE.stamps && SAVE.stamps[p[0]]), b = document.createElement('button'), f = STAMP_FACTS[p[0]]; b.className = got ? 'on' : ''; b.textContent = (got ? '⭐ ' : '☆ ') + L(p[0], p[1]);
+    if (got && f) { const s = document.createElement('small'); s.textContent = L(f[0], f[1]); b.appendChild(s); }
+    b.addEventListener('click', () => { openPicker(where, rer); pickSelect(lon2x(p[2]), lat2z(p[3]), [p[0], p[1]]); pickFit(p[2] - 0.25, p[3] - 0.25, p[2] + 0.25, p[3] + 0.25); pickDraw(); }); el.appendChild(b); }
 }
 
 // ---------- 13. Procedural audio ----------
 const Snd = { ctx: null, muted: false,
   init() {
     const A = window.AudioContext || window.webkitAudioContext; if (!A || this.ctx) return; const c = this.ctx = new A();
-    this.master = c.createGain(); this.master.gain.value = 0.7; this.master.connect(c.destination);
+    this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 0.7; this.master.connect(c.destination);
     const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; this.buf = buf;
     const noise = () => { const s = c.createBufferSource(); s.buffer = buf; s.loop = true; s.start(); return s; };
     const gain = v => { const g = c.createGain(); g.gain.value = v; return g; };
@@ -3127,7 +3196,7 @@ function startTrick(type) {
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
 function action(code) {
-  if (code === 'Escape' || code === 'Tab') { if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
+  if (code === 'Escape' || (code === 'Tab' && !S.paused)) {          /* Tab opens the menu; inside it Tab moves between the buttons, as everywhere */ if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
   if (S.paused) return;
   if (code === 'KeyO') { PH.on = !PH.on; document.body.classList.toggle('photo', PH.on); camSnap = true; if (PH.on) for (const k in keys) keys[k] = false; return; }
   if (PH.on) return;
@@ -3166,8 +3235,9 @@ function action(code) {
 const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyF', 'KeyB', 'KeyP', 'KeyC', 'KeyT', 'KeyR', 'KeyM', 'KeyH', 'KeyL', 'KeyX', 'KeyZ', 'KeyV', 'KeyI', 'KeyO', 'KeyY', 'KeyN', 'KeyK', 'Space', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Equal', 'Minus', 'PageUp', 'PageDown']);
 window.addEventListener('keydown', e => {
   if (PICK.open) return;                 // typing in the place search, not flying
-  if (!S.started) { if (e.code === 'Enter' && !$('fly').disabled) $('fly').click(); return; }
+  if (!S.started) { if (e.code === 'Enter' && !$('fly').disabled && (document.activeElement === document.body || !document.activeElement)) $('fly').click(); return; }      // Enter on a focused button presses that button
   const dg = /^Digit(\d)$/.exec(e.code); if (dg && !S.paused && !PH.on) { S.thr = +dg[1] / 9; e.preventDefault(); return; }      // 0 = idle … 9 = full power
+  if (e.code === 'Tab' && S.paused) return;
   if (HANDLED.has(e.code)) { e.preventDefault(); if (!keys[e.code] && !e.repeat) action(e.code); keys[e.code] = true; }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -3217,26 +3287,28 @@ function renderPanel(where) {
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
     ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
+    ['pass', L('My flight passport', 'דרכון הטיסה שלי'), stampCount() + ' / ' + PICK_SITES.length, el => stampGrid(el, where, rer)],
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
+  secs.push(['about', L('About and credits', 'אודות וקרדיטים'), '', el => { el.className = 'about'; el.textContent = L('Roads, land cover, buildings and sites: © OpenStreetMap contributors (ODbL). Built-up areas: GHSL, European Commission Joint Research Centre. 3D engine: three.js. The map is simplified and is not for navigation.', 'כבישים, כיסוי קרקע, מבנים ואתרים: © תורמי OpenStreetMap ‏(ODbL). שטחים בנויים: GHSL, מרכז המחקר המשותף של הנציבות האירופית. מנוע תלת-ממד: three.js. המפה מפושטת ואינה מיועדת לניווט.'); }]);
   const open = OPEN[where]; body.textContent = '';
   for (const [id, title, val, fill] of secs) {
     const d = document.createElement('details'); d.className = 'sec'; d.open = open.has(id); d.addEventListener('toggle', () => { if (d.open) open.add(id); else open.delete(id); });
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
-    const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
+    const c = document.createElement('div'); if (id !== 'set' && id !== 'keys' && id !== 'about') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
 }
 /** First in the air starts: any place in Israel, chosen on a map or by name (src/07b-picker.js). Shows the place chosen last. */
 function pickButton(el, where, cur, rer) {
   const b = document.createElement('button'), on = !!(cur && cur.pick); b.className = 'pickB' + (on ? ' on' : ''); b.textContent = '📍 ' + (on ? startName(cur) : L('Choose any place on the map', 'בחירת מקום כלשהו על המפה'));
-  const s = document.createElement('small'); s.textContent = on ? L('Tap to choose another place', 'הקישו כדי לבחור מקום אחר') : L('Search a town or site, or tap the map', 'חיפוש ישוב או אתר, או הקשה על המפה'); b.appendChild(s);
+  const s = document.createElement('small'); s.textContent = on ? L('Choose another place', 'בחירת מקום אחר') : L('Search a town or site, or tap the map', 'חיפוש ישוב או אתר, או הקשה על המפה'); b.appendChild(s);
   b.addEventListener('click', () => openPicker(where, rer)); el.insertBefore(b, el.firstChild);
 }
 /** Settings as rows of option buttons: every choice visible, the current one marked (aria-pressed). */
 function settingsRows(el, where, rer) {
   const touchUI = document.body.classList.contains('touch');
   const row = (label, opts, cur, set) => { const r = document.createElement('div'), sp = document.createElement('span'), g = document.createElement('div'); r.className = 'seg'; sp.textContent = label; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
-    opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { if (i !== cur) { set(i); rer(); } }); g.appendChild(b); }); r.append(sp, g); el.appendChild(r); };
+    opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { if (i !== cur) { set(i); persist(); rer(); } }); g.appendChild(b); }); r.append(sp, g); el.appendChild(r); };
   const onOff = [L('On', 'פועל'), L('Off', 'כבוי')];
   row(L('Language', 'שפה'), ['עברית', 'English'], SAVE.lang === 'he' ? 0 : 1, i => { SAVE.lang = i ? 'en' : 'he'; persist(); applyLang(); });
   row(touchUI ? L('Stick forward', 'ג׳ויסטיק קדימה') : L('Up arrow', 'חץ למעלה'), [L('Climbs', 'מעלה את המטוס'), L('Descends, like a real stick', 'מוריד, כמו מוט אמיתי')], SAVE.inv ? 1 : 0, i => { SAVE.inv = !!i; persist(); S.legSig = ''; });
@@ -3251,7 +3323,7 @@ function settingsRows(el, where, rer) {
   if (where === 'pause') { const b = document.createElement('button'); b.className = 'sec2'; b.style.marginTop = '10px'; b.textContent = L('Photo mode: look at the aircraft from any side', 'מצב צילום: מסתכלים על המטוס מכל צד');
     b.addEventListener('click', () => { closeMenu(); action('KeyO'); }); el.appendChild(b); }
 }
-const todName = i => SAVE.lang === 'he' ? tr(TOD[i].name.toLowerCase()) : TOD[i].name;
+const todName = i => SAVE.lang === 'he' ? tr(TOD[i].name.toLowerCase()) : TOD[i].name[0] + TOD[i].name.slice(1).toLowerCase();
 const KEYS = [['Climb / descend', 'טיפוס / ירידה', '↑ / ↓ · W / S'], ['Turn left / right', 'פנייה שמאלה / ימינה', '← / → · A / D'], ['Power up / down', 'הספק למעלה / למטה', 'Shift / Ctrl · = / −'], ['Set power directly', 'קביעת הספק ישירה', '0 – 9'],
   ['Brakes', 'בלמים', 'B · Space'], ['Land automatically', 'נחיתה אוטומטית', 'L'], ['Menu and pause', 'תפריט והפסקה', 'Esc'], ['Change view', 'החלפת מבט', 'C'], ['Restart from the same point', 'התחלה מחדש מאותה נקודה', 'R'],
   ['Day / sunset / night', 'יום / שקיעה / לילה', 'T'], ['Weather', 'מזג אוויר', 'Y'], ['Place names', 'שמות מקומות', 'N'], ['Photo mode', 'מצב צילום', 'O'], ['Simple / full instruments', 'מכשירים פשוטים / מלאים', 'I'],
@@ -3319,7 +3391,7 @@ function loop(now) {
       if (!S.crashed && !S.onGround) {          // buildings and other aircraft are solid
         if (hitObstacle(S.pos.x, S.pos.y - GEAR_H * 0.5, S.pos.z, PL.chase[0] * 0.12)) crash(L('Flew into a building.', 'התנגשות בבניין'));
         else for (const a of AIT) if (a.g.position.distanceToSquared(S.pos) < 900) { crash(L('Mid-air collision.', 'התנגשות באוויר')); break; } }
-      updateSystems(dt); readAttitude(); emitTrails(dt); if (frame % 20 === 0) updatePlace();
+      updateSystems(dt); readAttitude(); emitTrails(dt); if (frame % 20 === 0) { updatePlace(); updateStamps(); }
     }
     updateExplosion(dt); if (S.crashed && S.crashT > 0) { S.crashT -= dt; if (S.crashT <= 0) $('crash').style.display = 'flex'; }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').style.display = 'none'; }
@@ -3353,27 +3425,32 @@ function keepAwake() {
       v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none'; document.body.appendChild(v); }
     WAKE.video.play().catch(() => {}); } catch (e) {}
 }
-document.addEventListener('visibilitychange', () => { if (S.started && document.visibilityState === 'visible') keepAwake(); });
+document.addEventListener('visibilitychange', () => { if (S.started && document.visibilityState === 'visible') keepAwake();
+  if (Snd.ctx) { if (document.hidden) Snd.ctx.suspend(); else if (S.started) Snd.ctx.resume(); } });          // no engine drone from a tab in the background
 
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); setupPicker(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
-  spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
+  // settings from the last visit
+  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke) S.smoke = true; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
+  if (SAVE.first) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
+  spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; setInterval(() => { if (S.started) persist(); }, 5000);
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
-    if (!S.arc && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
+    if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
   $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
   $('modeB').addEventListener('click', e => { OPEN.pause.add('lv'); openMenu(); e.currentTarget.blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
   $('again').addEventListener('click', () => action('KeyR'));
-  $('airborne').addEventListener('click', () => spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: 'Back in the air', keep: true }));
+  $('airborne').addEventListener('click', () => spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }));
   requestAnimationFrame(loop);
 }
-if (typeof THREE === 'undefined') { $('fly').textContent = 'Could not load the 3D engine. Check your connection and reload.'; }
+if (typeof THREE === 'undefined') { $('fly').textContent = '!'; $('intro').textContent = document.documentElement.lang === 'he' ? 'לא הצלחנו לטעון את מנוע התלת-ממד. בדקו את החיבור לאינטרנט וטענו מחדש.' : 'Could not load the 3D engine. Check your connection and reload.'; $('sBody').textContent = ''; }
 else {      // decode the rasters first (settlements from GHSL, land cover and buildings from OpenStreetMap); everything else is built from them
-  const load = src => new Promise(res => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); res({ w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }); }; im.src = src; });
-  Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; setTimeout(init, 30); }); }
+  const load = src => new Promise((res, rej) => { const im = new Image(); im.onerror = () => rej(new Error('image')); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); res({ w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }); }; im.src = src; });
+  const failed = e => { console.error(e); $('fly').textContent = '!'; $('sBody').textContent = ''; $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
+  Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; setTimeout(() => { try { init(); } catch (e) { failed(e); } }, 30); }).catch(failed); }
 </script>
 </body>
 </html>

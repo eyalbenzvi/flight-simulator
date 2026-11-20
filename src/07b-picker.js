@@ -65,7 +65,7 @@ function pickSize() {
 function pickDef() {
   const [x, z] = PICK.pt, h = PICK_HDGS[PICK.hdg], agl = PICK_ALTS[PICK.alt], d = dirOf(h), back = 2500 * hsAt(agl), sx = x - d.x * back, sz = z - d.z * back;
   let g = -1e9; for (let i = 0; i <= 8; i++) { const gi = groundAt(sx + (x - sx) * i / 8, sz + (z - sz) * i / 8); g = Math.max(g, gi.h); }
-  return { label: PICK.name[0], name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(g, -400) + agl, hdg: h, spd: 115, at: [x, z] };
+  return { label: L(PICK.name[0], PICK.name[1]), name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(g, -400) + agl, hdg: h, spd: 115, at: [x, z] };
 }
 function pickDraw() {
   if (!PICK.open) return; const c = pickC(), x = c.getContext('2d'), dpr = c.width / (c.clientWidth || 1), s = PICK.s, P = (wx, wz) => { const [ix, iy] = pickImgXY(wx, wz); return [(ix - PICK.ox) * s, (iy - PICK.oy) * s]; };
@@ -101,7 +101,7 @@ function pickSelect(wx, wz, name) {
 /** The bottom bar: what is chosen, height and direction (every choice visible), and the button that starts there. */
 function pickPanel() {
   const el = $('pickFoot'); el.textContent = '';
-  const t = document.createElement('div'); t.className = 'pickWhat'; t.textContent = PICK.pt ? '📍 ' + L(PICK.name[0], PICK.name[1]) : L('Tap the map or search to choose a place', 'הקישו על המפה או חפשו כדי לבחור מקום'); el.appendChild(t);
+  const t = document.createElement('div'); t.className = 'pickWhat'; t.textContent = PICK.pt ? '📍 ' + L(PICK.name[0], PICK.name[1]) : (document.body.classList.contains('touch') ? L('Tap the map or search to choose a place', 'מקישים על המפה או מחפשים, ובוחרים מקום') : L('Click the map or search to choose a place', 'לוחצים על המפה או מחפשים, ובוחרים מקום')); el.appendChild(t);
   const rows = document.createElement('div'); el.appendChild(rows);
   const row = (label, opts, cur, set) => { const r = document.createElement('div'), sp = document.createElement('span'), g = document.createElement('div'); r.className = 'seg'; sp.textContent = label; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
     opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { set(i); pickPanel(); pickDraw(); }); g.appendChild(b); }); r.append(sp, g); rows.appendChild(r); };
@@ -117,17 +117,19 @@ function openPicker(where, rer) {
   PICK.open = true; PICK.where = where; PICK.rer = rer; const ov = $('pick'); ov.style.display = 'flex'; ov.dir = SAVE.lang === 'he' ? 'rtl' : 'ltr';
   $('pickT').textContent = L('Choose a place', 'בחירת מקום'); $('pickClose').setAttribute('aria-label', L('Close', 'סגירה'));
   const q = $('pickQ'); q.placeholder = L('Search a town or site, e.g. Masada', 'חיפוש ישוב או אתר, למשל: מצדה'); q.value = ''; $('pickRes').textContent = ''; $('pickRes').hidden = true;
-  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה');
+  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה'); $('pickHint').textContent += ' · © OpenStreetMap';
   const sv = SAVE.pick; if (!PICK.pt && sv && sv.at) { PICK.pt = sv.at; PICK.name = sv.name; PICK.alt = sv.alt | 0; PICK.hdg = sv.hdg | 0; }
+  pickPanel();                 // the bottom bar first: it sets how much room the map has (sizing the map before it squashed the picture and shifted every tap)
   pickC().width = 0; pickSize();
   if (PICK.pt) { const lo = x2lon(PICK.pt[0]), la = z2lat(PICK.pt[1]); pickFit(lo - 0.35, la - 0.35, lo + 0.35, la + 0.35); } else pickFit(34.2, 29.45, 35.95, 33.35);
-  pickPanel(); pickDraw(); if (!document.body.classList.contains('touch')) q.focus();
+  pickDraw(); if (!document.body.classList.contains('touch')) q.focus();
 }
 function closePicker() { PICK.open = false; $('pick').style.display = 'none'; }
 function setupPicker() {
   const c = pickC(), q = $('pickQ'), res = $('pickRes'), dpr = () => c.width / (c.clientWidth || 1);
   $('pickClose').addEventListener('click', closePicker);
   window.addEventListener('resize', () => { if (PICK.open) { pickSize(); pickDraw(); } });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (PICK.open) { pickSize(); pickDraw(); } }).observe(c);       // the bar under the map changes height when a place is chosen
   const show = list => { res.textContent = ''; res.hidden = !list.length;
     for (const e of list) { const b = document.createElement('button'); b.setAttribute('role', 'option'); const n = document.createElement('b'), m = document.createElement('small'); n.textContent = L(e.en, e.he); m.textContent = (e.site ? L('site', 'אתר') + ' · ' : '') + L(e.he, e.en);
       b.append(n, m); b.addEventListener('click', () => choose(e)); res.appendChild(b); } };
@@ -147,6 +149,57 @@ function setupPicker() {
     const [wx, wz] = pickWorld(PICK.ox + e.offsetX * k / PICK.s, PICK.oy + e.offsetY * k / PICK.s); pickSelect(wx, wz); };
   c.addEventListener('pointerup', up); c.addEventListener('pointercancel', up);
   c.addEventListener('wheel', e => { e.preventDefault(); const k = dpr(); pickZoomAt(e.offsetX * k, e.offsetY * k, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
-  c.addEventListener('dblclick', e => { const k = dpr(); pickZoomAt(e.offsetX * k, e.offsetY * k, 2); });
   for (const [id, f] of [['pickIn', 1.6], ['pickOut', 1 / 1.6]]) $(id).addEventListener('click', () => pickZoomAt(c.width / 2, c.height / 2, f));
+}
+
+// ---------- 12g. The flight passport: a stamp for every well-known place flown over ----------
+/** One sentence about each place in PICK_SITES, by its English name: [English, Hebrew]. */
+const STAMP_FACTS = {
+  'Mount Hermon': ['The highest mountain in Israel, with snow in winter and a ski site', 'ההר הגבוה בישראל. בחורף יש בו שלג ואתר סקי'],
+  'Sea of Galilee (Kinneret)': ['The lowest freshwater lake in the world, about 210 m below sea level', 'אגם המים המתוקים הנמוך בעולם, כ-210 מטר מתחת לפני הים'],
+  'Mount Tabor': ['A round mountain that stands alone in the Jezreel Valley', 'הר עגול שעומד לבדו בעמק יזרעאל'],
+  'Mount Carmel': ['A green ridge that runs down to the sea at Haifa', 'רכס ירוק שיורד אל הים בחיפה'],
+  'Rosh HaNikra': ['White chalk cliffs and sea caves on the northern border', 'צוקי קירטון לבנים ונקרות ים בגבול הצפון'],
+  'Mount Meron': ['The highest peak in the Galilee', 'הפסגה הגבוהה בגליל'],
+  'Hula Valley': ['Half a billion birds rest here on their way between Europe and Africa', 'חצי מיליארד ציפורים נודדות עוצרות כאן בדרך בין אירופה לאפריקה'],
+  'Banias': ['A spring and a waterfall at the foot of the Hermon', 'מעיין ומפל למרגלות החרמון'],
+  'Nimrod Fortress': ['A huge medieval castle on a ridge above the Banias', 'מבצר ענק מימי הביניים על רכס מעל הבניאס'],
+  'Gamla': ['An ancient town on a ridge shaped like a camel\'s hump, and a vulture colony', 'עיר עתיקה על רכס בצורת דבשת גמל, ולידה נשרים'],
+  'Mount Gilboa': ['Famous for its purple irises in spring', 'מפורסם באירוס הגלבוע הסגול שפורח באביב'],
+  'Jordan River (Yardenit)': ['Where the Jordan leaves the Kinneret on its way to the Dead Sea', 'כאן יוצא הירדן מהכנרת בדרכו לים המלח'],
+  'Akko old city': ['A walled port city with Crusader halls under its streets', 'עיר נמל מוקפת חומה, ומתחת לרחובותיה אולמות צלבניים'],
+  'Bahai Gardens': ['Nineteen garden terraces down the slope of the Carmel', 'תשע-עשרה מדרגות של גנים במורד הכרמל'],
+  'Caesarea': ['A Roman port city built by King Herod, with a theatre by the sea', 'עיר נמל רומית שבנה הורדוס, עם תיאטרון על חוף הים'],
+  'Azrieli Towers': ['Three towers in Tel Aviv: a circle, a triangle and a square', 'שלושה מגדלים בתל אביב: עגול, משולש ומרובע'],
+  'Tel Aviv Port': ['An old port that became a boardwalk by the sea', 'נמל ישן שהפך לטיילת על הים'],
+  'Jaffa Port': ['One of the oldest ports in the world, about 4,000 years old', 'אחד הנמלים העתיקים בעולם, בן כ-4,000 שנה'],
+  'Ben Gurion Airport': ['Israel\'s main airport, named after the first prime minister', 'שדה התעופה הראשי של ישראל, על שם ראש הממשלה הראשון'],
+  'Latrun': ['A hill on the road to Jerusalem, with a monastery and a tank museum', 'גבעה בדרך לירושלים, עם מנזר ומוזיאון טנקים'],
+  'Western Wall': ['The Western Wall, in the Old City of Jerusalem', 'הכותל המערבי, בעיר העתיקה בירושלים'],
+  'Herodium': ['A palace that King Herod built inside a man-made mountain', 'ארמון שהורדוס בנה בתוך הר מעשה ידי אדם'],
+  'Dead Sea': ['The lowest place on Earth, so salty that people float', 'המקום הנמוך בעולם. המים כל כך מלוחים שצפים בהם'],
+  'Masada': ['King Herod\'s fortress on a cliff above the Dead Sea', 'המבצר של הורדוס על צוק מעל ים המלח'],
+  'Ein Gedi': ['An oasis with waterfalls and ibex beside the Dead Sea', 'נווה מדבר עם מפלים ויעלים ליד ים המלח'],
+  'Sde Boker': ['The desert kibbutz where David Ben Gurion lived', 'הקיבוץ במדבר שבו גר דוד בן גוריון'],
+  'Makhtesh Ramon': ['The largest erosion crater in the world, 40 km long', 'המכתש הגדול בעולם, באורך 40 קילומטר'],
+  'Timna Park': ['Ancient copper mines and red sandstone pillars', 'מכרות נחושת עתיקים ועמודי אבן חול אדומים'],
+  'Coral Beach, Eilat': ['A coral reef in the Red Sea, full of colourful fish', 'שונית אלמוגים בים סוף, מלאה דגים צבעוניים'],
+  'Ashkelon National Park': ['Ancient city walls and the oldest arched gate in the world, by the sea', 'חומות עיר עתיקה ושער הקשת העתיק בעולם, על חוף הים'],
+  'Beit She\'an': ['A Roman city with a theatre and streets of columns', 'עיר רומית עם תיאטרון ורחובות עמודים'],
+  'Golan Heights': ['A high basalt plateau of old volcanoes', 'רמה גבוהה של בזלת והרי געש כבויים'] };
+const stampCount = () => PICK_SITES.filter(p => SAVE.stamps && SAVE.stamps[p[0]]).length;
+/** A stamp is earned by flying within 2 km (real) of the place, below 1,500 m above the ground. */
+function updateStamps() {
+  if (!S.started || S.crashed || S.onGround || S.ra > 1500) return;
+  for (const p of PICK_SITES) { if (SAVE.stamps && SAVE.stamps[p[0]]) continue; if (Math.hypot(lon2x(p[2]) - S.pos.x, lat2z(p[3]) - S.pos.z) > 500) continue;
+    (SAVE.stamps = SAVE.stamps || {})[p[0]] = 1; persist(); Snd.chime(660, 0.2); setTimeout(() => Snd.chime(880, 0.3), 160); setTimeout(() => Snd.chime(1100, 0.4), 320); if (navigator.vibrate) navigator.vibrate(60);
+    const f = STAMP_FACTS[p[0]]; toast('⭐ ' + L('New stamp: ', 'חותמת חדשה: ') + L(p[0], p[1]) + ' (' + stampCount() + '/' + PICK_SITES.length + ')' + (f ? '\n' + L(f[0], f[1]) : ''), 8); return; }
+}
+/** The passport in the menus: every place, earned ones in gold with their sentence. Choosing one opens the map on it, to start there. */
+function stampGrid(el, where, rer) {
+  const intro = document.createElement('p'); intro.style.gridColumn = '1 / -1'; intro.style.margin = '0 0 4px';
+  intro.textContent = L('Fly low over a place to collect its stamp. Choose a place to start near it.', 'טסים נמוך מעל מקום כדי לקבל את החותמת שלו. בוחרים מקום כדי להתחיל לידו.'); el.appendChild(intro);
+  for (const p of PICK_SITES) { const got = !!(SAVE.stamps && SAVE.stamps[p[0]]), b = document.createElement('button'), f = STAMP_FACTS[p[0]]; b.className = got ? 'on' : ''; b.textContent = (got ? '⭐ ' : '☆ ') + L(p[0], p[1]);
+    if (got && f) { const s = document.createElement('small'); s.textContent = L(f[0], f[1]); b.appendChild(s); }
+    b.addEventListener('click', () => { openPicker(where, rer); pickSelect(lon2x(p[2]), lat2z(p[3]), [p[0], p[1]]); pickFit(p[2] - 0.25, p[3] - 0.25, p[2] + 0.25, p[3] + 0.25); pickDraw(); }); el.appendChild(b); }
 }

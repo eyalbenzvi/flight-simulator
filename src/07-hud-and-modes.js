@@ -188,8 +188,8 @@ function mapLabels(W, H, u, big, zs) {
   const shield = r => { const x = mx(r.x), y = mz(r.z), size = 9, th = px(size + 4); M.font = font(size, true); const w = M.measureText(r.n).width + px(5);
     const b = { x0: x - w / 2 - gap, y0: y - th / 2 - gap, x1: x + w / 2 + gap, y1: y + th / 2 + gap }; if (!fits(b)) return; boxes.push(b); items.push({ text: r.n, x, y, w, h: th, font: M.font, kind: 'road', cls: r.cls, b }); };
   // waypoints: short codes on the small map, place names on the big one
-  const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]);
-  for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : n; label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
+  const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]), WPS = { TLV: 'ת״א', JRS: 'י-ם', HFA: 'חיפה', 'DEAD SEA': 'ים המלח', MASADA: 'מצדה', EILAT: 'אילת' };
+  for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : L(n, WPS[n] || n); label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
   if (big) {
     const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14)), minPop = Math.max(1, 20 / Math.pow(zs, 1.5));
     const locs = LOCS.filter(l => l[4] >= minPop).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
@@ -313,8 +313,13 @@ function drawSys() {
 }
 
 // ---------- 12b. Settings, smoke trails, air traffic, weather, photo mode ----------
-const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick; } catch (e) { /* no storage: defaults */ } return d; })();
-function persist() { try { localStorage.setItem('ifs-save', JSON.stringify(SAVE)); } catch (e) { /* storage unavailable: settings last for this session only */ } }
+const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick;
+  d.first = !o.plane;                    // nothing saved yet: a first visit
+  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (o.stamps && typeof o.stamps === 'object') d.stamps = o.stamps; } catch (e) { /* no storage: defaults */ } return d; })();
+/** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
+function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
+  const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
+let SAVE_LAST = '';
 Object.assign(S, { names: true, noEngine: false, gamHold: null, turb: 0, lt: 5, flash: 0, legend: true });
 const WXN = ['Clear', 'Dust haze', 'Storm'], PH = { on: false, az: 0.7, el: 0.22, d: 1.5, drag: null }, AIT = [];
 let TR = null, WX = 0;
@@ -453,7 +458,7 @@ function arcadeStep(dt) {
     /* more than 40% lever always reaches flying speed (a child sets the lever part-way and waits); less is taxiing. With the power at idle the brakes come on by themselves, after a landing or an abandoned take-off */
     const ac = arcadeAccel(A.v, 0, true), vT = S.brake ? 0 : S.thr > 0.4 ? Math.max(S.thr * vMax * 0.6, PL.vs * 1.2) : S.thr * PL.vs, a = (vT > A.v ? Math.max(ac.up, 0.3) : S.brake ? 4.4 : ac.dn + (S.thr < 0.05 ? 2.8 : 0)) * dt;
     A.v += clamp(vT - A.v, -a, a);
-    A.psi += lr * 0.7 * clamp(A.v / 8, 0, 1) * (1 - 0.8 * clamp(A.v / 60, 0, 1)) * dt; A.gam = 0;          /* gentle steering at speed */ A.phi *= Math.exp(-8 * dt); A.turn = 0;
+    A.psi += lr * 0.7 * Math.max(clamp(A.v / 8, 0, 1), S.thr > 0.1 ? 0.5 : 0) * (1 - 0.8 * clamp(A.v / 60, 0, 1)) * dt;          /* with power on it turns on the spot too, so it can turn away from water */ A.gam = 0;          /* gentle steering at speed */ A.phi *= Math.exp(-8 * dt); A.turn = 0;
     const sx = Math.sin(A.psi) * A.v * dt, sz = -Math.cos(A.psi) * A.v * dt; S.pos.x += sx; S.pos.z += sz; let g = groundAt(S.pos.x, S.pos.z);
     if (g.water) { S.pos.x -= sx; S.pos.z -= sz; A.v = 0; g = groundAt(S.pos.x, S.pos.z); arcSay('That is water. Turn around', 'זה מים. צריך להסתובב'); }
     S.pos.y = g.h + GEAR_H; S.airTime = 0;
@@ -475,7 +480,7 @@ function arcadeStep(dt) {
     { const top = gm * clamp((PL.aCeil - S.pos.y) / 1500, 0, 1); if (A.gam > top) { A.gam = Math.max(top, A.gam - 1.5 * dt); if (top < 0.01 && ud > 0.1) arcSay('This is as high as it goes', 'זה הכי גבוה שאפשר'); } }      // the ceiling
     if (!S.trick && S.ra < 260 + A.v) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
-      for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
+      for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12 && !(landing && (gh - here) / (A.v * t * hsAt(S.ra)) < 0.2)) need = Math.max(need,       /* coming down to land, gently rising ground is somewhere to land, not something to climb over */ (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
     if (S.ra < 150 && !S.trick && A.v > vMin * 1.2) A.gam = Math.max(A.gam, -Math.max(S.ra - 6, 0) / 130);          // still fast: it floats just above the ground until it has slowed to landing speed
     if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -(0.1 + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground
@@ -551,7 +556,7 @@ function updateExplosion(dt) {
   if (t > 6) { EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; }
 }
 const LV = [['Easy', 'קל'], ['Medium', 'בינוני'], ['Expert', 'מקצועי']];
-const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. בלי הזדקרות, נוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
+const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. המטוס לא נופל, ונוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
 /** The three difficulty buttons (start screen and menu). */
 function levelButtons(el, after) {
   el.textContent = '';

@@ -10,7 +10,11 @@ const fwd = new THREE.Vector3(), up = new THREE.Vector3(), right = new THREE.Vec
 const eul = new THREE.Euler(0, 0, 0, 'YXZ'), dq = new THREE.Quaternion(), XA = new THREE.Vector3(1, 0, 0), YA = new THREE.Vector3(0, 1, 0), ZA = new THREE.Vector3(0, 0, 1);
 let TNOW = 0, camSnap = true;
 
-function crash(why) { if (S.crashed) return; S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
+function crash(why) { if (S.crashed) return;
+  // Easy: nothing ends the flight. A bump, a word about what happened, and the aircraft is back in the air above the same spot
+  if (S.arc && !S.land && !S.ap.on && S.started) { const g = groundAt(S.pos.x, S.pos.z); S.pos.y = Math.max(S.pos.y, g.h) + 300; S.onGround = false; S.landed = false; S.trick = null; A.gam = 0.03; A.v = Math.max(A.v * 0.7, arcVmin() * 1.3); A.out = false; S.airTime = 0;
+    S.shake = 0.9; Snd.chime(240, 0.35); if (navigator.vibrate) navigator.vibrate(120); toast(L('Oops! ', 'אופס! ') + tr(why).replace(/\.$/, '') + L('. Back up we go', '. חוזרים למעלה'), 5); return; }
+  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
 let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
@@ -39,7 +43,7 @@ function spawn(def) {
   }
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = 0; S.boost = 0; if (S.noEngine) S.thr = S.n1 = 0;
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
-  A.sync = true; toast(tr(def.label));
+  A.sync = true; toast(def.pick ? '📍 ' + L(def.name[0], def.name[1]) : def.type === 'approach' ? L('Approach: ', 'גישה: ') + tr(def.label.replace('Approach: ', '')) : tr(def.label));
 }
 
 function readAttitude() { eul.setFromQuaternion(S.q, 'YXZ'); S.pitch = eul.x; S.bank = -eul.z; S.hdg = ((-eul.y / DEG) % 360 + 360) % 360; }
@@ -85,7 +89,7 @@ function updateControls(dt) {
     if (tr.type === 'roll') { rt = rollOut ? rollFor(0) : tr.dir; pt = 0.04; tr.ang += Math.abs(S.rr) * dt; }
     else { rt = 0; pt = clamp((ASTALL * 0.78 - S.alpha) * 8, 0.12, 1); tr.ang += Math.max(S.pr, 0) * dt; }
     const bad = tr.t > 45 || S.ra < 40;
-    if (bad || (tr.type === 'roll' ? rollOut && Math.abs(S.bank) < 0.1 && Math.abs(S.rr) < 0.35 : tr.ang > Math.PI * 2 - 0.25)) { S.gamHold = tr.type === 'roll' ? 0 : null; toast(bad ? 'Manoeuvre cut short' : tr.type === 'roll' ? 'Aileron roll!' : 'Loop!'); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
+    if (bad || (tr.type === 'roll' ? rollOut && Math.abs(S.bank) < 0.1 && Math.abs(S.rr) < 0.35 : tr.ang > Math.PI * 2 - 0.25)) { S.gamHold = tr.type === 'roll' ? 0 : null; toast(bad ? L('Manoeuvre cut short', 'התרגיל הופסק') : tr.type === 'roll' ? L('Aileron roll!', 'גלגול!') : L('Loop!', 'לולאה!')); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
   } else if (S.land) {
     // ---- AUTOLAND: follow the ILS, configure, flare, brake to a stop ----
     const rw = S.land; yt = 0;
