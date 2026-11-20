@@ -134,14 +134,30 @@ function refreshMenu() {
   planeCards($('mPlanes'), k => { selectPlane(k); closeMenu(); spawn(S.lastSpawn || FREE[0]); });
   gridButtons($('mFree'), FREE.map(d => [d.label, '', () => { closeMenu(); spawn(d); }]));
   gridButtons($('mLand'), LANDTESTS.map(d => [d.label.replace('Approach: ', ''), '', () => { closeMenu(); spawn(d); }]));
-  const set = (t, v, code) => [t, v, () => { S.paused = false; action(code); S.paused = true; refreshMenu(); }];
   levelButtons($('mLevels'));
-  gridButtons($('mSet'), [
+  gridButtons($('mSet'), settingsItems(refreshMenu, false));
+}
+/** The settings buttons, shared by the pause menu and the start screen. after: redraws the list that holds them. */
+function settingsItems(after, onStart) {
+  const set = (t, v, code) => [t, v, () => { const p = S.paused; S.paused = false; action(code); S.paused = p; after(); }];
+  return [
     [L('Language', 'שפה'), L('English', 'עברית'), () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); refreshMenu(); }],
     [L('Up arrow', 'חץ למעלה'), SAVE.inv ? L('Goes down (pull back, like a real stick)', 'מוריד (כמו מוט היגוי אמיתי)') : L('Goes up', 'מעלה'), () => { SAVE.inv = !SAVE.inv; persist(); refreshMenu(); }],
     set(L('Time of day', 'שעה ביום'), TOD[S.tod].name.toLowerCase(), 'KeyT'), set(L('Weather', 'מזג אוויר'), WXN[WX], 'KeyY'), set(L('View', 'מבט'), CAMS[S.cam], 'KeyC'), set(L('Place names', 'שמות מקומות'), S.names ? L('On', 'מוצגים') : L('Off', 'מוסתרים'), 'KeyN'),
     set(L('Instruments', 'מכשירים'), document.body.classList.contains('nopfd') ? L('Simple', 'פשוטים') : L('Full flight display', 'תצוגת טיסה מלאה'), 'KeyI'), set(L('Smoke trail', 'שובל עשן'), S.smoke ? L('On', 'פועל') : L('Off', 'כבוי'), 'KeyV'), set(L('Sound', 'קול'), Snd.muted ? L('Off', 'כבוי') : L('On', 'פועל'), 'KeyM'),
-    [L('Photo mode', 'מצב צילום'), L('Look at the aircraft from any side', 'מסתכלים על המטוס מכל צד'), () => { closeMenu(); action('KeyO'); }]]);
+    ...(onStart ? [] : [[L('Photo mode', 'מצב צילום'), L('Look at the aircraft from any side', 'מסתכלים על המטוס מכל צד'), () => { closeMenu(); action('KeyO'); }]])];
+}
+/** The start screen's folded sections: where to start (a free start or an approach to land), and the settings. */
+let START = null;
+function refreshStart() {
+  const cur = START || FREE[0], choose = d => () => { START = d; spawn(d); $('toast').style.display = 'none'; refreshStart(); };
+  gridButtons($('sFree'), FREE.map(d => [d.label, '', choose(d), d === cur]));
+  gridButtons($('sLand'), LANDTESTS.map(d => [d.label.replace('Approach: ', ''), '', choose(d), d === cur]));
+  gridButtons($('sSet'), settingsItems(refreshStart, true));
+  const head = (id, t, v) => { const h = $(id); h.textContent = t; if (v) { const s = document.createElement('small'); s.textContent = v; h.appendChild(s); } };
+  head('sFrH', L('Start from', 'מאיפה מתחילים'), FREE.includes(cur) ? tr(cur.label) : '');
+  head('sLdH', L('Approaches to land', 'גישות לנחיתה'), LANDTESTS.includes(cur) ? tr(cur.label.replace('Approach: ', '')) : '');
+  head('sStH', L('Settings', 'הגדרות'), [TOD[S.tod].name.toLowerCase(), WXN[WX]].map(tr).join(' · '));
 }
 function openMenu() { if (!S.started) return; S.paused = true; for (const k in keys) keys[k] = false; refreshMenu(); $('menu').style.display = 'flex'; $('menu').scrollTop = 0; }
 function closeMenu() { S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
@@ -231,11 +247,11 @@ function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
-  const pick = k => { selectPlane(k); spawn(FREE[0]); $('toast').style.display = 'none'; planeCards($('sPlanes'), pick); };
+  const pick = k => { selectPlane(k); spawn(START || FREE[0]); $('toast').style.display = 'none'; planeCards($('sPlanes'), pick); };
   planeCards($('sPlanes'), pick); startPick = pick;
   const fly = $('fly'); fly.disabled = false; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
-    if (!S.arc) toast('Push the throttle to full. The ' + PL.name.toLowerCase() + ' takes off by itself'); });
+    if (!S.arc && S.onGround) toast('Push the throttle to full. The ' + PL.name.toLowerCase() + ' takes off by itself'); });
   $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
   $('modeB').addEventListener('click', e => { action('KeyH'); e.currentTarget.blur(); });
   $('resume').addEventListener('click', closeMenu);

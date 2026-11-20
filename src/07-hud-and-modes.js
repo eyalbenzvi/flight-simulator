@@ -478,7 +478,7 @@ function applyLang() {
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'RESUME', 'המשך'); 
   set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
-  S.legSig = ''; if ($('sPlanes').childElementCount) planeCards($('sPlanes'), startPick);
+  S.legSig = ''; if ($('sPlanes').childElementCount) planeCards($('sPlanes'), startPick); if (!S.started && FREE.length) refreshStart();
 }
 let startPick = () => {};
 

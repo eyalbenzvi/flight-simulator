@@ -121,6 +121,8 @@ h1{font-size:clamp(28px,7vw,50px);line-height:1;margin:0 0 6px;letter-spacing:.0
 .go{font-size:18px;letter-spacing:.12em;padding:12px 30px;background:var(--sand);color:#17202a;border:none;font-weight:700} .go:hover{background:#f6dc98} .go:disabled{opacity:.5;cursor:wait}
 .mh{display:flex;justify-content:space-between;align-items:center;gap:10px} .mh h2{margin:0;font-size:26px;letter-spacing:.06em}
 details{margin-top:14px} summary{cursor:pointer;color:var(--dim);font-size:13.5px}
+details.sec{margin-top:12px;border-top:1px solid var(--line);padding-top:10px} details.sec summary{color:var(--sand);font-size:14px;font-weight:600;letter-spacing:.03em;padding:4px 0} details.sec summary small{color:var(--dim);font-weight:400;margin-inline-start:8px}
+details.sec[open] summary{margin-bottom:7px}
 #keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 18px;font-size:13px;margin-top:8px}
 #keys div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.07);padding:3px 0} #keys b{color:var(--cyan);font-weight:600;white-space:nowrap}
 #crash{display:none;background:rgba(60,4,4,.72);align-items:center}
@@ -179,6 +181,9 @@ details{margin-top:14px} summary{cursor:pointer;color:var(--dim);font-size:13.5p
     <div id="sPlanes" class="grid"></div>
     <h3 id="sLvH"></h3>
     <div id="sLevels" class="grid"></div>
+    <details class="sec"><summary id="sFrH"></summary><div id="sFree" class="grid"></div></details>
+    <details class="sec"><summary id="sLdH"></summary><div id="sLand" class="grid"></div></details>
+    <details class="sec"><summary id="sStH"></summary><div id="sSet" class="grid"></div></details>
     <div style="margin-top:18px"><button id="fly" class="go" disabled>…</button> <button id="langB" style="margin-inline-start:10px">English</button></div>
     <details><summary>Controls</summary><div id="keys"></div></details>
   </div>
