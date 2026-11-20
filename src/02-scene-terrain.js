@@ -55,6 +55,11 @@ function fieldsTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
 }
 
+/** The OpenStreetMap land cover as a one-byte-per-cell texture, sampled without filtering (the shader blurs the edges with noise). */
+function landCoverTexture() {
+  const n = LCR.w * LCR.h, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = LCR.d[i * 4];
+  const t = new THREE.DataTexture(a, LCR.w, LCR.h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+}
 const SHADER_VS = `
   attribute vec3 aCol; attribute vec4 aZone;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist;
@@ -67,7 +72,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime; uniform vec2 uOrg;
+  uniform sampler2D tNoise, tFields, tLC; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime; uniform vec2 uOrg; uniform vec4 uLCr;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -96,6 +101,28 @@ const TERRAIN_FS = `
     float wadi=pow(1.0-abs(2.0*nB-1.0),7.0);
     col=mix(col, col*1.2+0.04, arid*wadi*0.8);
     col*=1.0-arid*0.2*smoothstep(0.45,0.8,nC);
+    // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*55.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5);
+      float fine=1.0-smoothstep(900.0,4500.0,vDist); vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
+      if(lc>0.5){
+        if(lc<1.5){ float can=smoothstep(0.40,0.66,nz(P/16.0+0.21)*0.55+nD*0.45); col=mix(vec3(0.17,0.24,0.11),vec3(0.06,0.13,0.05),mix(0.55,can,fine))*(0.85+0.3*nC); urban=0.0; }
+        else if(lc<2.5){ vec2 r=fract(P/vec2(7.0,9.0)); float t=smoothstep(0.44,0.26,length(r-0.5)); col=mix(mix(soil,vec3(0.13,0.25,0.10),0.55),mix(soil,vec3(0.12,0.24,0.09),t),fine); urban=0.0; }
+        else if(lc<3.5){ float t=smoothstep(0.32,0.12,abs(fract(P.x/5.0+P.y/41.0)-0.5)); col=mix(mix(soil,vec3(0.26,0.34,0.14),0.45),mix(soil,vec3(0.24,0.33,0.12),t),fine); }
+        else if(lc<4.5){ col=mix(texture2D(tFields,P/3000.0).rgb,col,0.15)*(0.85+0.25*nC); urban=0.0; }
+        else if(lc<5.5){ col=vec3(0.28,0.44,0.19)*(0.85+0.3*nD); }
+        else if(lc<6.5){ col=mix(vec3(0.54,0.51,0.37),vec3(0.29,0.35,0.19),smoothstep(0.48,0.74,nD))*(0.9+0.2*nC); }
+        else if(lc<7.5){ col=vec3(0.88,0.81,0.62)*(0.93+0.12*nD); urban=0.0; }
+        else if(lc<8.5){ col=vec3(0.80,0.78,0.72)*(0.84+0.22*nC); urban=0.0; }
+        else if(lc<9.5){ col=vec3(0.15,0.31,0.39)+0.05*nD; urban=0.0; }
+        else if(lc<10.5){ col=mix(vec3(0.20,0.33,0.23),vec3(0.18,0.30,0.36),smoothstep(0.5,0.7,nD)); }
+        else if(lc<11.5){ urban=max(urban,0.7); }
+        else if(lc<12.5){ vec2 q=fract((P-uOrg)/30.0); col=mix(vec3(0.62,0.62,0.60),vec3(0.40,0.41,0.42),step(0.88,max(q.x,q.y))*fine)*(0.9+0.15*nD); urban=0.0; }
+        else if(lc<13.5){ float t=step(0.5,fract(P.x/3.0+P.y/90.0)); col=mix(vec3(0.84,0.86,0.84),mix(vec3(0.90,0.92,0.90),vec3(0.70,0.73,0.72),t),fine); urban=0.0; }
+        else if(lc<14.5){ vec2 q=fract(P/vec2(4.0,6.5)); col=mix(vec3(0.16,0.19,0.27),mix(vec3(0.10,0.13,0.22),vec3(0.58,0.60,0.62),step(0.84,max(q.x,q.y))),fine); urban=0.0; }
+        else if(lc<15.5){ }
+        else if(lc<16.5){ col=mix(vec3(0.64,0.63,0.59),vec3(0.24,0.33,0.19),smoothstep(0.52,0.70,nD)); }
+        else { col=vec3(0.67,0.58,0.45)*(0.9+0.2*nC); }
+      } }
     // layered rock on steep ground
     float steep=smoothstep(0.13,0.40,slope)*(0.3+0.7*rough);
     float strata=0.5+0.5*sin(vW.y*0.085+nC*5.0+nB*9.0);
@@ -104,10 +131,13 @@ const TERRAIN_FS = `
     col=mix(col, vec3(0.95,0.96,1.0), smoothstep(1750.0,2150.0,vW.y+(nC-0.5)*520.0)*(1.0-0.55*steep));
     vec3 emis=vec3(0.0); vec3 warm=vec3(1.0,0.72,0.36);
     // towns: street grid, roofs, trees; street lamps at night
-    if(urban>0.01){ vec2 q=(P-uOrg)/60.0; vec2 fq=abs(fract(q)-0.5); float road=smoothstep(0.40,0.45,max(fq.x,fq.y));
-      vec3 uc=mix(vec3(0.52,0.51,0.49),vec3(0.72,0.68,0.60),nz(floor(q)/61.0));
-      uc=mix(uc,vec3(0.24,0.36,0.19),smoothstep(0.66,0.76,nD)*0.7); uc=mix(uc,vec3(0.21,0.22,0.24),road);
-      col=mix(col,uc,urban*0.9); emis+=warm*uLights*urban*(road*0.85+0.10); }
+    if(urban>0.01){ vec2 q=(P-uOrg)/60.0; vec2 cq=floor(q); vec2 fq=abs(fract(q)-0.5);
+      // local streets between the blocks: thin and light, and only on some block edges, so towns do not look like a waffle
+      float ex=step(0.45,fract(sin(dot(cq+vec2(0.5,0.0),vec2(12.99,78.23)))*43758.5)), ez=step(0.45,fract(sin(dot(cq+vec2(0.0,0.5),vec2(39.35,11.13)))*24634.6));
+      float road=max(smoothstep(0.455,0.475,fq.x)*ex, smoothstep(0.455,0.475,fq.y)*ez)*(1.0-smoothstep(1500.0,6000.0,vDist));
+      vec3 uc=mix(vec3(0.55,0.54,0.51),vec3(0.73,0.69,0.61),nz(cq/61.0));
+      uc=mix(uc,vec3(0.26,0.37,0.20),smoothstep(0.66,0.76,nD)*0.6); uc=mix(uc,vec3(0.43,0.44,0.45),road*0.8);
+      col=mix(col,uc,urban*0.9); emis+=warm*uLights*urban*(road*0.45+0.08); }
     // scattered village lights at night
     { vec2 cq=P/420.0; float hv=fract(sin(dot(floor(cq),vec2(127.1,311.7)))*43758.5453);
       emis+=warm*uLights*(1.0-arid*0.92)*step(0.80,hv)*smoothstep(0.07,0.0,length(fract(cq)-0.5))*0.8*step(-405.0,vW.y); }
@@ -193,7 +223,7 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false };

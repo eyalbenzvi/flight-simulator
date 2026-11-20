@@ -92,8 +92,13 @@ function planLandmarks() {
       if (best) [x, z] = best; }
     if (!wet && groundAt(x, z).water) continue;
     LMK.list.push({ city, x, z, kind, o, r });
-    if (r) { const k = Math.floor(x / 1000) + ':' + Math.floor(z / 1000); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const kk = (Math.floor(x / 1000) + a) + ':' + (Math.floor(z / 1000) + b); let l = LMK.clear.get(kk); if (!l) LMK.clear.set(kk, l = []); l.push([x, z, r + 15]); } }
+    if (r) reserveGround(x, z, r + 15);
   }
+  planSites();                                       // and the OpenStreetMap sites (src/03c-sites.js)
+}
+/** Keep the generic city blocks off a circle of ground (a landmark or a site stands there). */
+function reserveGround(x, z, r) {
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const kk = (Math.floor(x / 1000) + a) + ':' + (Math.floor(z / 1000) + b); let l = LMK.clear.get(kk); if (!l) LMK.clear.set(kk, l = []); l.push([x, z, r]); }
 }
 /** True where a landmark stands, so buildCities leaves the block empty. */
 function landmarkAt(x, z) { const l = LMK.clear.get(Math.floor(x / 1000) + ':' + Math.floor(z / 1000)); return !!l && l.some(([lx, lz, r]) => Math.hypot(x - lx, z - lz) < r); }

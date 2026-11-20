@@ -493,7 +493,7 @@ function applyLang() {
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
   set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
-  set('#sys .r:nth-of-type(1) .k', 'Throttle', 'הספק'); set('#sys .r:nth-of-type(2) .k', 'Flaps', 'מדפים'); set('#sys .r:nth-of-type(3) .k', 'Gear', 'גלגלים'); set('#sys .r:nth-of-type(4) .k', 'Autopilot', 'טייס אוטומטי'); set('#sys .r:nth-of-type(5) .k', 'Mode', 'רמה');
+  { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }
   S.legSig = ''; if (FREE.length) { renderPanel('start'); if (S.paused) renderPanel('pause'); }
 }
 

@@ -1,0 +1,103 @@
+'use strict';
+// ---------- 7e. Identifiable places from OpenStreetMap: towers, mosques, churches, water towers, stadiums, ports' tanks, malls ... ----------
+// SITES comes from tools/osm2world.py (real positions, tagged heights, footprints in real metres). Footprints are drawn at half real size,
+// like the hand-made landmarks, heights are real. Each kind is one small model, placed with an InstancedMesh per kind and 8 km bucket.
+
+const SITE = { list: [], meshes: [] };
+let siteLights = null;
+/** Step 1, before buildCities (called from planLandmarks): choose the sites and reserve their ground. */
+function planSites() {
+  const nearLmk = (x, z, r) => LMK.list.some(l => Math.hypot(l.x - x, l.z - z) < r + l.r);
+  for (const s of SITES) {
+    const kind = SITE_KINDS[s[0]], x = lon2x(s[1] / 1e5), z = lat2z(s[2] / 1e5); if (x < X0 || x > X1 || z < Z0 || z > Z1) continue;
+    const L = s[4] / 2, W = s[5] / 2, area = s[4] * s[5];
+    if (kind === 'synagogue' && area < 500) continue;              // the large ones stand out; the many small ones look like any building
+    if (kind === 'ruins' && area < 3000) continue;
+    if (kind === 'tower' && s[3] && s[3] < 15) continue;
+    const r = { tall: Math.max(L, W, 14) * 0.75, mosque: 18, church: 18, synagogue: 14, watertower: 10, tower: 8, mast: 4, chimney: 6, lighthouse: 6, tank: Math.max(L * 0.5, 6),
+      stadium: Math.max(L, W, 50) * 0.6, hospital: Math.max(L, W, 40) * 0.6, mall: Math.max(L, W, 35) * 0.6, plant: Math.max(L, W, 40) * 0.6, turbine: 6, fortress: Math.max(L, 22) * 0.6, ruins: Math.max(L, 16) * 0.6, silo: 9 }[kind];
+    if (nearLmk(x, z, r + 30)) continue;                           // a hand-made landmark is already there
+    if (groundAt(x, z).water || airfieldAt(x, z, r)) continue;
+    SITE.list.push({ kind, x, z, h: s[3], L, W, rot: s[6] * DEG, r });
+    if (kind === 'plant') for (const k of [-1, 1]) SITE.list.push({ kind: 'chimney', x: x + Math.cos(s[6] * DEG) * L * 0.3 * k, z: z - Math.sin(s[6] * DEG) * L * 0.3 * k, h: 110, L: 0, W: 0, rot: 0, r: 6 });
+  }
+  for (const l of SITE.list) reserveGround(l.x, l.z, l.r);
+}
+
+/** The models, one per kind, in metres, base at y = 0, vertex-coloured. Footprint kinds (stadium, mall, hospital, fortress, ruins, plant)
+    are 1 × 1 in x and z and scaled to the footprint; the others are real size and scaled by height or a size factor. */
+function siteModels() {
+  const B = (w, h, d, x, y, z, c, ry = 0) => [new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y + h / 2, z), c];
+  const C = (rt, rb, h, x, y, z, c, seg = 10) => [new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y + h / 2, z), c];
+  const K = (r, h, x, y, z, c, seg = 10) => [new THREE.ConeGeometry(r, h, seg).translate(x, y + h / 2, z), c];
+  const D = (r, x, y, z, c, sy = 1) => [new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, sy, 1).translate(x, y, z), c];
+  const P = (w, h, d, x, y, z, c) => [new THREE.CylinderGeometry(1, 1, 1, 3).rotateX(-Math.PI / 2).scale(w / 2, h / 1.5, d).translate(x, y + h * 0.33, z), c];      // pitched roof
+  const rgb = (parts) => mergeGeo(parts.map(([g, c]) => { const k = new THREE.Color(c); return [g, k.r, k.g, k.b]; }));
+  const STONE = 0xdccfae, CREAM = 0xebe4d2, WHITE = 0xf1f0ea, RED = 0xc8443a, GREY = 0xb9bcc0, DARK = 0x4a4f55;
+  const bands = (r0, r1, n, c1, c2) => { const a = []; for (let i = 0; i < n; i++) a.push(C(r0 + (r1 - r0) * (i / n), r0 + (r1 - r0) * ((i + 1) / n), 1 / n, 0, i / n, 0, i % 2 ? c2 : c1, 10)); return a; };
+  const minaret = (x, z, h, c) => [C(1.5, 1.8, h, x, -1, z, c), C(2.6, 2.6, 1, x, h * 0.72, z, c), C(1.1, 1.2, h * 0.18, x, h * 0.78, z, c), K(1.5, 5, x, h - 1, z, 0x5f8f6a)];
+  return {
+    mosque: rgb([B(24, 10, 22, 0, -1, 0, CREAM), C(7.4, 7.4, 3, 0, 9, 0, CREAM), D(7.6, 0, 12, 0, 0x6f9a86, 1.05), ...minaret(14, -12, 32, WHITE)]),
+    mosqueG: rgb([B(24, 10, 22, 0, -1, 0, CREAM), C(7.4, 7.4, 3, 0, 9, 0, CREAM), D(7.6, 0, 12, 0, 0xd9a520, 1.05), ...minaret(14, -12, 32, WHITE)]),
+    church: rgb([B(14, 13, 30, 0, -1, 0, STONE), P(15, 7, 30, 0, 12, 0, 0x9a4a32), B(7.5, 28, 7.5, 0, -1, -18, STONE), K(5.6, 9, 0, 27, -18, 0x6a6f74, 4)]),
+    synagogue: rgb([B(22, 13, 18, 0, -1, 0, CREAM), C(6, 6, 2, 0, 12, 0, CREAM), D(6.2, 0, 14, 0, 0xb9a26a)]),
+    watertower: rgb([C(2.4, 3, 22, 0, -1, 0, 0xd5d0c2), C(8.5, 7, 8, 0, 20, 0, 0xd8d4c8), K(9, 3.5, 0, 28, 0, 0x9aa0a4)]),
+    tower: rgb([C(0.9, 3.6, 1, 0, 0, 0, 0xbcc0c4, 4), C(2.2, 2.2, 0.04, 0, 0.84, 0, 0xd8443a, 8), C(0.5, 0.5, 0.12, 0, 0.9, 0, 0xe8e8e8, 6)]),
+    mast: rgb(bands(0.9, 0.5, 7, 0xd8443a, 0xf2f2f0)),
+    chimney: rgb([C(3.4, 4.2, 0.72, 0, 0, 0, 0xd9d6cf, 12), ...bands(3.4, 3.0, 4, RED, WHITE).map(([g, c]) => [g.scale(1, 0.28, 1).translate(0, 0.72, 0), c])]),
+    lighthouse: rgb([...bands(3.2, 2.4, 5, WHITE, RED), C(2.2, 2.2, 0.1, 0, 1, 0, 0xfff2b0, 10), K(2.6, 0.12, 0, 1.1, 0, DARK)]),
+    tank: rgb([C(1, 1, 1, 0, 0, 0, 0xe9e9e4, 18), K(1.02, 0.12, 0, 1, 0, 0xcfd2d4, 18)]),
+    stadium: rgb([[new THREE.CylinderGeometry(1, 0.8, 1, 28, 1, true).translate(0, 0.5, 0), 0xc4c7ca], [new THREE.CylinderGeometry(0.62, 0.62, 0.06, 24).translate(0, 0.03, 0), 0x3f8f3a]]),
+    hospital: rgb([B(1, 15, 1, 0, -1, 0, 0xeceee9), B(0.34, 44, 0.42, -0.22, -1, 0.05, 0xe4e7e3), B(0.26, 36, 0.3, 0.2, -1, -0.18, 0xe8ebe6), C(0.11, 0.11, 0.5, 0.3, 14, 0.25, DARK, 12), B(0.05, 3, 0.05, -0.22, 43, 0.05, RED)]),
+    mall: rgb([B(1, 16, 1, 0, -1, 0, 0xd9d4c8), B(1.01, 3.5, 1.01, 0, 10, 0, 0xc8302a), B(0.3, 2, 0.3, 0.2, 15, 0.15, 0x8a8f94)]),
+    plant: rgb([B(1, 30, 0.6, 0, -1, -0.15, GREY), B(0.7, 18, 0.35, -0.1, -1, 0.35, 0xa9adb1)]),
+    turbine: rgb([C(1.6, 2.6, 82, 0, -1, 0, 0xeceeef), B(3.5, 3.5, 9, 0, 80, 0, 0xeceeef), ...[0, 2.094, 4.189].map(a => [new THREE.BoxGeometry(2.4, 40, 0.6).translate(0, 20, 0).rotateZ(a).translate(0, 82, 5), 0xf4f4f4])]),
+    fortress: rgb([B(1, 12, 0.07, 0, -1, -0.47, STONE), B(1, 12, 0.07, 0, -1, 0.47, STONE), B(0.07, 12, 1, -0.47, -1, 0, STONE), B(0.07, 12, 1, 0.47, -1, 0, STONE),
+      ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => C(0.09, 0.1, 17, a * 0.47, -1, b * 0.47, 0xcfc09c, 8))]),
+    ruins: rgb([B(1, 1.5, 1, 0, -1, 0, 0xd2c39c), B(0.6, 5, 0.05, -0.1, 0, -0.4, 0xc9b88f), B(0.05, 4, 0.5, 0.42, 0, 0.1, 0xc9b88f), ...[0, 1, 2, 3, 4, 5].map(k => C(0.03, 0.03, 7 + (k % 3) * 2, -0.3 + k * 0.12, 0, 0.2, 0xe8dcc0, 6))]),
+    silo: rgb([C(4.4, 4.4, 1, -5, 0, 0, 0xd9d9d4, 12), C(4.4, 4.4, 1, 5, 0, 0, 0xd9d9d4, 12), C(4.4, 4.4, 1, 0, 0, 8, 0xd2d2cc, 12), B(4, 1.15, 4, 0, 0, -4, 0xb9bcc0)])
+  };
+}
+
+/** Step 2, after the cities: instance every site; red obstruction lights on the tall ones for the night. */
+function buildSites() {
+  const M = siteModels(), base = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0); base.setAttribute('color', new THREE.BufferAttribute(new Float32Array(base.attributes.position.count * 3).fill(1), 3));
+  const plain = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 18, specular: 0x222222, side: THREE.DoubleSide });
+  const groups = new Map(), BK = 8000, R = rng(5150), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(), LP = [];
+  const GLASS = [0x8fb0c8, 0x9db8cc, 0x7f9fb8, 0xb8c6d2, 0xd6d9dc, 0xe2ded4, 0xa9bccb, 0xc9d1d8];
+  const FAR = { tall: 26000, stadium: 16000, mall: 14000, hospital: 14000, plant: 16000, tank: 14000, chimney: 18000, turbine: 16000, tower: 14000, fortress: 12000 };
+  for (const s of SITE.list) {
+    const y = Math.min(...[[0, 0], [s.r * 0.6, 0], [-s.r * 0.6, 0], [0, s.r * 0.6], [0, -s.r * 0.6]].map(([a, b]) => heightAt(s.x + a, s.z + b)));
+    let model = s.kind, sx = 1, sy = 1, sz = 1, yy = y, ry = s.rot, tint = 0.86 + R() * 0.14, colour = null, obst = null, light = 0;
+    switch (s.kind) {
+      case 'tall': { const h = Math.max(s.h, 40); model = 'tall'; sx = clamp(s.L, 14, 70); sz = clamp(s.W, 12, 60); sy = h + 8; yy = y - 8; colour = GLASS[(R() * GLASS.length) | 0]; obst = [sx, sz, y + h]; light = h > 70 ? y + h + 2 : 0; break; }
+      case 'mosque': { const k = clamp(Math.sqrt(s.L * s.W) / 12, 0.75, 1.7); model = R() < 0.3 ? 'mosqueG' : 'mosque'; sx = sy = sz = k; obst = [24 * k, 22 * k, y + 32 * k]; break; }
+      case 'church': case 'synagogue': { const k = clamp(Math.sqrt(s.L * s.W) / 14, 0.8, 1.6); sx = sy = sz = k; obst = [16 * k, 30 * k, y + 28 * k]; break; }
+      case 'watertower': { const k = clamp((s.h || 28) / 30, 0.7, 1.6); sx = sz = clamp(k, 0.8, 1.2); sy = k; ry = R() * 6.3; obst = [18, 18, y + 32 * k]; break; }
+      case 'tower': { sy = clamp(s.h || 45, 15, 250); obst = [7, 7, y + sy]; light = y + sy + 1; ry = R() * 6.3; break; }
+      case 'mast': { sy = clamp(s.h || 60, 15, 300); obst = [3, 3, y + sy]; light = y + sy + 1; break; }
+      case 'chimney': { sy = clamp(s.h || 80, 20, 300); obst = [8, 8, y + sy]; light = y + sy + 1; break; }
+      case 'lighthouse': { sy = clamp(s.h || 24, 10, 70); obst = [7, 7, y + sy]; break; }
+      case 'silo': { sy = clamp(s.h || 30, 10, 70); obst = [20, 20, y + sy]; break; }
+      case 'tank': { const rr = clamp(s.L * 0.5, 4, 45); sx = sz = rr; sy = clamp(s.h || 14, 6, 30); yy = y - 0.5; break; }
+      case 'stadium': { sx = clamp(s.L * 0.55, 30, 120); sz = clamp(s.W * 0.55, 22, 95); sy = 22; yy = y - 2; obst = [sx * 2, sz * 2, y + 20]; break; }
+      case 'hospital': case 'mall': case 'plant': case 'fortress': case 'ruins': {
+        sx = clamp(s.L, s.kind === 'ruins' ? 16 : 25, s.kind === 'plant' ? 220 : 140); sz = clamp(s.W, s.kind === 'ruins' ? 12 : 20, s.kind === 'plant' ? 160 : 110); if (s.kind !== 'ruins') obst = [sx, sz, y + (s.kind === 'hospital' ? 44 : s.kind === 'plant' ? 30 : 16)]; break; }
+      case 'turbine': { ry = R() * 6.3; obst = [6, 6, y + 120]; light = y + 84; break; }
+    }
+    const key = model + ':' + Math.floor(s.x / BK) + ':' + Math.floor(s.z / BK); let g = groups.get(key); if (!g) groups.set(key, g = { model, kind: s.kind, list: [] });
+    g.list.push([s.x, yy, s.z, ry, sx, sy, sz, colour, tint]);
+    if (obst) addObst(s.x, s.z, obst[0], obst[1], -ry, y - 2, obst[2]);
+    if (light) LP.push(s.x, light, s.z);
+  }
+  for (const g of groups.values()) {
+    const geo = g.model === 'tall' ? base : M[g.model], mat = g.model === 'tall' ? bldMat : plain, im = new THREE.InstancedMesh(geo, mat, g.list.length);
+    let cx = 0, cz = 0, ext = 0; for (const b of g.list) { cx += b[0]; cz += b[2]; } cx /= g.list.length; cz /= g.list.length;
+    g.list.forEach((b, n) => { e.set(0, b[3], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[4], b[5], b[6]); m4.compose(p, q, sc); im.setMatrixAt(n, m4);
+      im.setColorAt(n, b[7] !== null ? col.setHex(b[7]) : col.setRGB(b[8], b[8], b[8])); ext = Math.max(ext, Math.hypot(b[0] - cx, b[2] - cz)); });
+    im.frustumCulled = false; im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: ext + 300, far: (HIRES ? 1 : 0.55) * (FAR[g.kind] || 11000) }; scene.add(im); SITE.meshes.push(im);
+  }
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
+  siteLights = new THREE.Points(lg, new THREE.PointsMaterial({ size: 14, map: lightDot(), color: 0xff3020, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  siteLights.visible = false; scene.add(siteLights);
+}

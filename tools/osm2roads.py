@@ -56,7 +56,7 @@ def xy(p): return (p[0] * MX, p[1] * MZ)
 def length(pts): return sum(math.dist(xy(pts[i]), xy(pts[i + 1])) for i in range(len(pts) - 1))
 for c in chains: c['len'] = length(c['pts'])
 
-# 2. dual carriageways: drop a one-way chain that mostly runs within 70 m of a road already kept (the other direction)
+# 2. dual carriageways: drop a one-way chain that mostly runs within 110 m of a road already kept (the other direction)
 CELL = 200; grid = collections.defaultdict(list); kept = []
 def add(pts):
     for i in range(len(pts) - 1):
@@ -78,8 +78,8 @@ dropped = 0
 for c in sorted(chains, key=lambda c: (-c['c'], -c['len'])):
     if c['len'] < 40: continue
     if c['one']:
-        s = samples(c['pts']); hit = sum(near(x, z, 70) for x, z in s)
-        if s and hit / len(s) > 0.6: dropped += 1; continue
+        s = samples(c['pts']); hit = sum(near(x, z, 110) for x, z in s)
+        if s and hit / len(s) > 0.5: dropped += 1; continue
     kept.append(c); add(c['pts'])
 print('chains', len(chains), 'kept', len(kept), 'dropped as twin carriageway', dropped)
 

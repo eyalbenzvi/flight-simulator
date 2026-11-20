@@ -61,19 +61,23 @@ const cityMeshes = []; let cityLights = null, bldMat = null;
 function windowize(mat) {
   mat.onBeforeCompile = sh => {
     sh.uniforms.uLights = ENV.uLights;
-    sh.vertexShader = 'varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.vertexShader = 'varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vBp = position; vBn = normal;
       #ifdef USE_INSTANCING
-        vBs = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vBid = fract(instanceMatrix[3].x * 0.0137 + instanceMatrix[3].z * 0.0173);
+        vBs = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vBid = fract(instanceMatrix[3].x * 0.0137 + instanceMatrix[3].z * 0.0173); vIn = 1.0;
       #else
-        vBs = vec3(1.0); vBid = 0.0;
+        vBs = vec3(1.0); vBid = 0.0; vIn = 0.0;
       #endif`);
-    sh.fragmentShader = 'uniform float uLights; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'uniform float uLights; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float side = step(abs(vBn.y), 0.5);
         vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
         float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
         diffuseColor.rgb *= mix(1.0, 0.40 + 0.22 * wh, win) * mix(0.86, 1.0, side);
+        if (vIn > 0.5) { float hy = vBp.y * vBs.y;                                   // instanced blocks: height above the (sunk) base in metres
+          diffuseColor.rgb *= mix(0.72, 1.0, smoothstep(7.0, 17.0, hy));              // darker where the walls meet the ground
+          diffuseColor.rgb *= mix(1.0, 0.86, side * step(0.88, fract(hy / 3.4)) * step(9.0, hy));   // a balcony shadow at every floor
+          diffuseColor.rgb *= mix(1.0, 1.13, side * step(vBs.y - 1.4, hy)); }        // the light parapet along the roof
         if (side < 0.5 && vBn.y > 0.5) {   // flat roofs carry solar water heaters: a white tank and a dark panel per flat
           vec2 rc = vec2(vBp.x * vBs.x, vBp.z * vBs.z) / 5.0, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.78, rh);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.26), has * step(abs(rf.x - 0.5), 0.36) * step(abs(rf.y - 0.3), 0.16));
@@ -83,6 +87,11 @@ function windowize(mat) {
   return mat;
 }
 let BLD = null;      // settlement raster decoded from BLD_PNG: one pixel per 60 m block (R height, G style, B seed, A present)
+let LCR = null, BOR = null;      // OpenStreetMap land cover and buildings on the same grid (src/osmworld.js, tools/osm2world.py)
+/** Land cover class at a world point: 0 none, 1 forest, 2 orchard, 3 vineyard, 4 fields, 5 parks and lawns, 6 scrub, 7 sand, 8 rock and quarries,
+    9 water, 10 wetland, 11 residential, 12 industrial, 13 greenhouses, 14 solar, 15 military, 16 cemetery, 17 construction. */
+const LCN = { forest: 1, orchard: 2, vineyard: 3, fields: 4, park: 5, scrub: 6, sand: 7, rock: 8, water: 9, wetland: 10, residential: 11, industrial: 12, greenhouse: 13, solar: 14, military: 15, cemetery: 16, construction: 17 };
+const lcAt = (x, z) => { const i = Math.floor((x - X0) / 60), j = Math.floor((z - Z0) / 60); return (!LCR || i < 0 || j < 0 || i >= LCR.w || j >= LCR.h) ? 0 : LCR.d[(j * LCR.w + i) * 4]; };
 const bldAt = (i, j) => (i < 0 || j < 0 || i >= BLD.w || j >= BLD.h) ? 0 : BLD.d[(j * BLD.w + i) * 4 + 3];
 /** How built-up the ground is around a point (0…1), from the raster. */
 function urbanAt(x, z) { const i = Math.floor((x - X0) / 60), j = Math.floor((z - Z0) / 60); let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (bldAt(i + di, j + dj)) n++; return Math.min(1, n / 5); }
@@ -96,18 +105,41 @@ function buildCities() {
   const LP = [], boxes = new Map(), houses = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3(), cc = new THREE.Color(), { w, h, d } = BLD;
   const BK = 6000, push = (map, x, z, v) => { const k = Math.floor(x / BK) + ':' + Math.floor(z / BK); let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
   planLandmarks();                                   // landmarks first, so the blocks keep off their ground
+  // Each 60 m cell combines the satellite raster (built-up surface, average height) with OpenStreetMap (building type, how many, tagged heights):
+  // industrial zones get wide flat sheds, greenhouses get rows of long low tunnels, house neighbourhoods get houses and apartment
+  // neighbourhoods blocks, dense cells two or three blocks, tagged heights replace the satellite average, and neighbourhoods newer
+  // than the satellite data (OpenStreetMap buildings where the raster is empty) are added. Buildings of 40 m and more are sites (03c).
+  const flat = new Map(), bo = BOR.d, IND = [0xd5d7d8, 0xe6e4de, 0xc9c3b5, 0xbfc8cf, 0xdedbd2, 0xb9bdc0];
+  const fit = (x, z, bw, bd) => { const r0 = Math.max(bw, bd) * 0.6; if (!nearRoad(x, z, r0)) return [x, z, 1];
+    for (const k of [0.75, 0.55]) for (const [ox, oz] of FIT_OFFS) if (!nearRoad(x + ox, z + oz, r0 * k)) return [x + ox, z + oz, k]; return null; };
+  const styleNear = (i, j) => { for (let r = 1; r <= 3; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue; const oo = (jj * w + ii) * 4; if (d[oo + 3]) return d[oo + 1] & 7; } return 0; };
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-    const o = (j * w + i) * 4; if (!d[o + 3]) continue; const ht = d[o], st = d[o + 1] & 7, szc = d[o + 1] >> 3, szk = 0.7 + 0.13 * szc, sd = d[o + 2] / 255, s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1;
+    const o = (j * w + i) * 4, inRaster = d[o + 3] > 0, cov = bo[o] / 255, bc = bo[o + 1] & 15, nlog = bo[o + 1] >> 4, bh = bo[o + 2], lc = LCR.d[o];
+    if (!inRaster && !((cov >= 0.05 && nlog >= 2) || nlog >= 4)) continue;
+    const sd = inRaster ? d[o + 2] / 255 : hash2(i * 1.7 + 3.1, j * 2.3 + 1.7), s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1, szc = inRaster ? d[o + 1] >> 3 : Math.min(3, Math.round(cov * 6)), szk = 0.7 + 0.13 * szc;
+    let st = inRaster ? d[o + 1] & 7 : 0, ht = inRaster ? d[o] : 0;
+    if (bc === 3 || (lc === 12 && (bc === 0 || bc === 4) && cov > 0.04)) st = 5;                              // industrial sheds
+    else if ((bc === 6 || lc === 13) && !inRaster) st = 6;                                                     // greenhouses
+    else if (inRaster) { if (bc === 2 && st === 3) st = 1; else if (bc === 1 && st === 1 && ht < 14) st = 3; }  // apartments or houses, as mapped
+    else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
+    if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
+    if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
     const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z)) continue;
     const y = heightAt(x, z);
     if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
-    else { const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk, pal = PAL[st] || PAL[1];
-      // a block that touches a road is nudged off it, then shrunk; only if nothing fits is it left out (cities have a street every block or two)
-      let bx = x, bz = z, f = 1; const r0 = Math.max(bw, bd) * 0.6;
-      if (nearRoad(x, z, r0)) { f = 0; for (const k of [0.75, 0.55]) { for (const [ox, oz] of FIT_OFFS) if (!nearRoad(x + ox, z + oz, r0 * k)) { bx = x + ox; bz = z + oz; f = k; break; } if (f) break; } if (!f) continue; }
-      const by = bx === x && bz === z ? y : heightAt(bx, bz), w2 = bw * f, d2 = bd * f;
-      push(boxes, bx, bz, [bx, by - 8, bz, w2, ht + 8, d2, 0, pal[(s3 * pal.length) | 0]]); addObst(bx, bz, w2, d2, 0, by - 8, by + ht); }
-    if (sd < 0.75) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
+    else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
+      for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+        const by = heightAt(f[0], f[1]); push(flat, f[0], f[1], [f[0], by - 4, f[1], bw * f[2], ht + 4, bd * f[2], 0, IND[((s3 + k * 0.37) * IND.length | 0) % IND.length]]); addObst(f[0], f[1], bw * f[2], bd * f[2], 0, by - 4, by + ht); } }
+    else if (st === 6) {                                                                                      // greenhouse tunnels in rows
+      const rot = s3 < 0.5 ? 0 : 1.5708; for (let k = -1; k <= 1; k++) { const gx = x + (rot ? k * 17 : 0), gz = z + (rot ? 0 : k * 17); if (nearRoad(gx, gz, 26)) continue;
+        push(flat, gx, gz, [gx, heightAt(gx, gz) - 1, gz, 52, 5, 12, rot, 0xe4e9e6]); } }
+    else { const n = st === 1 ? (cov > 0.42 ? 3 : cov > 0.28 ? 2 : 1) : 1, kk = n === 1 ? 1 : n === 2 ? 0.74 : 0.62, pal = PAL[st] || PAL[1];
+      for (let k = 0; k < n; k++) {                                                                           // dense cells: two or three blocks
+        const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
+        const ox = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 1 : 0.3), oz = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 0.3 : 1), f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+        const by = heightAt(f[0], f[1]), w2 = bw * f[2], d2 = bd * f[2], h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
+        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, 0, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, 0, by - 8, by + h2); } }
+    if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
   // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
   for (const l of LOCS) { const x = lon2x(l[2]), z = lat2z(l[3]), i0 = Math.floor((x - X0) / 60), j0 = Math.floor((z - Z0) / 60); let any = false;
@@ -120,6 +152,10 @@ function buildCities() {
   for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
     list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
     im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 22000 : 11000 }; scene.add(im); cityMeshes.push(im); }
+  const flatMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  for (const [k, list] of flat) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, list.length);
+    list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 18000 : 9000 }; scene.add(im); cityMeshes.push(im); }
   for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
     im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : 6000 }; scene.add(im); cityMeshes.push(im); }
@@ -199,6 +235,17 @@ const ROAD_HW = { 0: 6, 1: 9, 2: 16 };
 let ROADLINES = null;
 /** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
     (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
+let RAILLINES = null;
+/** Railway lines from OpenStreetMap (RAILS), as world polylines with points at most 45 m apart. */
+function railLines() {
+  if (RAILLINES) return RAILLINES; RAILLINES = [];
+  for (const e of RAILS) { const D = []; let lo = e[0], la = e[1], px = 0, pz = 0;
+    for (let i = 0; i < e.length; i += 2) { if (i) { lo += e[i]; la += e[i + 1]; } const x = lon2x(lo / 1e4), z = lat2z(la / 1e4);
+      if (D.length) { const n = Math.ceil(Math.hypot(x - px, z - pz) / 45); for (let k = 1; k < n; k++) D.push([px + (x - px) * k / n, pz + (z - pz) * k / n]); }
+      D.push([x, z]); px = x; pz = z; }
+    if (D.length > 1) RAILLINES.push(D); }
+  return RAILLINES;
+}
 function roadLines() {
   if (ROADLINES) return ROADLINES; ROADLINES = []; const cov = new Set(), C = 800, ck = (x, z) => Math.floor(x / C) * 100003 + Math.floor(z / C);
   for (const [cls, ref, e] of OSM_ROADS) { const D = []; let lo = e[0], la = e[1], px = 0, pz = 0;
@@ -219,7 +266,7 @@ function roadIndex() {
     for (let cz = Math.floor((Math.min(az, bz) - e) / RIDX_C); cz <= Math.floor((Math.max(az, bz) + e) / RIDX_C); cz++) for (let cx = Math.floor((Math.min(ax, bx) - e) / RIDX_C); cx <= Math.floor((Math.max(ax, bx) + e) / RIDX_C); cx++) {
       const k = cx * 100003 + cz; let a = ROADIDX.get(k); if (!a) ROADIDX.set(k, a = []); a.push(seg); } } };
   for (const r of roadLines()) add(r.D, ROAD_HW[r.cls]);
-  for (const pts of RAIL_LINES) add(splinePath(pts, 45), 5);
+  for (const D of railLines()) add(D, 5);
 }
 /** True when a round object of radius r (metres) centred at x, z would touch a road or railway, with a 4 m verge. */
 function nearRoad(x, z, r) {
@@ -231,26 +278,34 @@ function nearRoad(x, z, r) {
 function buildRoads() {
   // surfaces: a two-lane road, and a dual carriageway with a planted median for the numbered motorways
   const mk = (w, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = 64; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
-  const tex = { 1: mk(32, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#34363a'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#d8d6cc'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
-    2: mk(64, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#303236'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#5f7a45'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#e4e2d8'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
+  // asphalt grey, light shoulders, white edge lines and dashes. The strips face up (their winding used to face down, so the lit
+  // side was the underside and roads, rails and rivers looked black)
+  const tex = { 1: mk(32, x => { x.fillStyle = '#a9a290'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#66686c'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#e8e6de'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
+    2: mk(64, x => { x.fillStyle = '#a9a290'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#606266'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#6f8a52'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#c9c9c4'; x.fillRect(28, 0, 1, 64); x.fillRect(35, 0, 1, 64);
+      x.fillStyle = '#eeece4'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
   const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
   for (const { cls, D } of roadLines()) {
-    const hw = ROAD_HW[cls], { P, U, N, I } = G[cls === 2 ? 2 : 1]; let prev = -1, path = [], len = 0;
-    for (let i = 0; i < D.length; i++) {
-      const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
-      if (g.water || airfieldAt(px, pz, ROAD_HW[cls])) { prev = -1; if (path.length > 4) roadPaths.push(path); path = []; continue; }
-      const k = P.length / 3; len += i ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
-      for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 2.2 + cls * 0.2, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
-      if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1);
-      prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
-    }
-    if (path.length > 4) roadPaths.push(path);
+    // where a road meets water or an airfield it is cut (runways are full size on the compressed map, so they cover real roads);
+    // a short stub left beside an airfield is dropped rather than drawn as a road that ends in a field
+    const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, ROAD_HW[cls]) ? 2 : 0), runs = [];
+    for (let i = 0; i < D.length;) { if (cut[i]) { i++; continue; } let j = i; while (j + 1 < D.length && !cut[j + 1]) j++;
+      const nearField = (i > 0 && cut[i - 1] === 2) || (j + 1 < D.length && cut[j + 1] === 2); if (j - i >= (nearField ? 10 : 2)) runs.push([i, j]); i = j + 1; }
+    const hw = ROAD_HW[cls], { P, U, N, I } = G[cls === 2 ? 2 : 1];
+    for (const [i0, i1] of runs) { let prev = -1, path = [], len = 0;
+      for (let i = i0; i <= i1; i++) {
+        const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl;
+        const k = P.length / 3; len += i > i0 ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
+        for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 2.2 + cls * 0.2, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
+        if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k);
+        prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
+      }
+      if (path.length > 4) roadPaths.push(path); }
   }
+  for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
   // route-number shields for the map: the middle of each numbered road longer than about 7 km, one per number within 36 km
   for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
     if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
-  for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
   // traffic: light points that drive along the roads (headlights at night)
   const n = 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);
   const cum = []; let tot = 0; for (const p of roadPaths) cum.push(tot += p.length);          // cars spread by road length
@@ -276,17 +331,18 @@ const GEO = {};
 /** Trees and villages are instanced only around the camera and re-seeded as it moves. Villages come in two kinds:
     red-roofed moshav/kibbutz houses around a water tower, and flat-roofed stone houses around a minaret. */
 function buildScatter() {
-  GEO.tree = mergeGeo([[new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0), 1, 1, 1]]);
+  GEO.tree = mergeGeo([[new THREE.ConeGeometry(0.5, 0.62, 7).translate(0, 0.62, 0), 1, 1, 1], [new THREE.ConeGeometry(0.42, 0.5, 7).translate(0, 0.32, 0), 0.86, 0.86, 0.86], [new THREE.CylinderGeometry(0.06, 0.08, 0.2, 5).translate(0, 0.1, 0), 0.32, 0.24, 0.16]]);
+  GEO.crown = mergeGeo([[new THREE.IcosahedronGeometry(0.5, 1).scale(1, 0.85, 1).translate(0, 0.62, 0), 1, 1, 1], [new THREE.CylinderGeometry(0.07, 0.09, 0.3, 5).translate(0, 0.15, 0), 0.34, 0.26, 0.18]]);
   GEO.house = mergeGeo([[new THREE.BoxGeometry(1, 0.6, 1).translate(0, 0.3, 0), 1, 1, 1], [new THREE.ConeGeometry(0.78, 0.42, 4).rotateY(Math.PI / 4).translate(0, 0.81, 0), 0.76, 0.29, 0.21]]);
   GEO.stone = mergeGeo([[new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), 1, 1, 1]]);
   GEO.tower = mergeGeo([[new THREE.CylinderGeometry(0.1, 0.13, 0.72, 8).translate(0, 0.36, 0), 0.8, 0.8, 0.78], [new THREE.CylinderGeometry(0.5, 0.36, 0.3, 12).translate(0, 0.86, 0), 0.92, 0.92, 0.9]]);
   GEO.minaret = mergeGeo([[new THREE.CylinderGeometry(0.03, 0.06, 0.9, 8).translate(0, 0.45, 0), 0.96, 0.95, 0.9], [new THREE.ConeGeometry(0.05, 0.14, 8).translate(0, 0.97, 0), 0.25, 0.5, 0.35], [new THREE.CylinderGeometry(0.085, 0.085, 0.03, 8).translate(0, 0.7, 0), 0.9, 0.9, 0.86]]);
   const mk = (g, n) => { const m = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }), n); m.frustumCulled = false; m.setColorAt(0, new THREE.Color(1, 1, 1)); m.instanceColor.array.fill(1); m.count = 0; scene.add(m); return m; };
-  scatter = { tm: mk(GEO.tree, 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
+  scatter = { bm: mk(GEO.crown, 2600), tm: mk(GEO.tree, 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
 }
 function updateScatter() {
   const S2 = scatter, cx = camera.position.x, cz = camera.position.z; if (Math.hypot(cx - S2.x, cz - S2.z) < 170) return; S2.x = cx; S2.z = cz;
-  const { tm, hm, sm, wm, mm, col, e } = S2; let nt = 0, nh = 0, ns = 0, nw = 0, nm = 0;
+  const { tm, bm, hm, sm, wm, mm, col, e } = S2; let nt = 0, nb = 0, nh = 0, ns = 0, nw = 0, nm = 0;
   if (camera.position.y - heightAt(cx, cz) < 2600) {
     const CELL = 42, RAD = 1500, n = Math.ceil(RAD / CELL), gx0 = Math.round(cx / CELL), gz0 = Math.round(cz / CELL), m4 = tmpM, q = tmpQ, p = tmpV, sc = tmpV2;
     for (let gz = gz0 - n; gz <= gz0 + n; gz++) for (let gx = gx0 - n; gx <= gx0 + n; gx++) {
@@ -305,14 +361,20 @@ function updateScatter() {
         else { if (nh >= 650) continue; sc.set(10 + h * 9, 8 + h * 4, 9 + hash2(gx, gz) * 6); m4.compose(p, q, sc); hm.setMatrixAt(nh, m4); const k = hash2(gx + 1, gz); hm.setColorAt(nh++, col.setRGB(0.93 + k * 0.07, 0.92 + k * 0.06, 0.86 + k * 0.1)); }
         continue;
       }
-      const pr = wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr || nt >= 3200) continue;
+      // where OpenStreetMap knows the land cover, it decides: pines in forests, round crowns in orchards, parks and towns, shrubs in scrub, nothing on sand, water, industry
+      const lc = lcAt(x, z), LP = [0, 0.9, 0.8, 0.12, 0.03, 0.5, 0.18, 0, 0.01, 0, 0.12, 0.22, 0, 0, 0, 0.04, 0.3, 0.02][lc];
+      const pr = lc ? LP : wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr) continue;
       const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6)) continue;
-      const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = arid > 0.6, ht = (shrub ? 3 + k * 3 : 11 + k * 12) * fade, wd = (shrub ? 5 + k * 4 : 5 + k * 5) * fade;
-      p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
-      tm.setColorAt(nt++, shrub ? col.setRGB(0.36 + k * 0.1, 0.40 + k * 0.08, 0.22) : col.setRGB(0.10 + k * 0.08, 0.24 + k * 0.12, 0.08 + k * 0.05));
+      const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = lc ? lc === 6 : arid > 0.6, pine = lc ? lc === 1 || (lc === 16 && k < 0.6) : !shrub && clump > 0.9;
+      if (pine) { if (nt >= 3200) continue; const ht = (10 + k * 10) * fade, wd = (5 + k * 3) * fade; p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
+        tm.setColorAt(nt++, col.setRGB(0.09 + k * 0.06, 0.20 + k * 0.10, 0.08 + k * 0.04)); continue; }
+      if (nb >= 2600) continue;
+      const orch = lc === 2, ht = (shrub ? 3 + k * 2.5 : orch ? 6 + k * 2 : 8 + k * 8) * fade, wd = (shrub ? 5 + k * 3 : orch ? 6 + k * 1.5 : 7 + k * 6) * fade;
+      p.set(x, triHeight(x, z) - 0.3, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); bm.setMatrixAt(nb, m4);
+      bm.setColorAt(nb++, shrub ? col.setRGB(0.36 + k * 0.1, 0.40 + k * 0.08, 0.22) : orch ? col.setRGB(0.15 + k * 0.05, 0.30 + k * 0.08, 0.11) : col.setRGB(0.16 + k * 0.10, 0.32 + k * 0.12, 0.12 + k * 0.05));
     }
   }
-  [[tm, nt], [hm, nh], [sm, ns], [wm, nw], [mm, nm]].forEach(([m, c]) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+  [[tm, nt], [bm, nb], [hm, nh], [sm, ns], [wm, nw], [mm, nm]].forEach(([m, c]) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
 }
 
 function buildDetails() {
@@ -502,12 +564,12 @@ function buildIsrael() {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); }
   // --- railways: the coast line from Nahariya to Beer Sheva and the fast line up to Jerusalem, with red trains ---
   const P = [], N = [], I = [];
-  for (const pts of RAIL_LINES) {
-    const D = splinePath(pts, 45); let prev = -1, path = [];
+  for (const D of railLines()) {
+    let prev = -1, path = [];
     for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
       if (g.water || airfieldAt(px, pz, 5)) { prev = -1; if (path.length > 30) RAIL.paths.push(path); path = []; continue; }
       const k = P.length / 3; for (const s of [-1, 1]) { const vx = px + nx * 5 * s, vz = pz + nz * 5 * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 3, vz); N.push(0, 1, 0); }
-      if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1); prev = k; path.push([px, triHeight(px, pz) + 5.2, pz]); }
+      if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k); prev = k; path.push([px, triHeight(px, pz) + 5.2, pz]); }
     if (path.length > 30) RAIL.paths.push(path); }
   const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); rg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); rg.setIndex(I);
   const rm = new THREE.Mesh(rg, new THREE.MeshLambertMaterial({ color: 0x5a4a3c, side: THREE.DoubleSide })); rm.frustumCulled = false; scene.add(rm);
@@ -529,7 +591,7 @@ function buildRivers() {
       for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
         if (g.water || g.field) { prev = -1; continue; } const k = P.length / 3;
         for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + yo, vz); N.push(0, 1, 0); }
-        if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1); prev = k; } }
+        if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k); prev = k; } }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex(I);
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); };
   // Yarkon, Kishon, Alexander, Taninim, Hadera, upper Jordan, Dan, Yarmouk, Harod, Sorek, Lakhish

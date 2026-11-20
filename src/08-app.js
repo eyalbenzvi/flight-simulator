@@ -259,7 +259,7 @@ function loop(now) {
   }
   ENV.uTime.value = TNOW; if (TR) TR.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * DEG / 2));
   if (run || !S.started) for (const s of clouds.children) { s.position.x += 6 * dt; if (s.position.x > X1 + 12000) s.position.x = X0 - 12000; }
-  for (const m of [...cityMeshes, ...LMK.meshes]) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
+  for (const m of [...cityMeshes, ...LMK.meshes, ...SITE.meshes]) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
   renderer.render(scene, camera);
 }
@@ -280,7 +280,7 @@ document.addEventListener('visibilitychange', () => { if (S.started && document.
 
 // ---------- 17. Boot ----------
 function init() {
-  buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
+  buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
   const fly = $('fly'); fly.disabled = false; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
@@ -294,6 +294,6 @@ function init() {
   requestAnimationFrame(loop);
 }
 if (typeof THREE === 'undefined') { $('fly').textContent = 'Could not load the 3D engine. Check your connection and reload.'; }
-else { const im = new Image();      // decode the settlement raster first; everything else is built from it
-  im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); BLD = { w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }; setTimeout(init, 30); };
-  im.src = BLD_PNG; }
+else {      // decode the rasters first (settlements from GHSL, land cover and buildings from OpenStreetMap); everything else is built from them
+  const load = src => new Promise(res => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); res({ w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }); }; im.src = src; });
+  Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; setTimeout(init, 30); }); }

@@ -57,6 +57,7 @@ function applyTOD(i) {
   if (TR) TR.mat.uniforms.uCol.value.setRGB(t.cloud[0], t.cloud[1], t.cloud[2]);
   if (glare) { glare.material.opacity = t.glare; glare.material.color.setHex(t.sunCol); }
   if (cityLights) { cityLights.visible = t.lights > 0; cityLights.material.opacity = t.lights; }
+  if (siteLights) { siteLights.visible = t.lights > 0; siteLights.material.opacity = Math.min(1, t.lights * 1.4); }
   applyWeather();
   if (traffic) { traffic.pts.material.size = 9 + 17 * t.lights; traffic.pts.material.color.setHex(t.lights > 0.3 ? 0xffe2a8 : 0xf4f1e6); }
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
