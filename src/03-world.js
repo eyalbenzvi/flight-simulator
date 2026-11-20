@@ -1,0 +1,483 @@
+'use strict';
+// ---------- 6. Airports ----------
+let rwyLights = null, dotTex = null;
+function lightDot() { if (dotTex) return dotTex; const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return dotTex = new THREE.CanvasTexture(c); }
+function runwayTexture(nameNear, nameFar) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 2048; const x = c.getContext('2d');
+  x.fillStyle = '#2b2d30'; x.fillRect(0, 0, 128, 2048);
+  for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(${Math.random() < .5 ? 255 : 0},${Math.random() < .5 ? 255 : 0},${Math.random() < .5 ? 255 : 0},.035)`; x.fillRect(Math.random() * 128, Math.random() * 2048, 2, 6); }
+  x.fillStyle = '#e9e9e4';
+  x.fillRect(3, 0, 2, 2048); x.fillRect(123, 0, 2, 2048);                              // edge lines
+  for (let y = 190; y < 1860; y += 44) x.fillRect(62.5, y, 3, 24);                     // centreline
+  for (const base of [14, 2048 - 58]) for (let i = 0; i < 8; i++) x.fillRect(12 + i * 13.6 + (i > 3 ? 6 : 0), base, 7, 44);   // threshold bars
+  for (const y of [300, 380, 2048 - 320, 2048 - 400]) { x.fillRect(34, y, 14, 30); x.fillRect(80, y, 14, 30); }               // touchdown zone
+  x.font = 'bold 54px Arial, sans-serif'; x.textAlign = 'center';
+  x.save(); x.translate(64, 2048 - 100); x.scale(1, 1.7); x.fillText(nameNear, 0, 0); x.restore();
+  x.save(); x.translate(64, 100); x.rotate(Math.PI); x.scale(1, 1.7); x.fillText(nameFar, 0, 0); x.restore();
+  const t = new THREE.CanvasTexture(c); t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
+}
+function strip(ax, az, bx, bz, w, y, mat) {
+  const len = Math.hypot(bx - ax, bz - az), g = new THREE.PlaneGeometry(w, len); g.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(g, mat); m.position.set((ax + bx) / 2, y, (az + bz) / 2); m.rotation.y = -Math.atan2(bx - ax, -(bz - az)); scene.add(m); return m;
+}
+function buildAirports() {
+  const taxi = new THREE.MeshLambertMaterial({ color: 0x3a3c40 }), apron = new THREE.MeshLambertMaterial({ color: 0x4a4c50 });
+  const wall = new THREE.MeshLambertMaterial({ color: 0xcfd6dc }), glass = new THREE.MeshPhongMaterial({ color: 0x5f87a8, shininess: 90 });
+  const LP = [], LC = [];
+  const light = (x, y, z, r, g, b) => { LP.push(x, y, z); LC.push(r, g, b); };
+  for (const rw of RUNWAYS) {
+    const ap = AIRPORTS[rw.ap], y = rw.elev, hx = rw.dx * rw.len / 2, hz = rw.dz * rw.len / 2, rx = -rw.dz, rz = rw.dx;   // right-hand vector
+    const recip = String(Math.round(((rw.hdg + 180) % 360) / 10)).padStart(2, '0');
+    const m = strip(rw.x - hx, rw.z - hz, rw.x + hx, rw.z + hz, rw.w, y, new THREE.MeshLambertMaterial({ map: runwayTexture(rw.name, recip) }));
+    m.position.y = y;
+    // parallel taxiway on the terminal side, with three connectors
+    const tx = ap.x + ap.term[0], tz = ap.z + ap.term[1], side = Math.sign((tx - rw.x) * rx + (tz - rw.z) * rz) || 1, ox = rx * 170 * side, oz = rz * 170 * side;
+    strip(rw.x - hx + ox, rw.z - hz + oz, rw.x + hx + ox, rw.z + hz + oz, 26, y - 0.15, taxi);
+    for (const f of [-0.97, 0, 0.97]) strip(rw.x + hx * f, rw.z + hz * f, rw.x + hx * f + ox, rw.z + hz * f + oz, 26, y - 0.15, taxi);
+    strip(rw.x + ox, rw.z + oz, tx, tz, 26, y - 0.2, taxi);
+    // edge, threshold, end and approach lights
+    for (let s = -rw.len / 2; s <= rw.len / 2; s += 60) for (const e of [-1, 1]) light(rw.x + rw.dx * s + rx * e * (rw.w / 2 + 2), y + 0.6, rw.z + rw.dz * s + rz * e * (rw.w / 2 + 2), 1, 0.95, 0.8);
+    for (let e = -4.5; e <= 4.5; e++) { light(rw.tx + rx * e * rw.w / 10, y + 0.6, rw.tz + rz * e * rw.w / 10, 0.2, 1, 0.3); light(rw.x + hx + rx * e * rw.w / 10, y + 0.6, rw.z + hz + rz * e * rw.w / 10, 1, 0.15, 0.1); }
+    if (rw.ils) for (let s = 60; s <= 720; s += 60) for (const e of [-1, 0, 1]) { const px = rw.tx - rw.dx * s + rx * e * 8, pz = rw.tz - rw.dz * s + rz * e * 8; light(px, Math.max(y, heightAt(px, pz)) + 2, pz, 1, 1, 1); }
+  }
+  for (const ap of AIRPORTS) {
+    const tx = ap.x + ap.term[0], tz = ap.z + ap.term[1], y = ap.elev, s = ap.big ? 1 : 0.45;
+    const a = new THREE.Mesh(new THREE.PlaneGeometry(620 * s, 420 * s).rotateX(-Math.PI / 2), apron); a.position.set(tx, y - 0.3, tz); scene.add(a);
+    const box = (w, h, d, x, z, mat) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); b.position.set(tx + x, y + h / 2, tz + z); scene.add(b); return b; };
+    box(300 * s, 26, 70 * s, 0, 0, wall); box(280 * s, 10, 60 * s, 0, 0, glass).position.y = y + 30;
+    if (ap.big) { box(40, 16, 150, -110, 100, wall); box(40, 16, 150, 0, 110, wall); box(40, 16, 150, 110, 100, wall); box(120, 22, 60, 230, -40, wall); }
+    const tw = new THREE.Mesh(new THREE.CylinderGeometry(5, 7, 70, 10), wall); tw.position.set(tx - 200 * s, y + 35, tz - 90 * s); scene.add(tw);
+    const cab = new THREE.Mesh(new THREE.CylinderGeometry(11, 8, 10, 10), glass); cab.position.set(tx - 200 * s, y + 75, tz - 90 * s); scene.add(cab);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(LC, 3));
+  rwyLights = new THREE.Points(g, new THREE.PointsMaterial({ size: 5, map: lightDot(), vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  scene.add(rwyLights);
+}
+
+// ---------- 7. Cities & landmarks ----------
+const cityMeshes = []; let cityLights = null, bldMat = null;
+/** Adds a procedural window grid (lit at night) to a building material. */
+function windowize(mat) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uLights = ENV.uLights;
+    sh.vertexShader = 'varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vBp = position; vBn = normal;
+      #ifdef USE_INSTANCING
+        vBs = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz)); vBid = fract(instanceMatrix[3].x * 0.0137 + instanceMatrix[3].z * 0.0173);
+      #else
+        vBs = vec3(1.0); vBid = 0.0;
+      #endif`);
+    sh.fragmentShader = 'uniform float uLights; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      { float side = step(abs(vBn.y), 0.5);
+        vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
+        float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
+        float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
+        diffuseColor.rgb *= mix(1.0, 0.40 + 0.22 * wh, win) * mix(0.86, 1.0, side);
+        if (side < 0.5 && vBn.y > 0.5) {   // flat roofs carry solar water heaters: a white tank and a dark panel per flat
+          vec2 rc = vec2(vBp.x * vBs.x, vBp.z * vBs.z) / 5.0, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.78, rh);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.26), has * step(abs(rf.x - 0.5), 0.36) * step(abs(rf.y - 0.3), 0.16));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), has * step(length(rf - vec2(0.5, 0.66)), 0.17)); }
+        totalEmissiveRadiance += vec3(1.0, 0.80, 0.50) * uLights * win * step(0.58, wh) * 0.9; }`);
+  };
+  return mat;
+}
+let BLD = null;      // settlement raster decoded from BLD_PNG: one pixel per 60 m block (R height, G style, B seed, A present)
+const bldAt = (i, j) => (i < 0 || j < 0 || i >= BLD.w || j >= BLD.h) ? 0 : BLD.d[(j * BLD.w + i) * 4 + 3];
+/** How built-up the ground is around a point (0…1), from the raster. */
+function urbanAt(x, z) { const i = Math.floor((x - X0) / 60), j = Math.floor((z - Z0) / 60); let n = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if (bldAt(i + di, j + dj)) n++; return Math.min(1, n / 5); }
+/** Every settlement is built from the raster: apartment blocks and towers in the cities, stone houses in Arab towns, red roofs in kibbutzim and moshavim. */
+function buildCities() {
+  bldMat = windowize(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }));
+  const houseMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const PAL = { 1: [0xd9dde0, 0xc9ced4, 0xe8e4da, 0xdcd8cc, 0xcfd6dc], 2: [0xe2d6b8, 0xd8c9a3, 0xe9dfc6, 0xcdbf9c], 4: [0x9db2c6, 0xb4c2cf, 0x8fa6ba] };
+  const base = new THREE.BoxGeometry(1, 1, 1); base.translate(0, 0.5, 0); base.setAttribute('color', new THREE.BufferAttribute(new Float32Array(base.attributes.position.count * 3).fill(1), 3));
+  const LP = [], boxes = new Map(), houses = new Map(), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3(), cc = new THREE.Color(), { w, h, d } = BLD;
+  const push = (map, x, z, v) => { const k = Math.floor(x / 12000) + ':' + Math.floor(z / 12000); let a = map.get(k); if (!a) map.set(k, a = []); a.push(v); };
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const o = (j * w + i) * 4; if (!d[o + 3]) continue; const ht = d[o], st = d[o + 1] & 7, szc = d[o + 1] >> 3, szk = 0.7 + 0.13 * szc, sd = d[o + 2] / 255, s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1;
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || g.field) continue;
+    if (AIRPORTS.some(ap => Math.hypot(x - ap.x, z - ap.z) < ap.R + 150)) continue; const y = heightAt(x, z);
+    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
+    else { const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk, pal = PAL[st] || PAL[1];
+      push(boxes, x, z, [x, y - 8, z, bw, ht + 8, bd, 0, pal[(s3 * pal.length) | 0]]); addObst(x, z, bw, bd, 0, y - 8, y + ht); }
+    if (sd < 0.75) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
+  }
+  const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * 12000, cz = (bz + 0.5) * 12000; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), 9800)]; };
+  for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
+    list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, far: HIRES ? 27000 : 14000 }; scene.add(im); cityMeshes.push(im); }
+  for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
+    list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, far: HIRES ? 13000 : 7000 }; scene.add(im); cityMeshes.push(im); }
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
+  cityLights = new THREE.Points(lg, new THREE.PointsMaterial({ size: 30, map: lightDot(), color: 0xffc46b, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  cityLights.visible = false; scene.add(cityLights);
+}
+function buildLandmarks() {
+  const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene.add(m); return m; };
+  // Azrieli Center: round, triangular and square towers
+  const tg = windowize(new THREE.MeshPhongMaterial({ color: 0xa9c4da, shininess: 110, specular: 0xffffff }));
+  { const x = lon2x(34.78) + 330, z = lat2z(32.075) - 120, y = heightAt(x, z) - 4;
+    add(new THREE.CylinderGeometry(23, 23, 191, 28), tg, x, y + 95, z);
+    add(new THREE.CylinderGeometry(29, 29, 173, 3), tg, x + 75, y + 86, z + 20);
+    add(new THREE.BoxGeometry(38, 158, 38), tg, x + 30, y + 79, z + 78);
+    add(new THREE.BoxGeometry(170, 22, 150), new THREE.MeshLambertMaterial({ color: 0xc9ced4 }), x + 35, y + 11, z + 35); }
+  // Jerusalem: Temple Mount platform, Old City walls and the golden Dome of the Rock (drawn oversized so it reads from the air)
+  { const x = lon2x(35.21) + 520, z = lat2z(31.78) + 60, y = heightAt(x, z) - 6, stone = new THREE.MeshLambertMaterial({ color: 0xdccfae });
+    add(new THREE.BoxGeometry(260, 16, 320), stone, x, y + 8, z);
+    add(new THREE.CylinderGeometry(60, 60, 36, 8), new THREE.MeshLambertMaterial({ color: 0x8fb8c9 }), x, y + 34, z);
+    add(new THREE.CylinderGeometry(36, 36, 22, 20), new THREE.MeshLambertMaterial({ color: 0xe8ddb8 }), x, y + 63, z);
+    add(new THREE.SphereGeometry(37, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhongMaterial({ color: 0xe0a91c, emissive: 0x4a3200, shininess: 120, specular: 0xfff0b0 }), x, y + 73, z);
+    for (const [wx, wz, sx, sz] of [[-420, 0, 12, 640], [130, 0, 12, 640], [-145, -320, 560, 12], [-145, 320, 560, 12]]) add(new THREE.BoxGeometry(sx, 26, sz), stone, x + wx, heightAt(x + wx, z + wz) + 5, z + wz); }
+  // Masada mesa above the Dead Sea shore
+  { const x = lon2x(35.354), z = lat2z(31.316), y = heightAt(x, z);
+    add(new THREE.CylinderGeometry(250, 430, 380, 9), new THREE.MeshLambertMaterial({ color: 0xb99668 }), x, y + 170, z).rotation.y = 0.4;
+    add(new THREE.BoxGeometry(120, 10, 60), new THREE.MeshLambertMaterial({ color: 0xd9c9a0 }), x - 40, y + 364, z - 60); }
+}
+
+// ---------- 7b. Map detail: roads, traffic, trees, villages, ponds, industry, ships ----------
+let ZONE = null, roadPaths = [], traffic = null, scatter = null, turbines = [];
+/** Exact height of the terrain mesh (same two triangles per cell as the geometry), so draped objects sit on it. */
+function triHeight(x, z) {
+  const fi = clamp((x - X0) / (X1 - X0) * NX, 0, NX - 0.0001), fj = clamp((z - Z0) / (Z1 - Z0) * NZ, 0, NZ - 0.0001), i = fi | 0, j = fj | 0, u = fi - i, v = fj - j, k = j * (NX + 1) + i;
+  const a = HGT[k], c = HGT[k + 1], b = HGT[k + NX + 1], d = HGT[k + NX + 2];
+  return u + v <= 1 ? a + (c - a) * u + (b - a) * v : d + (b - d) * (1 - u) + (c - d) * (1 - v);
+}
+const zoneAt = (x, z) => 4 * (Math.round(clamp((z - Z0) / (Z1 - Z0) * NZ, 0, NZ)) * (NX + 1) + Math.round(clamp((x - X0) / (X1 - X0) * NX, 0, NX)));
+/** Dense, smooth polyline through lon/lat waypoints (Catmull-Rom), about `step` metres between points. */
+function splinePath(pts, step) {
+  const Q = pts.map(p => [lon2x(p[0]), lat2z(p[1])]), out = [], cr = (a, b, c, d, t) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+  for (let i = 0; i < Q.length - 1; i++) { const a = Q[Math.max(i - 1, 0)], b = Q[i], c = Q[i + 1], d = Q[Math.min(i + 2, Q.length - 1)], n = Math.max(2, Math.round(Math.hypot(c[0] - b[0], c[1] - b[1]) / step));
+    for (let s = 0; s < n; s++) { const t = s / n, x = cr(a[0], b[0], c[0], d[0], t), z = cr(a[1], b[1], c[1], d[1], t), w = (fbm(x / 900, z / 900, 2) - 0.5) * 260 * Math.sin(Math.PI * (i + t) / (Q.length - 1));   // gentle wander away from the ends
+      out.push([x + w, z + w * 0.6]); } }
+  out.push(Q[Q.length - 1]); return out;
+}
+// [class, waypoints]  class 2 = motorway, 1 = two-lane road
+const ROADS = [
+  [2, [[34.79, 32.10], [34.82, 32.165], [34.865, 32.33], [34.915, 32.44], [34.94, 32.57], [34.965, 32.70], [34.985, 32.78]]],
+  [2, [[34.59, 31.67], [34.67, 31.80], [34.75, 31.88], [34.80, 31.96], [34.82, 32.07], [34.89, 32.11], [34.90, 32.18], [34.915, 32.44]]],
+  [2, [[34.80, 32.06], [34.79, 31.99], [34.83, 31.92], [34.90, 31.895], [34.98, 31.87], [35.08, 31.80], [35.20, 31.785], [35.30, 31.78], [35.44, 31.81], [35.49, 31.77]]],
+  [2, [[34.79, 31.25], [34.78, 31.45], [34.78, 31.61], [34.87, 31.80], [34.955, 31.95], [34.96, 32.19], [35.0, 32.40], [35.08, 32.62], [35.2, 32.75]]],
+  [2, [[35.575, 33.27], [35.57, 33.21], [35.545, 32.97], [35.535, 32.80], [35.565, 32.70], [35.51, 32.50], [35.53, 32.2], [35.47, 31.86], [35.46, 31.77]]],
+  [1, [[35.44, 31.74], [35.37, 31.46], [35.35, 31.32], [35.35, 31.20], [35.37, 31.0], [35.25, 30.6], [35.15, 30.2], [35.06, 29.89], [34.99, 29.66], [34.95, 29.565]]],
+  [1, [[34.79, 31.25], [34.79, 30.87], [34.80, 30.61], [34.95, 30.3], [35.07, 30.02]]],
+  [1, [[34.79, 31.25], [35.03, 31.07], [35.25, 31.0], [35.37, 31.0]]],
+  [1, [[34.79, 31.25], [35.0, 31.25], [35.21, 31.26], [35.33, 31.21]]],
+  [1, [[34.79, 31.25], [34.95, 31.40], [35.10, 31.53], [35.20, 31.705], [35.20, 31.785], [35.205, 31.90], [35.26, 32.22], [35.30, 32.46], [35.29, 32.61], [35.30, 32.70]]],
+  [1, [[34.915, 32.44], [35.15, 32.52], [35.29, 32.61], [35.42, 32.72], [35.535, 32.80]]],
+  [2, [[35.0, 32.775], [35.12, 32.80], [35.10, 32.93], [35.10, 33.01], [35.105, 33.08]]],
+  [1, [[35.09, 32.93], [35.30, 32.92], [35.47, 32.94], [35.545, 32.97]]],
+  [1, [[35.0, 32.775], [35.11, 32.66], [35.24, 32.675], [35.30, 32.70]]],
+  [1, [[34.265, 31.29], [34.31, 31.345], [34.47, 31.51], [34.55, 31.61], [34.59, 31.67]]],
+  [1, [[34.59, 31.67], [34.60, 31.525], [34.59, 31.42], [34.62, 31.31], [34.79, 31.25]]],
+  [1, [[35.66, 32.76], [35.69, 32.99], [35.80, 33.12], [35.77, 33.27]]],
+  [1, [[35.01, 29.53], [35.12, 29.9], [35.30, 30.5], [35.45, 31.0], [35.70, 31.18], [35.79, 31.72], [35.93, 31.95], [35.88, 32.28], [35.85, 32.555]]],
+  [1, [[35.93, 31.95], [35.75, 31.90], [35.56, 31.85], [35.47, 31.86]]],
+  [1, [[34.78, 31.61], [34.81, 31.895], [34.865, 31.915]]],
+  [1, [[35.57, 33.21], [35.69, 33.25], [35.77, 33.27]]],
+  [1, [[35.20, 33.27], [35.105, 33.08]]]
+];
+const ROADNUM = ['2', '4', '1', '6', '90', '90', '40', '25', '31', '60', '65', '4', '85', '75', '', '34', '98', '', '', '40', '99', '', '20', '5', '443', '38', '71'], ROADLBL = [];
+ROADS.push([2, [[34.795, 32.115], [34.797, 32.07], [34.79, 32.03], [34.79, 31.99]]], [2, [[34.82, 32.11], [34.90, 32.115], [35.0, 32.11], [35.17, 32.105]]], [1, [[34.98, 31.87], [35.08, 31.88], [35.17, 31.85], [35.205, 31.83]]],
+  [1, [[34.99, 31.84], [34.99, 31.75], [34.97, 31.66], [34.90, 31.60]]], [1, [[35.29, 32.61], [35.40, 32.56], [35.50, 32.50]]]);
+function buildRoads() {
+  // surfaces: a two-lane road, and a dual carriageway with a planted median for the numbered motorways
+  const mk = (w, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = 64; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+  const tex = { 1: mk(32, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#34363a'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#d8d6cc'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
+    2: mk(64, x => { x.fillStyle = '#8f8a7c'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#303236'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#5f7a45'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#e4e2d8'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
+  const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
+  ROADS.forEach(([cls, pts], ri) => {
+    const D = splinePath(pts, 45), hw = cls === 2 ? 24 : 10, { P, U, N, I } = G[cls]; let prev = -1, path = [], len = 0;
+    const mid = D[D.length >> 1]; if (ROADNUM[ri]) ROADLBL.push({ x: mid[0], z: mid[1], n: ROADNUM[ri], cls });
+    for (let i = 0; i < D.length; i++) {
+      const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
+      if (g.water || g.field) { prev = -1; if (path.length > 4) roadPaths.push(path); path = []; continue; }
+      const k = P.length / 3; len += i ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
+      for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 2.2 + cls * 0.2, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
+      if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1);
+      prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
+    }
+    if (path.length > 4) roadPaths.push(path);
+  });
+  for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
+  // traffic: light points that drive along the roads (headlights at night)
+  const n = 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { const p = roadPaths[(R() * roadPaths.length) | 0]; cars.push({ p, s: R() * (p.length - 2), v: (R() < 0.5 ? -1 : 1) * (22 + R() * 12) / 45 }); }
+  const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.BufferAttribute(tp, 3));
+  traffic = { cars, pts: new THREE.Points(tg, new THREE.PointsMaterial({ size: 9, map: lightDot(), color: 0xf4f1e6, transparent: true, opacity: 0.9, depthWrite: false, fog: false })) };
+  traffic.pts.frustumCulled = false; scene.add(traffic.pts);
+}
+function updateTraffic(dt) {
+  const a = traffic.pts.geometry.attributes.position, arr = a.array;
+  traffic.cars.forEach((c, i) => { c.s += c.v * dt; const m = c.p.length - 1; if (c.s >= m) c.s -= m; else if (c.s < 0) c.s += m; const k = c.s | 0, f = c.s - k, p = c.p[k], q = c.p[Math.min(k + 1, m)];
+    arr[i * 3] = p[0] + (q[0] - p[0]) * f; arr[i * 3 + 1] = p[1] + (q[1] - p[1]) * f; arr[i * 3 + 2] = p[2] + (q[2] - p[2]) * f; });
+  a.needsUpdate = true;
+}
+
+/** Merge simple geometries into one, each with its own vertex colour: [[geometry, r, g, b], ...]. */
+function mergeGeo(parts) {
+  const P = [], N = [], C = [];
+  for (const [g0, r, gg, b] of parts) { const g = g0.index ? g0.toNonIndexed() : g0, p = g.attributes.position.array, n = g.attributes.normal.array; for (let i = 0; i < p.length; i += 3) { P.push(p[i], p[i + 1], p[i + 2]); N.push(n[i], n[i + 1], n[i + 2]); C.push(r, gg, b); } }
+  const o = new THREE.BufferGeometry(); o.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); o.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); o.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); return o;
+}
+const GEO = {};
+/** Trees and villages are instanced only around the camera and re-seeded as it moves. Villages come in two kinds:
+    red-roofed moshav/kibbutz houses around a water tower, and flat-roofed stone houses around a minaret. */
+function buildScatter() {
+  GEO.tree = mergeGeo([[new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0), 1, 1, 1]]);
+  GEO.house = mergeGeo([[new THREE.BoxGeometry(1, 0.6, 1).translate(0, 0.3, 0), 1, 1, 1], [new THREE.ConeGeometry(0.78, 0.42, 4).rotateY(Math.PI / 4).translate(0, 0.81, 0), 0.76, 0.29, 0.21]]);
+  GEO.stone = mergeGeo([[new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), 1, 1, 1]]);
+  GEO.tower = mergeGeo([[new THREE.CylinderGeometry(0.1, 0.13, 0.72, 8).translate(0, 0.36, 0), 0.8, 0.8, 0.78], [new THREE.CylinderGeometry(0.5, 0.36, 0.3, 12).translate(0, 0.86, 0), 0.92, 0.92, 0.9]]);
+  GEO.minaret = mergeGeo([[new THREE.CylinderGeometry(0.03, 0.06, 0.9, 8).translate(0, 0.45, 0), 0.96, 0.95, 0.9], [new THREE.ConeGeometry(0.05, 0.14, 8).translate(0, 0.97, 0), 0.25, 0.5, 0.35], [new THREE.CylinderGeometry(0.085, 0.085, 0.03, 8).translate(0, 0.7, 0), 0.9, 0.9, 0.86]]);
+  const mk = (g, n) => { const m = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }), n); m.frustumCulled = false; m.setColorAt(0, new THREE.Color(1, 1, 1)); m.instanceColor.array.fill(1); m.count = 0; scene.add(m); return m; };
+  scatter = { tm: mk(GEO.tree, 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
+}
+function updateScatter() {
+  const S2 = scatter, cx = camera.position.x, cz = camera.position.z; if (Math.hypot(cx - S2.x, cz - S2.z) < 170) return; S2.x = cx; S2.z = cz;
+  const { tm, hm, sm, wm, mm, col, e } = S2; let nt = 0, nh = 0, ns = 0, nw = 0, nm = 0;
+  if (camera.position.y - heightAt(cx, cz) < 2600) {
+    const CELL = 42, RAD = 1500, n = Math.ceil(RAD / CELL), gx0 = Math.round(cx / CELL), gz0 = Math.round(cz / CELL), m4 = tmpM, q = tmpQ, p = tmpV, sc = tmpV2;
+    for (let gz = gz0 - n; gz <= gz0 + n; gz++) for (let gx = gx0 - n; gx <= gx0 + n; gx++) {
+      const h = hash2(gx * 1.37 + 11, gz * 2.11 + 7), x = (gx + hash2(gx + 3.3, gz + 9.1) - 0.5) * CELL, z = (gz + hash2(gx + 7.7, gz + 1.9) - 0.5) * CELL, d = Math.hypot(x - cx, z - cz); if (d > RAD) continue;
+      const zi = zoneAt(x, z), farm = ZONE[zi], arid = ZONE[zi + 1], urban = ZONE[zi + 2], wood = (1 - arid) * (1 - farm) * (1 - urban), clump = FOREST[zi >> 2] > 0.3 ? 1.5 : vnoise(gx * 0.11, gz * 0.11) > 0.47 ? 1 : 0.22;
+      // one coarse cell in four holds a village; its kind depends on the region
+      const vx = Math.floor(gx / 14), vz = Math.floor(gz / 14), lon = x2lon(vx * 14 * CELL), lat = z2lat(vz * 14 * CELL);
+      const stoneV = (lon > 35.03 && lon < 35.45 && lat > 31.32 && lat < 32.55) || (lon < 34.52 && lat < 31.6) || lon > 35.72 || (lat > 32.75 && lat < 32.98 && lon > 35.15 && lon < 35.42) || arid > 0.55;
+      const vd = Math.hypot(gx - (vx * 14 + 7), gz - (vz * 14 + 7)), vill = false && urban < 0.2 && (stoneV ? arid < 0.8 && farm < 0.9 : farm > 0.35) && hash2(vx * 5.1 + 2, vz * 3.7 + 5) < (stoneV ? 0.2 : 0.27) && vd < 4.4;
+      if (vill) {
+        const g = groundAt(x, z); if (g.water || g.field) continue; const y = triHeight(x, z);
+        if (vd < 0.6) { p.set(x, y, z); q.set(0, 0, 0, 1); if (stoneV && nm < 40) { sc.set(40, 40, 40); m4.compose(p, q, sc); mm.setMatrixAt(nm++, m4); } else if (!stoneV && nw < 40) { sc.set(11, 24, 11); m4.compose(p, q, sc); wm.setMatrixAt(nw++, m4); } continue; }
+        if (h > (stoneV ? 0.7 : 0.55)) continue;
+        e.set(0, Math.floor(hash2(vx, vz) * 4) * 0.4 + (stoneV ? h * 3 : 0), 0); q.setFromEuler(e); p.set(x, y - 1, z);
+        if (stoneV) { if (ns >= 550) continue; sc.set(9 + h * 9, 5 + hash2(gx, gz) * 6, 8 + h * 8); m4.compose(p, q, sc); sm.setMatrixAt(ns, m4); const k = hash2(gx + 1, gz); sm.setColorAt(ns++, col.setRGB(0.86 + k * 0.08, 0.80 + k * 0.08, 0.66 + k * 0.1)); }
+        else { if (nh >= 650) continue; sc.set(10 + h * 9, 8 + h * 4, 9 + hash2(gx, gz) * 6); m4.compose(p, q, sc); hm.setMatrixAt(nh, m4); const k = hash2(gx + 1, gz); hm.setColorAt(nh++, col.setRGB(0.93 + k * 0.07, 0.92 + k * 0.06, 0.86 + k * 0.1)); }
+        continue;
+      }
+      const pr = wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr || nt >= 3200) continue;
+      const g = groundAt(x, z); if (g.water || g.field) continue;
+      const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = arid > 0.6, ht = (shrub ? 3 + k * 3 : 11 + k * 12) * fade, wd = (shrub ? 5 + k * 4 : 5 + k * 5) * fade;
+      p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
+      tm.setColorAt(nt++, shrub ? col.setRGB(0.36 + k * 0.1, 0.40 + k * 0.08, 0.22) : col.setRGB(0.10 + k * 0.08, 0.24 + k * 0.12, 0.08 + k * 0.05));
+    }
+  }
+  [[tm, nt], [hm, nh], [sm, ns], [wm, nw], [mm, nm]].forEach(([m, c]) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+}
+
+function buildDetails() {
+  const lam = c => new THREE.MeshLambertMaterial({ color: c }), put = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene.add(m); return m; };
+  // --- ponds: Dead Sea evaporation pans, fish ponds, salt pans, greenhouses ---
+  const P = [], C = [], I = [], col = new THREE.Color();
+  const ponds = (lon, lat, cols, rows, w, d, pal, rot) => { const cx = lon2x(lon), cz = lat2z(lat), R = rng(Math.round(lon * 977 + lat * 131)), ca = Math.cos(rot), sa = Math.sin(rot);
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || g.field) continue;
+      const y = triHeight(x, z) + 2.5, k = P.length / 3; col.setHex(pal[(R() * pal.length) | 0]);
+      for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) { const ox = sx * w / 2, oz = sz * d / 2; P.push(x + ox * ca - oz * sa, y, z + ox * sa + oz * ca); C.push(col.r, col.g, col.b); }
+      I.push(k, k + 1, k + 2, k + 2, k + 1, k + 3); } };
+  ponds(35.415, 31.16, 5, 13, 330, 520, [0x3fc7c0, 0x7fded2, 0xbfe9e0, 0xe9efe8, 0x2aa7b0], 0.18);          // Dead Sea Works
+  ponds(35.545, 32.505, 5, 6, 170, 240, [0x35607a, 0x3f7186, 0x4a6f5e, 0x2d566e], 0.1);                      // Beit She'an valley fish ponds
+  ponds(35.60, 33.075, 4, 6, 170, 230, [0x35607a, 0x416f7c, 0x4f7a5c], 0);                                   // Hula valley
+  ponds(34.925, 32.555, 2, 6, 150, 210, [0x35607a, 0x3f7186, 0x4a6f5e], 0.12);                               // Carmel coast fish ponds
+  ponds(34.985, 29.60, 3, 5, 150, 230, [0xe7d9d2, 0xd8a9a4, 0xf0ece6, 0xc98f93], 0.2);                      // Eilat salt pans
+  for (const [lo, la] of [[35.07, 29.93], [35.19, 30.62], [35.33, 30.93], [34.44, 31.31], [35.50, 32.03]]) ponds(lo, la, 6, 5, 60, 150, [0xf2f4f2, 0xe4e8e6, 0xd8dedc], 0.3);   // greenhouse clusters
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); pg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); pg.setIndex(I); pg.computeVertexNormals();
+  const pm = new THREE.Mesh(pg, new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, side: THREE.DoubleSide })); pm.frustumCulled = false; scene.add(pm);
+  // --- power-station stacks with red and white bands ---
+  const sc = document.createElement('canvas'); sc.width = 4; sc.height = 64; const sx = sc.getContext('2d'); for (let i = 0; i < 8; i++) { sx.fillStyle = i < 3 && i % 2 === 0 ? '#c8443a' : '#e6e3dc'; sx.fillRect(0, i * 8, 4, 8); }
+  const stackM = new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(sc) }), plant = lam(0xb9bcc0);
+  for (const [lo, la, hs] of [[34.886, 32.47, [250, 250, 300]], [34.537, 31.63, [250, 250]], [34.668, 31.845, [150, 150]], [34.776, 32.106, [150]]]) {
+    const x = lon2x(lo), z = lat2z(la), y = heightAt(x, z); hs.forEach((h, i) => put(new THREE.CylinderGeometry(7, 11, h, 12), stackM, x + i * 60, y + h / 2, z)); put(new THREE.BoxGeometry(60 * hs.length + 80, 55, 90), plant, x + 30 * (hs.length - 1), y + 27, z + 80); }
+  // --- Haifa: refinery cooling towers and the golden Bahá'í dome on the Carmel slope ---
+  { const x = lon2x(35.105), z = lat2z(32.80), y = heightAt(x, z), cool = lam(0xd9d6cf); for (const o of [0, 95]) { put(new THREE.CylinderGeometry(24, 38, 46, 20, 1, true), cool, x + o, y + 23, z).material.side = THREE.DoubleSide; put(new THREE.CylinderGeometry(30, 24, 34, 20, 1, true), cool, x + o, y + 63, z); }
+    const bx = lon2x(34.988), bz = lat2z(32.814), by = heightAt(bx, bz); put(new THREE.CylinderGeometry(26, 30, 34, 8), lam(0xf0ead8), bx, by + 17, bz);
+    put(new THREE.SphereGeometry(20, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhongMaterial({ color: 0xe0a91c, emissive: 0x4a3200, shininess: 120 }), bx, by + 34, bz);
+    for (let i = 1; i < 9; i++) put(new THREE.BoxGeometry(150 - i * 8, 3, 34), lam(i % 2 ? 0x3f7a35 : 0xcfc9b4), bx, heightAt(bx, bz - i * 42) + 2, bz - i * 42); }
+  // --- Ashalim solar tower in the Negev: a tall mast with a blinding receiver ---
+  { const x = lon2x(34.73), z = lat2z(30.96), y = heightAt(x, z); put(new THREE.CylinderGeometry(9, 14, 250, 12), lam(0x8d9196), x, y + 125, z);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); s.position.set(x, y + 252, z); s.scale.set(170, 170, 1); scene.add(s);
+    const hel = lam(0x7f95ad), R = rng(8); for (let i = 0; i < 70; i++) { const a = R() * 6.283, r = 250 + R() * 700, hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r; put(new THREE.BoxGeometry(46, 2, 30), hel, hx, triHeight(hx, hz) + 5, hz).rotation.y = -a; } }
+  // --- wind turbines on the Golan and Mount Gilboa (blades turn) ---
+  const tw = lam(0xe9ebed), blade = new THREE.BoxGeometry(5, 66, 1.5).translate(0, 33, 0), R2 = rng(31);
+  for (const [lo, la, n] of [[35.80, 33.04, 8], [35.76, 32.93, 5], [35.42, 32.47, 5]]) for (let i = 0; i < n; i++) {
+    const x = lon2x(lo) + (R2() - 0.5) * 2600, z = lat2z(la) + (R2() - 0.5) * 2600, y = heightAt(x, z); put(new THREE.CylinderGeometry(2.2, 3.6, 120, 8), tw, x, y + 60, z);
+    const hub = new THREE.Group(); hub.position.set(x, y + 120, z + 4); for (let b = 0; b < 3; b++) { const m = new THREE.Mesh(blade, tw); m.rotation.z = b * 2.094; hub.add(m); } hub.userData.v = 0.8 + R2() * 0.5; scene.add(hub); turbines.push(hub); }
+  // --- shipping: freighters off the ports, sailboats off the beaches and on the Kinneret ---
+  const hull = [lam(0x2c3e55), lam(0x7a2d2a), lam(0x1f2a33)], wht = lam(0xf2f2ee), box = [lam(0xc65b3a), lam(0x3c78a8), lam(0x6d9a4b)], R3 = rng(57);
+  for (const [lo, la, hdg] of [[34.93, 32.87, 0.5], [34.90, 32.90, 0.7], [34.955, 32.845, 0.3], [34.60, 31.86, 1.1], [34.57, 31.90, 1.3], [34.50, 31.70, 0.2], [34.70, 32.12, 0], [34.74, 32.45, 0.1], [34.965, 29.50, 0.35], [34.955, 29.44, 0.4]]) {
+    const x = lon2x(lo), z = lat2z(la); if (!groundAt(x, z).water) continue; const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = hdg; scene.add(g);
+    const h = new THREE.Mesh(new THREE.BoxGeometry(30, 14, 190), hull[(R3() * 3) | 0]); h.position.y = 4; g.add(h); const br = new THREE.Mesh(new THREE.BoxGeometry(26, 26, 22), wht); br.position.set(0, 24, 76); g.add(br);
+    for (let i = 0; i < 3; i++) { const cb = new THREE.Mesh(new THREE.BoxGeometry(26, 9 + R3() * 8, 40), box[i]); cb.position.set(0, 15, -66 + i * 44); g.add(cb); } }
+  const sail = new THREE.ConeGeometry(7, 22, 3).translate(0, 13, 0);
+  for (const [lo, la, lvl, n, sp] of [[34.755, 32.08, 0, 7, 900], [34.80, 32.17, 0, 5, 800], [34.84, 32.33, 0, 4, 700], [34.955, 29.535, 0, 6, 600], [35.585, 32.80, -212, 8, 2200], [34.96, 32.82, 0, 4, 700]]) for (let i = 0; i < n; i++) {
+    const x = lon2x(lo) + (R3() - 0.5) * sp, z = lat2z(la) + (R3() - 0.5) * sp; if (!groundAt(x, z).water) continue; put(sail, wht, x, lvl, z).rotation.y = R3() * 6; put(new THREE.BoxGeometry(4, 2.5, 14), wht, x, lvl + 1, z); }
+  // --- aircraft parked on the aprons ---
+  const body = new THREE.CylinderGeometry(1.9, 1.9, 34, 10).rotateX(Math.PI / 2), wing = new THREE.BoxGeometry(32, 0.5, 5), fin = new THREE.BoxGeometry(0.4, 7, 5), tailc = [lam(0x1557a8), lam(0xb83232), lam(0x2f8f6a)];
+  AIRPORTS.forEach((ap, ai) => { const n = ap.big ? 5 : 2, s = ap.big ? 1 : 0.55; for (let i = 0; i < n; i++) { const g = new THREE.Group(); g.position.set(ap.x + ap.term[0] + (i - (n - 1) / 2) * 62 * s * 1.6, ap.elev + 3.6 * s, ap.z + ap.term[1] + (ap.big ? 150 : 70)); g.scale.setScalar(s); scene.add(g);
+    g.add(new THREE.Mesh(body, wht)); const w = new THREE.Mesh(wing, wht); w.position.set(0, -1, 1); g.add(w); const f = new THREE.Mesh(fin, tailc[(i + ai) % 3]); f.position.set(0, 4.5, 14.5); g.add(f); } });
+}
+/** Bake roads and every town onto the minimap image. */
+function bakeMap() {
+  const x = mapImg.getContext('2d'), W = mapImg.width, H = mapImg.height, mx = v => (v - X0) / (X1 - X0) * W, mz = v => (v - Z0) / (Z1 - Z0) * H;
+  for (const p of roadPaths) { x.strokeStyle = p[0][3] === 2 ? 'rgba(255,236,170,.95)' : 'rgba(240,240,235,.6)'; x.lineWidth = p[0][3] === 2 ? 1.5 : 0.9; x.beginPath(); p.forEach((q, i) => i ? x.lineTo(mx(q[0]), mz(q[2])) : x.moveTo(mx(q[0]), mz(q[2]))); x.stroke(); }
+  x.fillStyle = 'rgba(238,232,220,.8)'; const sx = W / BLD.w, sy = H / BLD.h; for (let j = 0; j < BLD.h; j++) for (let i = 0; i < BLD.w; i++) if (BLD.d[(j * BLD.w + i) * 4 + 3]) x.fillRect(i * sx, j * sy, sx + 0.35, sy + 0.35);      // the real outline of every settlement
+}
+
+// ---------- 7c. Things that make it Israel: Hebrew place names, mosques, the Nahalal circle, pivot fields, seafronts, railways ----------
+const HE = ['תל אביב', 'ירושלים', 'חיפה', 'באר שבע', 'אילת', 'נתניה', 'אשדוד', 'טבריה', 'נצרת', 'עכו', 'אשקלון', 'ראשון לציון', 'רחובות', 'פתח תקווה', 'הרצליה', 'כפר סבא', 'חדרה', 'קיסריה', 'זכרון יעקב', 'יקנעם',
+  'עפולה', 'מגדל העמק', 'בית שאן', 'צפת', 'ראש פינה', 'קריית שמונה', 'מטולה', 'קצרין', 'מג׳דל שמס', 'נהריה', 'מעלות', 'כרמיאל', 'סח׳נין', 'שפרעם', 'קריית ביאליק', 'אום אל-פחם', 'מודיעין', 'רמלה', 'יבנה', 'בית שמש',
+  'קריית גת', 'שדרות', 'נתיבות', 'אופקים', 'רהט', 'ערד', 'דימונה', 'ירוחם', 'שדה בוקר', 'מצפה רמון', 'עין גדי', 'עין בוקק', 'יריחו', 'מעלה אדומים', 'בית לחם', 'חברון', 'רמאללה', 'שכם', 'ג׳נין', 'טולכרם',
+  'קלקיליה', 'אריאל', 'עזה', 'ח׳אן יונס', 'רפיח', 'יטבתה', 'עקבה', 'עמאן', 'אירביד', 'מידבא', 'כרכ', 'צור', 'קוניטרה', 'עין גב'];
+CITIES.forEach((c, i) => c.he = HE[i] || c.name);
+// Second tier of places: [English, Hebrew, lon, lat, size 1-5, style].  Sizes: 1 hamlet … 5 city.
+const MORE = [
+  ['Ramat Gan','רמת גן',34.815,32.078,4,'g'],['Bnei Brak','בני ברק',34.835,32.088,4,'g'],['Holon','חולון',34.78,32.015,4,'g'],['Bat Yam','בת ים',34.752,32.022,4,'g'],['Ra’anana','רעננה',34.87,32.186,3,'g'],['Hod HaSharon','הוד השרון',34.89,32.152,3,'g'],
+  ['Rosh HaAyin','ראש העין',34.955,32.095,3,'m'],['Ness Ziona','נס ציונה',34.80,31.93,3,'g'],['Gedera','גדרה',34.78,31.812,2,'m'],['Kiryat Malakhi','קריית מלאכי',34.745,31.73,2,'m'],['Shoham','שוהם',34.948,31.998,2,'m'],['Elad','אלעד',34.952,32.052,2,'g'],
+  ['Kfar Yona','כפר יונה',34.935,32.317,2,'m'],['Tira','טירה',34.95,32.233,3,'s'],['Tayibe','טייבה',35.01,32.266,3,'s'],['Baqa al-Gharbiyye','באקה אל-גרביה',35.04,32.42,3,'s'],['Pardes Hanna','פרדס חנה',34.97,32.475,3,'m'],['Binyamina','בנימינה',34.95,32.52,2,'m'],
+  ['Or Akiva','אור עקיבא',34.92,32.508,2,'m'],['Atlit','עתלית',34.94,32.69,2,'m'],['Tirat Carmel','טירת כרמל',34.972,32.76,3,'m'],['Nesher','נשר',35.045,32.765,3,'m'],['Kiryat Ata','קריית אתא',35.11,32.81,4,'g'],['Kiryat Tiv’on','קריית טבעון',35.13,32.72,2,'m'],
+  ['Daliyat al-Karmel','דאלית אל-כרמל',35.047,32.693,3,'s'],['Isfiya','עספיא',35.063,32.72,2,'s'],['Ramat Yishai','רמת ישי',35.17,32.705,2,'m'],['Nof HaGalil','נוף הגליל',35.33,32.71,3,'m'],['Kafr Kanna','כפר כנא',35.34,32.747,3,'s'],['Tur’an','טורעאן',35.375,32.777,2,'s'],
+  ['Arraba','עראבה',35.335,32.851,3,'s'],['Maghar','מגאר',35.407,32.89,3,'s'],['Rameh','ראמה',35.367,32.938,2,'s'],['Peki’in','פקיעין',35.33,32.975,1,'s'],['Hurfeish','חורפיש',35.348,33.017,2,'s'],['Shlomi','שלומי',35.147,33.075,2,'m'],
+  ['Tamra','טמרה',35.2,32.853,3,'s'],['Majd al-Krum','מג׳ד אל-כרום',35.255,32.92,3,'s'],['Kabul','כאבול',35.21,32.87,2,'s'],['Hatzor HaGlilit','חצור הגלילית',35.545,32.98,2,'m'],['Yesud HaMa’ala','יסוד המעלה',35.6,33.057,1,'m'],['Kfar Blum','כפר בלום',35.61,33.172,1,'m'],
+  ['Dan','דן',35.652,33.24,1,'m'],['Mas’ade','מסעדה',35.755,33.232,2,'s'],['Buq’ata','בוקעאתא',35.78,33.2,2,'s'],['Merom Golan','מרום גולן',35.777,33.133,1,'m'],['Ramot','רמות',35.668,32.85,1,'m'],['Degania','דגניה',35.575,32.708,1,'m'],
+  ['Kinneret','כנרת',35.562,32.722,1,'m'],['Yavne’el','יבנאל',35.5,32.708,2,'m'],['Kfar Tavor','כפר תבור',35.42,32.688,2,'m'],['Migdal','מגדל',35.505,32.84,1,'m'],['Ginosar','גינוסר',35.523,32.848,1,'m'],['Capernaum','כפר נחום',35.575,32.88,1,'s'],
+  ['Beit Alfa','בית אלפא',35.43,32.517,1,'m'],['Nir David','ניר דוד',35.458,32.505,1,'m'],['Sde Eliyahu','שדה אליהו',35.513,32.44,1,'m'],['Mehola','מחולה',35.52,32.37,1,'m'],['Argaman','ארגמן',35.52,32.17,1,'m'],['Fasa’el','פצאל',35.44,32.05,1,'m'],
+  ['Kalia','קליה',35.47,31.75,1,'m'],['Mitzpe Shalem','מצפה שלם',35.395,31.57,1,'m'],['Neve Zohar','נווה זוהר',35.36,31.15,1,'m'],['Ne’ot HaKikar','נאות הכיכר',35.375,30.935,1,'m'],['Hatzeva','חצבה',35.25,30.77,1,'m'],['Ein Yahav','עין יהב',35.185,30.66,1,'m'],
+  ['Sapir','ספיר',35.18,30.61,1,'m'],['Tzofar','צופר',35.18,30.56,1,'m'],['Paran','פארן',35.15,30.365,1,'m'],['Ketura','קטורה',35.06,29.97,1,'m'],['Grofit','גרופית',35.07,29.94,1,'m'],['Eilot','אילות',34.975,29.583,1,'m'],
+  ['Taba','טאבה',34.89,29.492,2,'s'],['Ashalim','אשלים',34.7,30.96,1,'m'],['Revivim','רביבים',34.72,31.045,1,'m'],['Tze’elim','צאלים',34.535,31.2,1,'m'],['Nitzana','ניצנה',34.39,30.885,1,'m'],['Lehavim','להבים',34.815,31.372,2,'m'],
+  ['Omer','עומר',34.85,31.265,2,'m'],['Meitar','מיתר',34.94,31.325,2,'m'],['Hura','חורה',34.935,31.298,2,'s'],['Tel Sheva','תל שבע',34.86,31.245,2,'s'],['Kuseife','כסיפה',35.09,31.245,2,'s'],['Ar’ara BaNegev','ערערה בנגב',35.02,31.16,2,'s'],
+  ['Segev Shalom','שגב שלום',34.84,31.2,2,'s'],['Laqiya','לקיה',34.87,31.325,2,'s'],['Zikim','זיקים',34.52,31.61,1,'m'],['Yad Mordechai','יד מרדכי',34.558,31.588,1,'m'],['Erez','ארז',34.565,31.56,1,'m'],['Nir Am','ניר עם',34.58,31.52,1,'m'],
+  ['Mefalsim','מפלסים',34.56,31.503,1,'m'],['Kfar Aza','כפר עזה',34.535,31.484,1,'m'],['Nahal Oz','נחל עוז',34.498,31.473,1,'m'],['Sa’ad','סעד',34.535,31.47,1,'m'],['Alumim','עלומים',34.51,31.45,1,'m'],['Be’eri','בארי',34.49,31.425,1,'m'],
+  ['Re’im','רעים',34.46,31.385,1,'m'],['Kissufim','כיסופים',34.4,31.375,1,'m'],['Ein HaShlosha','עין השלושה',34.4,31.352,1,'m'],['Nirim','נירים',34.395,31.335,1,'m'],['Nir Oz','ניר עוז',34.402,31.31,1,'m'],['Magen','מגן',34.43,31.3,1,'m'],
+  ['Nir Yitzhak','ניר יצחק',34.36,31.24,1,'m'],['Sufa','סופה',34.34,31.235,1,'m'],['Holit','חולית',34.325,31.228,1,'m'],['Kerem Shalom','כרם שלום',34.283,31.228,1,'m'],['Urim','אורים',34.525,31.305,1,'m'],['Gvulot','גבולות',34.47,31.21,1,'m'],
+  ['Latrun','לטרון',34.98,31.838,1,'s'],['Abu Ghosh','אבו גוש',35.11,31.806,2,'s'],['Mevaseret Zion','מבשרת ציון',35.15,31.802,3,'s'],['Tzur Hadassa','צור הדסה',35.097,31.72,2,'s'],['Efrat','אפרת',35.155,31.655,2,'s'],['Beitar Illit','ביתר עילית',35.12,31.698,3,'s'],
+  ['Giv’at Ze’ev','גבעת זאב',35.17,31.862,2,'s'],['Modi’in Illit','מודיעין עילית',35.045,31.932,3,'s'],['Salfit','סלפית',35.18,32.085,2,'s'],['Tubas','טובאס',35.37,32.32,3,'s'],['Qabatiya','קבאטיה',35.28,32.41,3,'s'],['Yatta','יטא',35.09,31.448,3,'s'],
+  ['Dura','דורא',35.03,31.507,3,'s'],['ad-Dhahiriya','א-דאהרייה',34.972,31.41,3,'s'],['Abu Dis','אבו דיס',35.262,31.762,2,'s'],['Karnei Shomron','קרני שומרון',35.097,32.172,2,'s'],['Shilo','שילה',35.29,32.053,1,'s'],['Ofra','עפרה',35.26,31.955,1,'s'],
+  ['Beit El','בית אל',35.223,31.94,2,'s'],['Tekoa','תקוע',35.23,31.652,1,'s'],['Kfar Adumim','כפר אדומים',35.335,31.823,1,'s'],['Beit Hanoun','בית חאנון',34.535,31.54,3,'s'],['Beit Lahia','בית לאהיא',34.495,31.552,3,'s'],['Deir al-Balah','דיר אל-בלח',34.35,31.418,3,'s'],
+  ['Nuseirat','נוסייראת',34.39,31.45,3,'s'],['Salt','א-סלט',35.73,32.04,4,'s'],['Jerash','ג׳רש',35.9,32.28,3,'s'],['Ajloun','עג׳לון',35.75,32.333,2,'s'],['Tafila','טפילה',35.6,30.84,3,'s'],['Petra','פטרה',35.48,30.322,2,'s'],
+  ['Shobak','שובכ',35.56,30.53,1,'s'],['Zarqa','זרקא',36.09,32.07,5,'s'],['Naqoura','נאקורה',35.14,33.118,1,'s'],['Bint Jbeil','בינת ג׳בייל',35.43,33.12,3,'s'],['Marjayoun','מרג׳ עיון',35.59,33.36,2,'s'],['Nabatieh','נבטיה',35.48,33.38,4,'s'],
+  ['Daraa','דרעא',36.1,32.62,4,'s'],['Nawa','נווא',36.04,32.89,3,'s'],['El Arish','אל-עריש',33.81,31.13,4,'s'],['Sheikh Zuweid','שייח׳ זוויד',34.11,31.21,2,'s'],['Megiddo','מגידו',35.19,32.58,1,'m'],['Nahalal','נהלל',35.197,32.69,1,'m']
+];
+for (const p of MORE) { const [r, n] = [[150, 12], [220, 24], [320, 46], [440, 80], [620, 150]][p[4] - 1]; if (p[0] !== 'Nahalal') CITIES.push({ name: p[0], he: p[1], lon: p[2], lat: p[3], r, n, style: p[5] === 'g' ? 'grid' : p[5] === 's' ? 'stone' : 'mixed' }); }
+// more roads, routed through the towns by name so they really connect them
+{ const CP = {}; for (const c of CITIES) CP[c.name.replace(/’/g, "'")] = [c.lon, c.lat]; const via = (...a) => a.map(v => typeof v === 'string' ? (CP[v] || console.warn('no place', v) || [35, 31.5]) : v);
+  const add = (cls, num, ...a) => { ROADS.push([cls, via(...a)]); ROADNUM[ROADS.length - 1] = num; };
+  add(1, '232', 'Sderot', 'Mefalsim', 'Kfar Aza', "Sa'ad", "Be'eri", "Re'im", 'Urim', 'Magen', 'Nir Yitzhak', 'Kerem Shalom');
+  add(1, '3', 'Ashkelon', 'Kiryat Malakhi', [34.88, 31.80], 'Latrun', "Modi'in");
+  add(1, '35', 'Ashkelon', 'Kiryat Gat', [34.95, 31.60], 'Hebron'); add(1, '57', 'Netanya', 'Kfar Yona', 'Tulkarm', [35.15, 32.28], 'Nablus');
+  add(1, '55', 'Kfar Saba', 'Qalqilya', 'Karnei Shomron', 'Nablus'); add(1, '444', 'Rosh HaAyin', 'Tira', 'Tayibe', 'Baqa al-Gharbiyye');
+  add(1, '70', "Zikhron Ya'akov", 'Yokneam', "Kiryat Tiv'on", 'Shefa-Amr', 'Tamra', 'Kabul', [35.16, 33.0], 'Shlomi'); add(1, '66', 'Yokneam', 'Megiddo', 'Jenin');
+  add(1, '77', 'Ramat Yishai', [35.30, 32.765], 'Kafr Kanna', "Tur'an", [35.47, 32.785], 'Tiberias'); add(1, '79', 'Kiryat Bialik', 'Shefa-Amr', 'Nazareth');
+  add(1, '89', 'Nahariya', "Ma'alot", 'Hurfeish', [35.44, 33.0], 'Safed'); add(1, '91', 'Rosh Pina', [35.63, 33.01], [35.72, 33.05], 'Merom Golan');
+  add(1, '92', 'Degania', 'Ein Gev', 'Ramot', [35.645, 32.90]); add(1, '87', 'Capernaum', [35.64, 32.93], 'Katzrin'); add(1, '65', 'Afula', 'Kfar Tavor', [35.45, 32.76], 'Maghar');
+  add(1, '204', 'Dimona', 'Yeruham', 'Sde Boker'); add(1, '211', 'Nitzana', [34.55, 30.91], 'Ashalim', 'Yeruham'); add(1, '222', "Tze'elim", 'Revivim', 'Ashalim');
+  add(1, '12', 'Eilat', [34.88, 29.62], [34.84, 29.80], [34.93, 29.96]); add(1, '60', 'Beer Sheva', 'Meitar', 'ad-Dhahiriya', 'Hebron'); add(1, '31', 'Lehavim', 'Hura', 'Kuseife', 'Arad');
+  add(1, '375', 'Beit Shemesh', 'Tzur Hadassa', 'Beitar Illit', 'Bethlehem'); add(1, '1', 'Jerusalem', 'Mevaseret Zion', 'Abu Ghosh', [35.04, 31.82], 'Latrun');
+  add(1, '458', "Ma'ale Adumim", 'Kfar Adumim', [35.33, 31.95], 'Shilo'); add(1, '90', 'Jericho', "Fasa'el", 'Argaman', 'Mehola', 'Sde Eliyahu', "Beit She'an");
+  add(1, '90', 'Kalia', 'Mitzpe Shalem', 'Ein Gedi'); add(1, '90', 'Hatzeva', 'Ein Yahav', 'Sapir', 'Tzofar', 'Paran', [35.10, 30.12], 'Ketura', 'Yotvata');
+  add(1, '35', 'Aqaba', [35.25, 29.80], 'Petra', 'Shobak', 'Tafila', 'Karak'); add(1, '35', 'Amman', 'Jerash', 'Irbid'); add(1, '30', 'Amman', 'Salt', [35.62, 32.08]); add(1, '', 'Tyre', 'Naqoura', 'Shlomi');
+  add(1, '98', 'Majdal Shams', "Mas'ade", "Buq'ata", 'Merom Golan', 'Quneitra'); add(1, '', 'Gaza', 'Nuseirat', 'Deir al-Balah', 'Khan Yunis'); add(1, '', 'Rafah', 'Sheikh Zuweid', 'El Arish'); }
+
+const GEO_LABELS = [['הר חרמון', 'Mount Hermon', 35.86, 33.42, 500], ['הכנרת', 'Sea of Galilee', 35.59, 32.82, 250], ['הר תבור', 'Mount Tabor', 35.39, 32.687, 300], ['עמק יזרעאל', 'Jezreel Valley', 35.25, 32.62, 500], ['הכרמל', 'Mount Carmel', 35.05, 32.72, 350],
+  ['נהלל', 'Nahalal', 35.197, 32.69, 250], ['נתב״ג', 'Ben Gurion Airport', 34.885, 32.005, 300], ['מדבר יהודה', 'Judean Desert', 35.36, 31.60, 500], ['ים המלח', 'Dead Sea', 35.47, 31.52, 350], ['מצדה', 'Masada', 35.354, 31.316, 560],
+  ['מכתש רמון', 'Makhtesh Ramon', 34.92, 30.60, 500], ['הערבה', 'The Arava', 35.17, 30.35, 500], ['מפרץ אילת', 'Gulf of Eilat', 34.96, 29.50, 300], ['רמת הגולן', 'Golan Heights', 35.78, 32.98, 500], ['עמק החולה', 'Hula Valley', 35.61, 33.10, 350],
+  ['הגלבוע', 'Mount Gilboa', 35.41, 32.47, 400], ['הנגב', 'The Negev', 34.75, 30.95, 600], ['הירדן', 'Jordan River', 35.555, 32.25, 300], ['ראש הנקרה', 'Rosh HaNikra', 35.105, 33.09, 250], ['הרודיון', 'Herodium', 35.241, 31.666, 350]];
+const LABELS = [];
+function buildLabels() {
+  const mk = (he, en, lon, lat, up, far, gold) => { const c = document.createElement('canvas'); c.width = 256; c.height = 80; const x = c.getContext('2d'); x.textAlign = 'center'; x.lineJoin = 'round'; x.strokeStyle = 'rgba(0,0,0,.85)';
+    x.font = 'bold 34px Arial, "Arial Hebrew", "Noto Sans Hebrew", sans-serif'; x.lineWidth = 6; x.strokeText(he, 128, 36); x.fillStyle = gold ? '#ffd76a' : '#ffffff'; x.fillText(he, 128, 36);
+    x.font = '17px Arial, sans-serif'; x.lineWidth = 4; x.strokeText(en, 128, 64); x.fillStyle = gold ? '#f3e2ae' : '#dfe8ee'; x.fillText(en, 128, 64);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: Object.assign(new THREE.CanvasTexture(c), { generateMipmaps: false, minFilter: THREE.LinearFilter }), transparent: true, depthWrite: false, fog: false, sizeAttenuation: false })), px = lon2x(lon), pz = lat2z(lat);
+    s.scale.set(0.2, 0.0625, 1); s.position.set(px, groundAt(px, pz).h + up, pz); s.visible = false; scene.add(s); LABELS.push({ s, far }); };
+  for (const l of LOCS) if (l[4] >= 60) mk(l[0], l[1], l[2], l[3], 320 + Math.sqrt(l[4]) * 22, clamp(9000 + l[4] * 45, 9000, 30000));      // only the big cities carry a name in the sky
+}
+function updateLabels() {
+  const on = S.names && S.started && !PH.on;
+  for (const l of LABELS) { const d = camera.position.distanceTo(l.s.position), v = on && d < l.far && d > 400; l.s.visible = v; if (v) l.s.material.opacity = clamp((l.far - d) / (l.far * 0.25), 0, 1); }
+}
+const RAIL = { paths: [], trains: [], mesh: null };
+function buildIsrael() {
+  const lam = c => new THREE.MeshLambertMaterial({ color: c }), put = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); scene.add(m); return m; }, R = rng(2026);
+  const inst = (geo, list, s) => { const m = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }), list.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), col = new THREE.Color(1, 1, 1);
+    list.forEach((b, i) => { e.set(0, b[3] || 0, 0); q.setFromEuler(e); m4.compose(tmpV.set(b[0], b[1], b[2]), q, tmpV2.set(b[4] || s[0], b[5] || s[1], b[6] || s[2])); m.setMatrixAt(i, m4); m.setColorAt(i, col); }); m.frustumCulled = false; scene.add(m); return m; };
+  // --- minarets and domes in Arab towns ---
+  const ARAB = new Set(['Nazareth', 'Acre', 'Umm al-Fahm', 'Sakhnin', 'Shefa-Amr', 'Rahat', 'Jericho', 'Bethlehem', 'Hebron', 'Ramallah', 'Nablus', 'Jenin', 'Tulkarm', 'Qalqilya', 'Gaza', 'Khan Yunis', 'Rafah', 'Aqaba', 'Amman', 'Irbid', 'Madaba', 'Karak', 'Tyre', 'Quneitra']);
+  const mins = [], domes = [];
+  for (const c of CITIES) { if (!ARAB.has(c.name)) continue; const n = clamp(Math.round(c.n / 22), 2, 12), cx = lon2x(c.lon), cz = lat2z(c.lat);
+    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || g.field) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
+  // Jaffa and East Jerusalem get a few too
+  for (const [lo, la] of [[34.752, 32.052], [34.755, 32.049], [35.236, 31.781], [35.228, 31.787], [35.242, 31.775]]) { const x = lon2x(lo), z = lat2z(la), g = groundAt(x, z); if (!g.water) { mins.push([x, g.h, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
+  inst(GEO.minaret, mins, [42, 42, 42]);
+  inst(mergeGeo([[new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0.62, 0.72, 0.66], [new THREE.BoxGeometry(2.6, 1.2, 2.6).translate(0, -0.6, 0), 0.9, 0.86, 0.76]]), domes, [8, 8, 8]);
+  // --- Tel Aviv: hotel wall along the beach, breakwaters, Jaffa's hill and clock tower, the Kirya antenna tower ---
+  const slab = windowize(lam(0xe9e6de)), rock = lam(0x4a4d50), stone = lam(0xd9c79f);
+  for (let i = 0; i < 12; i++) { const lat = 32.062 + i * 0.0042, x = lon2x(coastLon(lat) + 0.0075), z = lat2z(lat), h = 55 + R() * 55; if (!groundAt(x, z).water) put(new THREE.BoxGeometry(24, h, 62), slab, x, heightAt(x, z) + h / 2 - 3, z).rotation.y = 0.25;
+    put(new THREE.BoxGeometry(14, 5, 110), rock, lon2x(coastLon(lat) - 0.0065), 0.5, z).rotation.y = 0.3; }
+  { const x = lon2x(34.754), z = lat2z(32.0535), y = heightAt(x, z); for (let i = 0; i < 46; i++) { const a = R() * 6.283, r = 190 * Math.sqrt(R()), w = 14 + R() * 14; put(new THREE.BoxGeometry(w, 10 + R() * 12 + (190 - r) * 0.08, w), stone, x + Math.cos(a) * r + 60, y + 8, z + Math.sin(a) * r); }
+    put(new THREE.BoxGeometry(7, 34, 7), stone, x + 150, y + 17, z - 120); put(new THREE.ConeGeometry(6, 9, 4), lam(0x8a4a3a), x + 150, y + 38, z - 120);
+    const kx = lon2x(34.787), kz = lat2z(32.073), ky = heightAt(kx, kz); put(new THREE.BoxGeometry(16, 110, 16), lam(0xbfc4c8), kx, ky + 55, kz); put(new THREE.CylinderGeometry(0.8, 2.5, 34, 6), lam(0xd8443a), kx, ky + 127, kz); }
+  // --- Jerusalem: Knesset, Shrine of the Book, the Chords Bridge mast, Mount Scopus tower ---
+  { const jx = lon2x(35.21), jz = lat2z(31.78), at = (dx, dz) => heightAt(jx + dx, jz + dz), cream = lam(0xe6dcc0), white = lam(0xf4f2ec);
+    put(new THREE.BoxGeometry(110, 20, 95), cream, jx - 820, at(-820, 60) + 10, jz + 60); put(new THREE.BoxGeometry(128, 5, 112), cream, jx - 820, at(-820, 60) + 23, jz + 60);
+    put(new THREE.SphereGeometry(20, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), white, jx - 1010, at(-1010, 260) + 6, jz + 260).scale.set(1, 1.25, 1); put(new THREE.BoxGeometry(8, 22, 46), lam(0x1d1f22), jx - 960, at(-960, 260) + 11, jz + 260);
+    const mast = put(new THREE.CylinderGeometry(1.2, 3, 118, 8), white, jx - 1500, at(-1500, -250) + 56, jz - 250); mast.rotation.z = 0.32;
+    for (let i = 0; i < 9; i++) { const cb = put(new THREE.CylinderGeometry(0.35, 0.35, 120, 4), white, jx - 1500 + 30 + i * 6, at(-1500, -250) + 46, jz - 250 + (i - 4) * 10); cb.rotation.z = 0.95; cb.rotation.y = (i - 4) * 0.09; }
+    put(new THREE.BoxGeometry(12, 62, 12), cream, jx + 760, at(760, -1150) + 31, jz - 1150); }
+  // --- Haifa: university tower on the Carmel ridge, the Sail Tower downtown; Eilat: hotel strip and the reef observatory ---
+  { const x = lon2x(35.02), z = lat2z(32.762); put(new THREE.BoxGeometry(34, 102, 34), windowize(lam(0x8f9499)), x, heightAt(x, z) + 51, z); const sx = lon2x(35.0), sz = lat2z(32.812); put(new THREE.CylinderGeometry(14, 22, 110, 3), windowize(lam(0xbdd3e2)), sx, heightAt(sx, sz) + 55, sz);
+    for (let i = 0; i < 8; i++) { const ex = lon2x(34.953 + i * 0.0032), ez = lat2z(29.5535 - (i % 2) * 0.0012), h = 30 + R() * 26; if (!groundAt(ex, ez).water) put(new THREE.BoxGeometry(46, h, 26), slab, ex, heightAt(ex, ez) + h / 2 - 2, ez); }
+    const ox = lon2x(34.922), oz = lat2z(29.505); if (groundAt(ox, oz).water) { put(new THREE.CylinderGeometry(5, 7, 26, 12), lam(0xf1f1ec), ox, 11, oz); put(new THREE.CylinderGeometry(11, 11, 4, 16), lam(0xf1f1ec), ox, 24, oz); } }
+  // --- Nahalal: the circular moshav, houses on a ring with farm plots radiating out ---
+  { const cx = lon2x(35.197), cz = lat2z(32.69), list = [], y0 = triHeight(cx, cz);
+    for (let i = 0; i < 76; i++) { const a = i / 76 * 6.283, x = cx + Math.cos(a) * 430, z = cz + Math.sin(a) * 430; list.push([x, triHeight(x, z) - 1, z, -a, 15, 11, 12]); }
+    for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283, x = cx + Math.cos(a) * 150, z = cz + Math.sin(a) * 150; list.push([x, triHeight(x, z) - 1, z, -a, 22, 12, 16]); }
+    inst(GEO.house, list, [14, 10, 12]); const ring = put(new THREE.RingGeometry(380, 396, 72), lam(0x55575a), cx, y0 + 2.4, cz); ring.rotation.x = -Math.PI / 2;
+    const sp = []; for (let i = 0; i < 38; i++) { const a = i / 38 * 6.283, r = 800, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r; sp.push([x, triHeight(x, z) + 1.2, z, -a, 760, 0.8, 4]); } inst(GEO.stone, sp, [1, 1, 1]).material.color.setHex(0x3f5a2c);
+    put(GEO.tower, new THREE.MeshLambertMaterial({ vertexColors: true }), cx, y0, cz).scale.set(13, 28, 13); }
+  // --- centre-pivot irrigation circles in the north-western Negev ---
+  { const P = [], C = [], col = new THREE.Color(), pal = [0x4f8a3a, 0x67a046, 0x3f7430, 0x8a9a4a, 0x7a6a48];
+    for (let t = 0; t < 400 && P.length < 60 * 24 * 9; t++) { const lon = 34.40 + R() * 0.42, lat = 31.16 + R() * 0.32, x = lon2x(lon), z = lat2z(lat), r = 150 + R() * 90, g = groundAt(x, z); if (g.water || g.field || ZONE[zoneAt(x, z) + 2] > 0.1) continue;
+      const hs = [triHeight(x + r, z), triHeight(x - r, z), triHeight(x, z + r), triHeight(x, z - r)], hi = Math.max(...hs), lo = Math.min(...hs); if (hi - lo > 7) continue; col.setHex(pal[(R() * pal.length) | 0]); const y = hi + 1.6;
+      for (let k = 0; k < 24; k++) { const a = k / 24 * 6.283, b = (k + 1) / 24 * 6.283, sh = 0.85 + 0.15 * ((k >> 1) % 2); P.push(x, y, z, x + Math.cos(b) * r, y, z + Math.sin(b) * r, x + Math.cos(a) * r, y, z + Math.sin(a) * r); for (let v = 0; v < 3; v++) C.push(col.r * sh, col.g * sh, col.b * sh); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); }
+  // --- railways: the coast line from Nahariya to Beer Sheva and the fast line up to Jerusalem, with red trains ---
+  const P = [], N = [], I = [];
+  for (const pts of [[[35.095, 33.0], [35.085, 32.925], [35.095, 32.86], [35.0, 32.795], [34.962, 32.70], [34.943, 32.58], [34.898, 32.44], [34.862, 32.30], [34.812, 32.17], [34.80, 32.08], [34.80, 32.0], [34.84, 31.925], [34.82, 31.89], [34.70, 31.79], [34.61, 31.68], [34.63, 31.50], [34.70, 31.36], [34.785, 31.265]],
+      [[34.84, 31.925], [34.92, 31.89], [35.0, 31.85], [35.10, 31.80], [35.19, 31.79]]]) {
+    const D = splinePath(pts, 45); let prev = -1, path = [];
+    for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
+      if (g.water || g.field) { prev = -1; if (path.length > 30) RAIL.paths.push(path); path = []; continue; }
+      const k = P.length / 3; for (const s of [-1, 1]) { const vx = px + nx * 5 * s, vz = pz + nz * 5 * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 3, vz); N.push(0, 1, 0); }
+      if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1); prev = k; path.push([px, triHeight(px, pz) + 5.2, pz]); }
+    if (path.length > 30) RAIL.paths.push(path); }
+  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); rg.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); rg.setIndex(I);
+  const rm = new THREE.Mesh(rg, new THREE.MeshLambertMaterial({ color: 0x5a4a3c, side: THREE.DoubleSide })); rm.frustumCulled = false; scene.add(rm);
+  const cars = 6, nT = 8; RAIL.mesh = new THREE.InstancedMesh(GEO.stone, new THREE.MeshLambertMaterial({ vertexColors: true }), nT * cars); RAIL.mesh.frustumCulled = false; scene.add(RAIL.mesh);
+  for (let t = 0; t < nT; t++) { const p = RAIL.paths[t % RAIL.paths.length]; RAIL.trains.push({ p, s: R() * (p.length - 2), v: (t % 2 ? -1 : 1) * 42 / 45 }); for (let c = 0; c < cars; c++) RAIL.mesh.setColorAt(t * cars + c, new THREE.Color(c === 0 ? 0xd2372f : 0xdfe3e6)); }
+}
+function updateTrains(dt) {
+  const cars = 6, m4 = tmpM, e = scatter.e;
+  RAIL.trains.forEach((tr, t) => { const m = tr.p.length - 1; tr.s += tr.v * dt; if (tr.s >= m) tr.s -= m; else if (tr.s < 0) tr.s += m;
+    for (let c = 0; c < cars; c++) { const s = tr.s - Math.sign(tr.v) * c * 0.6, ok = s > 0 && s < m - 1, k = ok ? s | 0 : 0, f = ok ? s - k : 0, a = tr.p[k], b = tr.p[k + 1];
+      e.set(0, Math.atan2(b[0] - a[0], b[2] - a[2]), 0); tmpQ.setFromEuler(e); m4.compose(tmpV.set(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f - 2, a[2] + (b[2] - a[2]) * f), tmpQ, tmpV2.set(ok ? 3.6 : 0, 4.2, 25)); RAIL.mesh.setMatrixAt(t * cars + c, m4); } });
+  RAIL.mesh.instanceMatrix.needsUpdate = true;
+}
+
+/** Streams draped on the terrain: perennial rivers in blue over a green bank, desert wadis as pale gravel beds. */
+function buildRivers() {
+  const mk = (list, hw, yo, color) => { const P = [], N = [], I = [];
+    for (const pts of list) { const D = splinePath(pts, 40); let prev = -1;
+      for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
+        if (g.water || g.field) { prev = -1; continue; } const k = P.length / 3;
+        for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + yo, vz); N.push(0, 1, 0); }
+        if (prev >= 0) I.push(prev, k, prev + 1, prev + 1, k, k + 1); prev = k; } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex(I);
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); };
+  // Yarkon, Kishon, Alexander, Taninim, Hadera, upper Jordan, Dan, Yarmouk, Harod, Sorek, Lakhish
+  const rivers = [[[34.92, 32.105], [34.86, 32.10], [34.82, 32.098], [34.775, 32.098]], [[35.2, 32.62], [35.12, 32.70], [35.07, 32.76], [35.075, 32.80]], [[35.0, 32.33], [34.93, 32.37], [34.87, 32.395]], [[35.0, 32.54], [34.93, 32.545], [34.9, 32.54]], [[35.02, 32.42], [34.94, 32.46], [34.89, 32.465]],
+    [[35.62, 33.22], [35.61, 33.10], [35.62, 32.98], [35.61, 32.905]], [[35.655, 33.245], [35.62, 33.22]], [[35.85, 32.72], [35.70, 32.69], [35.59, 32.655]], [[35.33, 32.56], [35.45, 32.52], [35.55, 32.49]], [[34.88, 31.85], [34.78, 31.90], [34.71, 31.94]], [[34.8, 31.70], [34.70, 31.78], [34.645, 31.82]]];
+  // Besor, Zin, Paran, the Arava stream, Qelt, Arugot, Be'er Sheva stream
+  const wadis = [[[34.7, 31.2], [34.55, 31.28], [34.42, 31.44]], [[34.8, 30.83], [34.95, 30.88], [35.15, 30.92], [35.33, 30.93]], [[34.75, 30.15], [34.95, 30.35], [35.15, 30.42], [35.22, 30.5]], [[35.1, 30.0], [35.2, 30.45], [35.32, 30.85]], [[35.3, 31.84], [35.4, 31.845], [35.47, 31.84]], [[35.25, 31.5], [35.33, 31.465], [35.385, 31.455]], [[35.0, 31.22], [34.82, 31.235], [34.7, 31.2]]];
+  mk(rivers, 46, 1.1, 0x4a6034); mk(rivers, 15, 1.6, 0x3d6f7c); mk(wadis, 32, 1.2, 0xdccba4);
+  // Ramat Gan's Diamond Exchange tower, the tallest thing on the Tel Aviv skyline for years
+  const tx = lon2x(34.803), tz = lat2z(32.084), tw = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 235, 20), windowize(new THREE.MeshPhongMaterial({ color: 0x9fb4c4, shininess: 100 }))); tw.position.set(tx, heightAt(tx, tz) + 117, tz); scene.add(tw);
+}

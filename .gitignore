@@ -1,0 +1,7 @@
+raw/*
+!raw/README.txt
+__pycache__/
+*.pyc
+.DS_Store
+smoke.png
+node_modules/
