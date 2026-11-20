@@ -74,7 +74,7 @@ body.touch #legend{display:none!important}
 #thrTf{position:absolute;left:0;right:0;bottom:0;height:0;background:rgba(85,214,255,.38)}
 #thrT span{position:absolute;left:0;right:0;top:5px;text-align:center;font-size:11px;color:var(--ink)}
 #ctx{position:absolute;right:calc(14px + var(--sr));bottom:calc(164px + var(--sb));display:flex;flex-direction:column;gap:7px;align-items:flex-end}
-#ctx button{min-width:64px;padding:11px 8px;background:rgba(9,15,22,.55)} #ctx button.hot{border-color:var(--sand);color:var(--sand)}
+#ctx button{min-width:64px;min-height:44px;padding:11px 8px;background:rgba(9,15,22,.55)} #ctx button.hot{border-color:var(--sand);color:var(--sand)}
 #ctx button.ready{border-color:var(--green);color:var(--green);background:rgba(20,70,40,.6)} #ctx button.off{opacity:.5;border-style:dashed}
 #ctx button.active{border-color:var(--mag);color:var(--mag);background:rgba(70,20,70,.6)} #ctx button.on{border-color:var(--green);color:var(--green)}
 #landP{padding:5px 10px;font-size:13px;line-height:1.4;text-align:center;border-inline-start:3px solid var(--dim);max-width:min(92vw,440px)}
@@ -121,10 +121,22 @@ h1{font-size:clamp(28px,7vw,50px);line-height:1;margin:0 0 6px;letter-spacing:.0
 .go{font-size:18px;letter-spacing:.12em;padding:12px 30px;background:var(--sand);color:#17202a;border:none;font-weight:700} .go:hover{background:#f6dc98} .go:disabled{opacity:.5;cursor:wait}
 .mh{display:flex;justify-content:space-between;align-items:center;gap:10px} .mh h2{margin:0;font-size:26px;letter-spacing:.06em}
 details{margin-top:14px} summary{cursor:pointer;color:var(--dim);font-size:13.5px}
+/* --- menus: the same sections, buttons and footer on the start screen and the pause menu --- */
+.pill{border-radius:16px;padding:6px 14px;min-height:36px;font-size:13.5px}
+.ov .card{position:relative}
+.foot{position:sticky;bottom:0;z-index:2;margin:14px -22px -20px;padding:12px 22px calc(12px + var(--sb));display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:rgba(8,13,19,.97);border-top:1px solid var(--line);border-radius:0 0 6px 6px}
+.foot .sum{color:var(--dim);font-size:13px;line-height:1.35}
+.foot .go{flex:none;min-height:48px}
+.ov .grid button,.seg button,#crash button,.sec2{min-height:44px}
+.seg{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.seg>span{font-size:14px} .seg>div{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{padding:6px 12px;font-size:13px;border-radius:16px} .seg button[aria-pressed="true"]{background:var(--sand);color:#17202a;border-color:var(--sand);font-weight:600}
+#crash div div button{margin:0 4px}
 details.sec{margin-top:12px;border-top:1px solid var(--line);padding-top:10px} details.sec summary{color:var(--sand);font-size:14px;font-weight:600;letter-spacing:.03em;padding:4px 0} details.sec summary small{color:var(--dim);font-weight:400;margin-inline-start:8px}
 details.sec[open] summary{margin-bottom:7px}
-#keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 18px;font-size:13px;margin-top:8px}
-#keys div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.07);padding:3px 0} #keys b{color:var(--cyan);font-weight:600;white-space:nowrap}
+#keys,.keysL{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 18px;font-size:13px;margin-top:8px}
+#keys div,.keysL div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.07);padding:3px 0} #keys b,.keysL b{color:var(--cyan);font-weight:600;white-space:nowrap}
 #crash{display:none;background:rgba(60,4,4,.72);align-items:center}
 #crash .card{padding:22px 26px;text-align:center;max-width:420px} #crash h2{margin:0 0 6px;font-size:30px;color:var(--red);letter-spacing:.1em} #crash p{color:var(--ink);margin:0 auto 14px}
 #crash div div{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
@@ -134,7 +146,7 @@ details.sec[open] summary{margin-bottom:7px}
 <canvas id="gl"></canvas>
 
 <div id="hud">
-  <button id="menuB" aria-label="Menu">☰</button>
+  <button id="menuB" aria-label="Menu" title="Menu">☰</button>
   <button id="modeB"></button>
   <div id="sys" class="panel">
     <div class="r"><span class="k">Throttle</span><span id="sThr">0%</span></div>
@@ -150,7 +162,7 @@ details.sec[open] summary{margin-bottom:7px}
     <div id="hint" dir="auto"></div>
     <div id="place" dir="auto"></div>
   </div>
-  <canvas id="map" width="320" height="588" title="Tap to enlarge"></canvas>
+  <canvas id="map" width="320" height="588" role="button" tabindex="0" title="Tap to enlarge" aria-label="Map"></canvas>
   <canvas id="pfd" width="440" height="300"></canvas>
   <div id="alert"></div>
   <div id="toast" class="panel" dir="auto"></div>
@@ -174,30 +186,19 @@ details.sec[open] summary{margin-bottom:7px}
 
 <div id="start" class="ov">
   <div class="card panel">
-    <h1>ISRAEL FLIGHT SIMULATOR</h1>
+    <div class="mh"><h1></h1><button id="langB" class="pill" lang="">English</button></div>
     <div id="rule"></div>
-    <p>Pick an aircraft and take off from Ben Gurion. Fly anywhere over Israel: along the coast, over Jerusalem, down to the Dead Sea below sea level, across the Negev, or up to the Galilee and Mount Hermon. Assisted flight keeps the wings level for you. Manual flight, in the menu, hands you everything.</p>
-    <h3 id="sPlH"></h3>
-    <div id="sPlanes" class="grid"></div>
-    <h3 id="sLvH"></h3>
-    <div id="sLevels" class="grid"></div>
-    <details class="sec"><summary id="sFrH"></summary><div id="sFree" class="grid"></div></details>
-    <details class="sec"><summary id="sLdH"></summary><div id="sLand" class="grid"></div></details>
-    <details class="sec"><summary id="sStH"></summary><div id="sSet" class="grid"></div></details>
-    <div style="margin-top:18px"><button id="fly" class="go" disabled>…</button> <button id="langB" style="margin-inline-start:10px">English</button></div>
-    <details><summary>Controls</summary><div id="keys"></div></details>
+    <p id="intro"></p>
+    <div id="sBody"></div>
+    <div class="foot"><span id="sSum" class="sum"></span><button id="fly" class="go" disabled>…</button></div>
   </div>
 </div>
 
 <div id="menu" class="ov" style="display:none">
   <div class="card panel">
-    <div class="mh"><h2>Paused</h2><button id="resume" class="go">RESUME</button></div>
-    <h3 id="hLv"></h3><div id="mLevels" class="grid"></div>
-    <h3 id="hPl"></h3><div id="mPlanes" class="grid"></div>
-    <h3 id="hFr"></h3><div id="mFree" class="grid"></div>
-    <h3 id="hLd"></h3><div id="mLand" class="grid"></div>
-    <h3 id="hSt"></h3><div id="mSet" class="grid"></div>
-    <details><summary>Controls</summary><div id="keys2"></div></details>
+    <div class="mh"><h2></h2><button id="mClose" class="pill">✕</button></div>
+    <div id="mBody"></div>
+    <div class="foot"><span id="mSum" class="sum"></span><button id="resume" class="go"></button></div>
   </div>
 </div>
 
@@ -205,7 +206,7 @@ details.sec[open] summary{margin-bottom:7px}
   <div class="card panel">
     <h2>CRASH</h2>
     <p id="crashWhy"></p>
-    <div><div><button id="again" class="go">TRY AGAIN</button><button id="airborne">Back in the air</button></div></div>
+    <div><div><button id="again" class="go">TRY AGAIN</button><button id="airborne" class="sec2">Back in the air</button></div></div>
   </div>
 </div>
 

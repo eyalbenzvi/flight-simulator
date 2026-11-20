@@ -49,6 +49,20 @@ place names. `setupCanvasGuard` (in `src/08-app.js`) saves every canvas used as 
 and repaints them on `contextrestored`, on `webglcontextrestored`, when the page comes back into view, and when a reference pixel of
 the map image changes (checked every 3 s). A canvas texture created after start-up is not covered: create textures during `init`.
 
+## Menus and interface standard
+
+- The start screen and the pause menu are built by one function, `renderPanel('start' | 'pause')` (in `src/08-app.js`): the same folded
+  sections in the same order (aircraft, difficulty, take off from a runway `TAKEOFFS`, start in the air `AIRSTARTS`, practise a landing
+  `LANDTESTS`, settings, keyboard keys on desktop), each heading showing its current choice, and a sticky footer with a summary and
+  the one main button (FLY / CONTINUE). Aircraft and difficulty are open by default; open/closed state is kept in `OPEN`.
+- On the start screen a choice only selects (`START`); in the pause menu a start point or aircraft starts at once.
+- Settings are rows of option buttons (`settingsRows`, `aria-pressed`), every choice visible; never a button that cycles.
+- The level chip in flight opens the menu at the difficulty levels; only the H key switches level directly.
+- Touch targets are at least 44 px; icon buttons get localized `aria-label`s in `applyLang`, which also sets `<html lang>`.
+- Every user-facing string is bilingual (`L('English', 'עברית')`, or `TRD` for data labels). Aviation instruments (PFD, ft, kt) stay as they are.
+- Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
+- Easy mode climbs over rising ground by itself when low (`arcadeStep`), so letting go never flies into a hill; flat ground can still be landed on.
+
 ## Flight modes (`S.mode`, set only through `setMode`)
 
 - 0 Easy (`S.arc`): `arcadeStep` replaces the physics. The stick steers the flight path directly, the lever sets speed,
@@ -109,7 +123,6 @@ same 60 m lattice (`uOrg`).
   `buildCities` or raise the coverage threshold `TH` in `tools/ghsl2bld.py`.
 - Terrain is formula-based (tables and Gaussian peaks in `rawHeight`), not a DEM. A real DEM could replace `rawHeight`
   through the same kind of embedded raster.
-- Some toasts and the Medium/Expert hints are still English only; `TRD` and `L(en, he)` are the two translation mechanisms.
 - Audio has only been checked for errors, never listened to.
 - No licence file yet.
 

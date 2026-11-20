@@ -24,8 +24,10 @@ function spawn(def) {
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
-    const rw = def.rw; S.pos.set(rw.tx + rw.dx * 130, rw.elev + GEAR_H, rw.tz + rw.dz * 130); S.vel.set(0, 0, 0);
-    S.q.setFromEuler(eul.set(0, -rw.hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = 0; S.gear = true; S.gearPos = 1; S.flapIdx = fi(1); S.flapDeg = FLAPS[S.flapIdx]; S.onGround = true; S.airTime = 0;
+    const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
+    const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;
+    S.pos.set(ex + rw.dx * 130 * sg, rw.elev + GEAR_H, ez + rw.dz * 130 * sg); S.vel.set(0, 0, 0);
+    S.q.setFromEuler(eul.set(0, -h * DEG, 0, 'YXZ')); S.thr = S.n1 = 0; S.gear = true; S.gearPos = 1; S.flapIdx = fi(1); S.flapDeg = FLAPS[S.flapIdx]; S.onGround = true; S.airTime = 0;
   } else {
     let x, z, alt, hdg = def.hdg, gamma = 0, V = (def.spd || 120) / 120 * PL.vc; const f = fi(def.flaps || 0), gear = !!def.gear || !!PL.fixedGear;
     if (def.type === 'approach') { const rw = def.rw; x = rw.tx - rw.dx * def.dist; z = rw.tz - rw.dz * def.dist; alt = rw.elev + GEAR_H + (def.dist + 300) * Math.tan(3 * DEG); hdg = rw.hdg; gamma = -3 * DEG;
@@ -120,7 +122,7 @@ function updateControls(dt) {
     }
   } else if (S.ap.on) {
     // ---- AUTOPILOT: the stick moves the altitude and heading bugs ----
-    if (S.onGround || S.stalled) { S.ap.on = false; toast('Autopilot disengaged'); }
+    if (S.onGround || S.stalled) { S.ap.on = false; toast(L('Autopilot disengaged', 'הטייס האוטומטי התנתק')); }
     else {
       S.ap.hdg = (S.ap.hdg + lr * 14 * dt + 360) % 360; S.ap.alt += climb * 25 * dt;
       rt = rollFor(clamp(wrap180(S.ap.hdg - S.hdg) * 1.2, -25, 25) * DEG); pt = pitchFor(gammaForAlt(S.ap.alt)); yt = 0;
@@ -145,11 +147,11 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG) { S.boost = 1; S.prot = 'Terrain ahead: climbing'; } else if (climb < -0.1 && S.ra < 90) S.prot = 'Low-altitude protection';
+        if (gReq > 4 * DEG) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Low-altitude protection', 'הגנת גובה נמוך');
       }
     }
     const vmin = S.vs0 * 1.2;                                                    // stall protection: lower the nose, add power
-    if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = 'Too slow: adding power'; }
+    if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
     pt = pitchFor(gT);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
@@ -226,7 +228,7 @@ function physics(dt) {
     if (g.water) return crash('The aircraft hit the water.');
     if (!S.onGround && S.airTime > 1.5) {
       if (S.gearPos < 0.9) return crash('Touched down with the landing gear up.');
-      if (vs < (S.assist || S.land ? -9.5 : -7)) return crash('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.');
+      if (vs < (S.assist || S.land ? -9.5 : -7)) return crash(L('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.', 'פגיעה בקרקע במהירות ירידה של ' + Math.round(-vs * 196.85) + ' רגל לדקה'));
       if (!g.field && V > 45) return crash('Flew into terrain.');
       if (Math.abs(phi) > 0.26 || theta < -0.1) return crash('Wing or nose struck the ground.');
       S.landed = true; S.shake = clamp(-vs * 0.12, 0.1, 0.8); toast(landingScore(vs), 5);
@@ -261,7 +263,7 @@ function updateSystems(dt) {
       else if (!S.gear) { if (V > 105 * K) S.flapIdx = 0; else if (V < 98 * K && S.flapIdx < 1) S.flapIdx = fi(1); }
     } else if (V < 30 * K && !S.landed) S.flapIdx = fi(1);
   }
-  if (V > 335 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast('Mach 1! Sonic boom'); } else if (V < 310) S.mach1 = false;
+  if (V > 335 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if (V < 310) S.mach1 = false;
 }
 
 // ---------- 11. Cameras ----------

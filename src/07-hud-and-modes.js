@@ -230,14 +230,15 @@ function drawMap() {
   // fixed to the frame: north marker, and the zoom factor while zoomed
   const pf = v => v / u0; M.setTransform(k, 0, 0, k, 0, 0); M.textAlign = 'center'; M.font = 'bold ' + pf(12).toFixed(3) + 'px ' + FONT; M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = pf(3); M.fillStyle = '#fff';
   M.strokeText('N', W - pf(9), pf(9)); M.fillText('N', W - pf(9), pf(9));
+  { const g = big ? '⤡' : '⤢'; M.font = 'bold ' + pf(14).toFixed(3) + 'px ' + FONT; M.textAlign = 'left'; M.textBaseline = 'bottom'; M.strokeText(g, pf(5), H - pf(3)); M.fillText(g, pf(5), H - pf(3)); M.textBaseline = 'middle'; }     // tap to enlarge / shrink
   if (big && z > 1.001) { const t = z.toFixed(1) + '×'; M.font = 'bold ' + pf(11).toFixed(3) + 'px ' + FONT; M.textAlign = 'left'; M.strokeText(t, pf(7), pf(10)); M.fillText(t, pf(7), pf(10)); }
 }
 function hintText() {
   const T = document.body.classList.contains('touch'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓', ft = m => (Math.round(m * FT / 50) * 50).toLocaleString('en') + ' ft';
   if (S.crashed) return '';
-  if (S.trick) return S.trick.type === 'loop' ? 'Looping…' : 'Rolling…';
+  if (S.trick) return S.trick.type === 'loop' ? L('Looping…', 'לולאה…') : L('Rolling…', 'גלגול…');
   if (S.land) return S.onGround ? '' : L('Hands off: the aircraft lands itself. ' + (T ? 'Tap Cancel landing' : 'Press L') + ' to take over', 'לא נוגעים: המטוס נוחת לבד. כדי להשתלט: ' + (T ? '"ביטול נחיתה"' : 'L'));
-  if (S.ap.on) return 'Autopilot on. The stick moves its altitude and heading targets';
+  if (S.ap.on) return L('Autopilot on. The stick moves its altitude and heading targets', 'טייס אוטומטי פועל. הג׳ויסטיק משנה את הגובה והכיוון שהוא שומר');
   if (S.arc) {
     if (S.onGround) return A.v > 3 ? L('Here we go!', 'יוצאים לדרך!') : T ? L('Push the speed lever up. It takes off by itself', 'מרימים את ידית המהירות. המטוס ממריא לבד') : L('Hold Shift to go. It takes off by itself', 'מחזיקים Shift. המטוס ממריא לבד');
     if (S.airTime < 25) return T ? L('Move the stick where you want to fly. Let go to fly straight', 'מזיזים את הג׳ויסטיק לאן שרוצים לטוס. משחררים, וטסים ישר') : L('The arrows steer. Let go to fly straight. X rolls, Z loops', 'החצים מכוונים. משחררים, וטסים ישר. X גלגול, Z לולאה');
@@ -245,31 +246,31 @@ function hintText() {
     return '';
   }
   if (S.onGround) {
-    if (S.thr > 0.5) return S.assist ? 'Full power. It lifts off by itself' : 'Full power. Raise the nose at ' + Math.round(S.vs0 * 1.15 * KT) + ' kt';
-    if (S.landed) return S.assist ? 'Slowing down' : (T ? 'Hold Brake to stop' : 'Hold B or Space to brake');
-    return T ? 'Slide the power lever up to take off' : 'Hold Shift, or press 9, for take-off power';
+    if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : L('Full power. Raise the nose at ' + Math.round(S.vs0 * 1.15 * KT) + ' kt', 'הספק מלא. מרימים את האף ב-' + Math.round(S.vs0 * 1.15 * KT) + ' קשר');
+    if (S.landed) return S.assist ? L('Slowing down', 'מאטים') : (T ? L('Hold Brake to stop', 'מחזיקים "בלם" כדי לעצור') : L('Hold B or Space to brake', 'מחזיקים B או רווח כדי לבלום'));
+    return T ? L('Slide the power lever up to take off', 'מעלים את ידית ההספק כדי להמריא') : L('Hold Shift, or press 9, for take-off power', 'מחזיקים Shift, או לוחצים 9, להספק המראה');
   }
   if (S.assist) {
     if (S.prot) return S.prot;
-    if (AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50) && S.gear) return T ? 'Over the airport: hold the stick toward Descend to land' : 'Over the airport: hold ' + dn + ' to land';
+    if (AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50) && S.gear) return T ? L('Over the airport: hold the stick down to land', 'מעל שדה התעופה: מחזיקים את הג׳ויסטיק למטה כדי לנחות') : L('Over the airport: hold ' + dn + ' to land', 'מעל שדה התעופה: מחזיקים ' + dn + ' כדי לנחות');
     // otherwise say what the aircraft is doing
-    if (S.toClimb) return 'Climbing out. Gear and flaps are automatic';
-    if (S.holdAlt !== null) return 'Holding ' + ft(S.holdAlt);
-    return S.vel.y > 1.5 ? 'Climbing through ' + ft(S.pos.y) : S.vel.y < -1.5 ? 'Descending through ' + ft(S.pos.y) : '';
+    if (S.toClimb) return L('Climbing out. Gear and flaps are automatic', 'מטפסים. הגלגלים והמדפים אוטומטיים');
+    if (S.holdAlt !== null) return L('Holding ', 'שומרים גובה ') + ft(S.holdAlt);
+    return S.vel.y > 1.5 ? L('Climbing through ', 'מטפסים, ') + ft(S.pos.y) : S.vel.y < -1.5 ? L('Descending through ', 'יורדים, ') + ft(S.pos.y) : '';
   }
-  if (S.gear && !PL.fixedGear && S.ra > 250 && S.V > S.vs0 * 1.5) return T ? 'Gear is still down: tap Gear' : 'Gear is still down: press G';
-  if (S.gamHold !== null) return 'Manual: holding this path';
+  if (S.gear && !PL.fixedGear && S.ra > 250 && S.V > S.vs0 * 1.5) return T ? L('The gear is still down: tap Gear', 'הגלגלים עדיין למטה: לוחצים "גלגלים"') : L('The gear is still down: press G', 'הגלגלים עדיין למטה: לוחצים G');
+  if (S.gamHold !== null) return L('Holding this flight path', 'שומרים על נתיב הטיסה');
   return '';
 }
 /** The always-visible key guide (desktop). It changes with the flight mode and the pitch setting. */
 function drawLegend() {
   const el = $('legend'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓'; el.style.display = S.legend ? 'grid' : 'none'; el.textContent = '';
-  if (S.arc) { for (const [k, en, he] of [[up, 'Up', 'למעלה'], [dn, 'Down', 'למטה'], ['← →', 'Turn', 'פנייה'], ['Shift', 'Faster', 'מהר יותר'], ['Ctrl', 'Slower', 'לאט יותר'], ['X', 'Roll', 'גלגול'], ['Z', 'Loop', 'לולאה'], ['Space', 'Brake', 'בלם'], ['L', 'Land for me', 'נחיתה אוטומטית'], ['C', 'Change view', 'החלפת מבט'], ['Esc', 'Menu', 'תפריט']]) {
+  if (S.arc) { for (const [k, en, he] of [[up, 'Up', 'למעלה'], [dn, 'Down', 'למטה'], ['← →', 'Turn', 'פנייה'], ['Shift', 'Faster', 'מהר יותר'], ['Ctrl', 'Slower', 'לאט יותר'], ['X', 'Roll', 'גלגול'], ['Z', 'Loop', 'לולאה'], ['Space', 'Brake', 'בלם'], ['L', 'Land automatically', 'נחיתה אוטומטית'], ['C', 'Change view', 'החלפת מבט'], ['Esc', 'Menu', 'תפריט']]) {
       const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; b.dir = 'ltr'; sp.textContent = L(en, he); el.appendChild(b); el.appendChild(sp); } return; }
-  const rows = [[up, S.assist ? 'Climb' : 'Nose up'], [dn, S.assist ? 'Descend' : 'Nose down'], ['← →', S.assist ? 'Turn' : 'Roll'], ['Shift / Ctrl', 'Power up / down'], ['0 – 9', 'Set power'], ['B / Space', 'Brake'], ['L', 'Land automatically (within 20 km of an airport)']];
-  if (!S.assist) rows.push(['G', 'Landing gear'], ['F', 'Flaps']);
-  rows.push(['Esc', 'Menu'], ['K', 'Hide this']);
-  for (const [k, t] of rows) { const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; sp.textContent = t; el.appendChild(b); el.appendChild(sp); }
+  const rows = [[up, S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה')], [dn, S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה')], ['← →', S.assist ? L('Turn', 'פנייה') : L('Roll', 'הטיה')], ['Shift / Ctrl', L('Power up / down', 'הספק למעלה / למטה')], ['0 – 9', L('Set power', 'קביעת הספק')], ['B / Space', L('Brake', 'בלם')], ['L', L('Land automatically', 'נחיתה אוטומטית')]];
+  if (!S.assist) rows.push(['G', L('Landing gear', 'גלגלים')], ['F', L('Flaps', 'מדפים')]);
+  rows.push(['Esc', L('Menu', 'תפריט')], ['K', L('Hide this', 'הסתרת המדריך')]);
+  for (const [k, t] of rows) { const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; b.dir = 'ltr'; sp.textContent = t; el.appendChild(b); el.appendChild(sp); }
 }
 function drawSys() {
   const touchUI = document.body.classList.contains('touch'), air = !S.onGround;
@@ -279,10 +280,10 @@ function drawSys() {
   else {
     $('sThr').textContent = thrTxt; $('sThr').className = t < -0.01 || auto ? 'warnc' : '';
     $('thrFill').style.width = Math.abs(t) * 100 + '%'; $('thrFill').style.background = t < 0 ? 'var(--amber)' : 'var(--cyan)';
-    const AU = S.assist || S.land ? ' · AUTO' : ''; $('sFlap').textContent = FLAPS.length < 2 ? 'NONE' : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '') + AU;
-    const gp = S.gearPos, ge = $('sGear'); ge.textContent = (PL.fixedGear ? 'FIXED' : gp > 0.98 ? '▼ DOWN' : gp < 0.02 ? '▲ UP' : 'IN TRANSIT') + (PL.fixedGear ? '' : AU); ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
-    const ae = $('sAp'); ae.textContent = S.land ? 'LAND ' + S.land.label : S.ap.on ? Math.round(S.ap.alt * FT / 10) * 10 + ' ft / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : 'OFF'; ae.className = S.ap.on || S.land ? 'mg' : '';
-    $('sMode').textContent = S.arc ? 'EASY' : S.assist ? 'ASSISTED' : 'MANUAL'; $('sMode').className = S.assist ? 'ok' : 'warnc';
+    const AU = S.assist || S.land ? L(' · AUTO', ' · אוטו׳') : ''; $('sFlap').textContent = FLAPS.length < 2 ? L('NONE', 'אין') : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '') + AU;
+    const gp = S.gearPos, ge = $('sGear'); ge.textContent = (PL.fixedGear ? L('FIXED', 'קבועים') : gp > 0.98 ? L('▼ DOWN', '▼ למטה') : gp < 0.02 ? L('▲ UP', '▲ למעלה') : L('MOVING', 'בתנועה')) + (PL.fixedGear ? '' : AU); ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
+    const ae = $('sAp'); ae.textContent = S.land ? L('LANDING', 'נחיתה') : S.ap.on ? Math.round(S.ap.alt * FT / 10) * 10 + ' ft / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : L('OFF', 'כבוי'); ae.className = S.ap.on || S.land ? 'mg' : '';
+    $('sMode').textContent = L(LV[S.mode][0], LV[S.mode][1]); $('sMode').className = S.assist ? 'ok' : 'warnc';
   }
   if (document.body.classList.contains('nopfd')) $('strip').innerHTML = '<b>' + Math.round(S.V * KT) + '</b><span>kt</span><b>' + (Math.round(S.pos.y * FT / 10) * 10).toLocaleString('en') + '</b><span>ft</span><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b>';
   $('hint').textContent = hintText(); $('place').textContent = S.place ? L('Over ' + S.place, 'מעל ' + S.placeHe) : '';
@@ -296,7 +297,7 @@ function drawSys() {
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
-    const uT = S.arc ? L('Up', 'למעלה') : S.assist ? 'Climb' : 'Nose up', dT = S.arc ? L('Down', 'למטה') : S.assist ? 'Descend' : 'Nose down'; $('stU').textContent = SAVE.inv ? dT : uT; $('stD').textContent = SAVE.inv ? uT : dT; $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : 'Power';
+    const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = SAVE.inv ? dT : uT; $('stD').textContent = SAVE.inv ? uT : dT; $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
   }
 }
 
@@ -347,12 +348,12 @@ function updatePlace() {
 /** Grade a manual touchdown on a runway: sink rate, centreline, and distance from the aiming point. */
 function landingScore(vs) {
   const ru = runwayUnder(), fpm = Math.round(-vs * 196.85);
-  if (S.land) return 'Autoland touchdown: ' + fpm + ' ft/min';
-  if (!ru) return (vs < -3.5 ? 'Hard landing: ' : 'Touchdown: ') + fpm + ' ft/min';
+  if (S.land) return L('Automatic landing touchdown: ' + fpm + ' ft/min', 'נגיעה בנחיתה אוטומטית: ' + fpm + ' רגל לדקה');
+  if (!ru) return (vs < -3.5 ? L('Hard landing: ', 'נחיתה קשה: ') : L('Touchdown: ', 'נגיעה: ')) + fpm + L(' ft/min', ' רגל לדקה');
   const s1 = clamp(1 - (fpm - 120) / 700, 0, 1), s2 = clamp(1 - Math.abs(ru.cross) / 20, 0, 1), s3 = clamp(1 - Math.abs(ru.fromThr - 300) / 900, 0, 1);
   const sc = Math.round(100 * (0.5 * s1 + 0.3 * s2 + 0.2 * s3)), grade = sc >= 90 ? 'S' : sc >= 75 ? 'A' : sc >= 55 ? 'B' : 'C';
   Snd.chime(sc >= 75 ? 760 : 420, 0.3);
-  return 'Landing grade ' + grade + ' (' + sc + '/100): ' + fpm + ' ft/min, ' + Math.abs(ru.cross).toFixed(0) + ' m off centre';
+  return L('Landing grade ' + grade + ' (' + sc + '/100): ' + fpm + ' ft/min, ' + Math.abs(ru.cross).toFixed(0) + ' m off centre', 'ציון נחיתה ' + grade + ' (' + sc + '/100): ' + fpm + ' רגל לדקה, ' + Math.abs(ru.cross).toFixed(0) + ' מ׳ ממרכז המסלול');
 }
 function buildFun() {
   const lam = c => new THREE.MeshLambertMaterial({ color: c }), R = rng(404);
@@ -405,7 +406,7 @@ const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים',
   'Twin-jet for 150 passengers. Steady and forgiving, slow to turn': 'סילון גדול ל-150 נוסעים. יציב וסלחני, פונה לאט', 'Sleek T-tail jet. Quick, agile, lands short': 'סילון קטן ומהיר. זריז ונוחת בקלות',
   'Afterburner, Mach 1.5, rolls and loops. Hold on': 'מבער, מהירות על-קולית, גלגולים ולולאות. תחזיקו חזק', 'Light propeller plane with show smoke. Slow, nimble, lands anywhere': 'מטוס מדחף קל עם עשן. איטי, זריז ונוחת בכל מקום',
-  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת',
+  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת',
   'Ben Gurion runway 12': 'נתב״ג, מסלול 12', 'Haifa over the bay': 'חיפה, מעל המפרץ', 'Eilat Ramon': 'רמון (אילת)', 'Rosh Pina airstrip': 'מנחת ראש פינה', 'Masada (Bar Yehuda) airstrip': 'מנחת בר יהודה (מצדה)', 'Beer Sheva airstrip': 'מנחת באר שבע',
   'Cockpit': 'תא הטייס', 'Chase': 'מאחור', 'Wing': 'מהכנף', 'Clear': 'בהיר', 'Dust haze': 'אובך', 'Storm': 'סופה', 'day': 'יום', 'sunset': 'שקיעה', 'night': 'לילה' };
 const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
@@ -443,6 +444,10 @@ function arcadeStep(dt) {
     const gm = PL.aG * DEG, back = PL.aPitch * 0.45 * dt;
     if (Math.abs(ud) > 0.05) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 150) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
     if (ud < -0.05) A.out = false;
+    if (!S.trick && S.ra < 260) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
+      const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
+      for (const t of [2, 4, 7]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t, gz = S.pos.z - Math.cos(A.psi) * A.v * t, gh = groundAt(gx, gz).h; if (gh > here + 12) need = Math.max(need, (gh + 70 - S.pos.y) / (A.v * t)); }
+      if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
     if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -(0.1 + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground
     A.phi += (A.turn / PL.aTurn * PL.aBank * DEG - A.phi) * Math.min(1, 6 * dt);
     G2 = A.gam + (S.trick && S.trick.type === 'loop' ? S.trick.ang : 0); const cg = Math.cos(G2);
@@ -469,18 +474,20 @@ function arcadeStep(dt) {
 /** Static interface text in the chosen language. */
 function applyLang() {
   const he = SAVE.lang === 'he', set = (sel, en, h) => document.querySelectorAll(sel).forEach(e => e.textContent = he ? h : en);
-  document.querySelectorAll('.ov .card, #legend, #photoBar').forEach(e => e.dir = he ? 'rtl' : 'ltr');
+  document.querySelectorAll('.ov .card, #legend, #photoBar, #sys').forEach(e => e.dir = he ? 'rtl' : 'ltr');
   set('#start h1', 'ISRAEL FLIGHT SIMULATOR', 'סימולטור טיסה מעל ישראל');
-  set('#start p', 'Pick an aircraft and a difficulty, then fly anywhere over Israel. On Easy the arrows (or the stick) steer the aircraft directly, and letting go flies straight. To land, come down slowly and gently, anywhere. Hit the ground hard, the sea or a building, and it ends with a bang.',
-    'בוחרים מטוס ורמת קושי, וטסים לכל מקום מעל ישראל. ברמה הקלה החצים (או הג׳ויסטיק) מכוונים את המטוס ישירות, וכשמשחררים הוא טס ישר. כדי לנחות יורדים לאט ובעדינות, בכל מקום. פגיעה חזקה בקרקע, בים או בבניין נגמרת בפיצוץ.');
-  set('#sPlH, #hPl', 'Aircraft', 'מטוס'); set('#sLvH, #hLv', 'Difficulty', 'רמת קושי'); set('#hFr', 'Start from', 'מאיפה מתחילים'); set('#hLd', 'Approaches to land', 'גישות לנחיתה'); set('#hSt', 'Settings', 'הגדרות'); levelButtons($('sLevels')); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[S.mode][0], LV[S.mode][1]); set('#langB', 'עברית', 'English'); set('summary', 'All keys', 'כל המקשים');
+  set('#intro', 'Pick an aircraft and a difficulty, then press FLY. Everything else can also be changed during the flight, in the ☰ menu.', 'בוחרים מטוס ורמת קושי ולוחצים "לטוס!". את כל השאר אפשר לשנות גם במהלך הטיסה, בתפריט ☰.');
+  $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[S.mode][0], LV[S.mode][1]); set('#langB', 'עברית', 'English'); $('langB').lang = he ? 'en' : 'he';
+  document.documentElement.lang = he ? 'he' : 'en'; document.title = L('Israel Flight Simulator', 'סימולטור טיסה מעל ישראל');
+  const aria = (id, en, h) => { const e = $(id); e.setAttribute('aria-label', he ? h : en); e.title = he ? h : en; };
+  aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
-  set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'RESUME', 'המשך'); 
+  set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
   set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
-  S.legSig = ''; if ($('sPlanes').childElementCount) planeCards($('sPlanes'), startPick); if (!S.started && FREE.length) refreshStart();
+  set('#sys .r:nth-of-type(1) .k', 'Throttle', 'הספק'); set('#sys .r:nth-of-type(2) .k', 'Flaps', 'מדפים'); set('#sys .r:nth-of-type(3) .k', 'Gear', 'גלגלים'); set('#sys .r:nth-of-type(4) .k', 'Autopilot', 'טייס אוטומטי'); set('#sys .r:nth-of-type(5) .k', 'Mode', 'רמה');
+  S.legSig = ''; if (FREE.length) { renderPanel('start'); if (S.paused) renderPanel('pause'); }
 }
-let startPick = () => {};
 
 // ---------- 12e. Collisions with buildings, and the explosion ----------
 const OBST = new Map(), EXP = { parts: [], t: -1 };
@@ -516,8 +523,8 @@ function updateExplosion(dt) {
 const LV = [['Easy', 'קל'], ['Medium', 'בינוני'], ['Expert', 'מקצועי']];
 const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. בלי הזדקרות, נוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
 /** The three difficulty buttons (start screen and menu). */
-function levelButtons(el) {
+function levelButtons(el, after) {
   el.textContent = '';
   LV.forEach((n, i) => { const b = document.createElement('button'); b.className = i === S.mode ? 'on' : ''; b.innerHTML = '<b></b><small></small>'; b.firstChild.textContent = L(n[0], n[1]); b.lastChild.textContent = L(LVD[i][0], LVD[i][1]);
-    b.addEventListener('click', () => { setMode(i); levelButtons($('sLevels')); levelButtons($('mLevels')); }); el.appendChild(b); });
+    b.addEventListener('click', () => { setMode(i); if (after) after(); else levelButtons(el); }); el.appendChild(b); });
 }
