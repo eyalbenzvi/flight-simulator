@@ -129,7 +129,15 @@ function lmkGeo() {
   LG.ball = new THREE.SphereGeometry(1, 14, 10);
   LG.ring = new THREE.TorusGeometry(1, 0.035, 6, 40);
   LG.bowl = new THREE.CylinderGeometry(1, 0.78, 1, 32, 1, true).translate(0, 0.5, 0);
-  LG.tri = new THREE.CylinderGeometry(1, 1, 1, 3);       // centred; laid along z with rx = -90°, apex up, it is a pitched roof
+  LG.tri = new THREE.CylinderGeometry(1, 1, 1, 3);
+  // a stadium bowl, 1 across and 1 high: stands rising from the pitch to the rim, the outer wall, a roof over the main stand
+  LG.stands = new THREE.LatheGeometry([[0.6, 0.0], [0.6, 0.07], [0.66, 0.1], [0.97, 0.78], [1.0, 0.8]].map(([r, y]) => new THREE.Vector2(r, y)), 40);
+  LG.wall = new THREE.CylinderGeometry(1.0, 1.02, 0.8, 40, 1, true).translate(0, 0.4, 0);
+  LG.roof = new THREE.CylinderGeometry(0.86, 1.0, 0.1, 40, 1, true, -0.9, 1.8).translate(0, 0.96, 0);
+  LG.roof2 = new THREE.CylinderGeometry(0.86, 1.0, 0.1, 40, 1, true, Math.PI - 0.9, 1.8).translate(0, 0.96, 0);
+  LG.rim = new THREE.TorusGeometry(1.0, 0.025, 4, 40).rotateX(Math.PI / 2).translate(0, 0.8, 0);
+  LG.ribs = new THREE.SphereGeometry(1, 16, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+  LG.pitch = new THREE.CylinderGeometry(0.6, 0.6, 0.12, 40).translate(0, 0.06, 0);     // thick enough to stand above uneven ground       // centred; laid along z with rx = -90°, apex up, it is a pitched roof
   return LG;
 }
 // colours
@@ -147,11 +155,13 @@ const LMK_KIND = {
     addObst(x, z, w, d, ry, y - 3, y + h + 10); },
   twin(b, x, y, z, o) { const ry = o.rot || 0.4; for (const s of [-1, 1]) LMK_KIND.tower(b, x + Math.cos(ry) * 34 * s, y, z + Math.sin(ry) * 34 * s, { h: o.h * (s < 0 ? 1 : 0.88), w: 28, d: 28, col: o.col, glass: 1, ry }); },
   stadium(b, x, y, z, o) { const G = lmkGeo(), L = o.len, W = o.wid, h = o.h, r = o.rot || 0;
-    b.put('plain', G.bowl, CONC, x, y - 2, z, r, L / 2, h, W / 2); b.put('plain', G.bowl, 0x6d7378, x, y + h * 0.55, z, r, L / 2 * 1.01, h * 0.48, W / 2 * 1.01);
-    b.put('plain', G.cyl(28), 0x3f8f3a, x, y - 1.5, z, r, L / 2 * 0.74, 2.2, W / 2 * 0.70); b.put('plain', G.box, 0xe8e8e0, x, y + 0.75, z, r, L * 0.62, 0.2, 0.8);
+    b.put('plain', G.stands, 0x5d6976, x, y - 1, z, r, L / 2, h, W / 2); b.put('plain', G.wall, 0xd3d6d9, x, y - 1, z, r, L / 2, h, W / 2); b.put('plain', G.roof, 0xeeeeea, x, y - 1, z, r, L / 2, h, W / 2);
+    b.put('plain', G.roof2, 0xeeeeea, x, y - 1, z, r, L / 2, h, W / 2); b.put('plain', G.rim, 0xb9bec3, x, y - 1, z, r, L / 2, h, W / 2);
+    b.put('plain', G.pitch, 0x3d8f38, x, y - 1, z, r, L / 2, h, W / 2); b.put('plain', G.box, 0xf2f2ee, x, y - 1 + h * 0.12, z, r, 0.6, 0.15, W * 0.55);
     for (let k = 0; k < 4; k++) { const a = r + Math.PI / 4 + k * Math.PI / 2, mx = x + Math.cos(a) * L * 0.55, mz = z + Math.sin(a) * W * 0.55; b.put('plain', G.cyl(6), 0xcfd3d6, mx, y, mz, 0, 1.4, h + 30, 1.4); b.put('plain', G.box, 0xf6f2d0, mx, y + h + 30, mz, -a, 10, 5, 2); }
     addObst(x, z, L, W, -r, y - 2, y + h); },
-  arena(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.cyl(28), o.col || CONC, x, y - 2, z, 0, o.r, o.h * 0.6, o.r); b.put('shiny', G.dome, o.col || 0xd8dde2, x, y + o.h * 0.6 - 2, z, 0, o.r, o.h * 0.5, o.r); addObst(x, z, o.r * 2, o.r * 2, 0, y - 2, y + o.h); },
+  arena(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.cyl(28), o.col || CONC, x, y - 2, z, 0, o.r, o.h * 0.35, o.r); b.put('shiny', G.cyl(28), 0x6f8fa8, x, y - 2 + o.h * 0.35, z, 0, o.r * 1.01, o.h * 0.25, o.r * 1.01);
+    b.put('plain', G.cyl(28), o.col || CONC, x, y - 2 + o.h * 0.6, z, 0, o.r * 1.04, o.h * 0.08, o.r * 1.04); b.put('shiny', G.ribs, 0x9aa3ab, x, y - 2 + o.h * 0.68, z, 0, o.r, o.h * 0.32, o.r); addObst(x, z, o.r * 2, o.r * 2, 0, y - 2, y + o.h); },
   campus(b, x, y, z, o) { const R = rng(Math.round(x + z)), col = o.stone ? STONE : 0xd6d2c6;
     for (let i = 0; i < 9; i++) { const a = i * 0.7, d = 40 + R() * 80, w = 30 + R() * 30, h = 12 + R() * 16; b.put('win', lmkGeo().box, col, x + Math.cos(a) * d, y - 2, z + Math.sin(a) * d, a, w, h, 18 + R() * 12); }
     LMK_KIND.tower(b, x, y, z, { h: 60, w: 18, d: 18, col }); b.put('plain', lmkGeo().cyl(24), GREEN, x + 60, y - 1.4, z - 50, 0, 45, 1.6, 45); },
@@ -184,18 +194,18 @@ const LMK_KIND = {
   lighthouse(b, x, y, z, o) { const G = lmkGeo(), h = o.h; for (let i = 0; i < 4; i++) b.put('plain', G.cyl(12), i % 2 ? 0xd23a2e : WHITE, x, y - 1 + i * h / 4, z, 0, 3.2 - i * 0.3, h / 4, 3.2 - i * 0.3);
     b.put('shiny', G.cyl(10), 0xfff2b0, x, y + h - 1, z, 0, 2.4, 3, 2.4); b.put('plain', G.cone(10), 0x2e3236, x, y + h + 2, z, 0, 2.8, 2.5, 2.8); },
   observatory(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.cyl(16), CREAM, x, y - 2, z, 0, 12, 18, 12); b.put('shiny', G.dome, 0xc9ced2, x, y + 16, z, 0, 11, 11, 11); },
-  yeshiva(b, x, y, z, o) { const G = lmkGeo(); b.put('win', G.box, CREAM, x, y - 2, z, 0.2, 80, 22, 50); b.put('plain', G.cyl(16), CREAM, x, y + 20, z, 0, 14, 8, 14); b.put('shiny', G.dome, o.dome || GOLD, x, y + 28, z, 0, 14, 12, 14);
+  yeshiva(b, x, y, z, o) { const G = lmkGeo(); b.put('win', G.box, CREAM, x, y - 2, z, 0.2, 80, 22, 50); b.put('plain', G.box, 0xd9cfb4, x, y + 20, z, 0.2, 50, 7, 30); b.put('plain', G.tri, 0x9a8f78, x, y + 27 + 3, z, 0.2, 30, 50, 6, -1.5708);
     b.put('win', G.box, CREAM, x + 60, y - 2, z + 20, 0.2, 40, 30, 30); },
-  synagogue(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.box, STONE, x, y - 2, z, 0, 26, 16, 34); b.put('plain', G.cyl(12), STONE, x, y + 14, z, 0, 8, 5, 8); b.put('shiny', G.dome, 0x8fa8a0, x, y + 19, z, 0, 8, 7, 8); },
+  synagogue(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.box, STONE, x, y - 2, z, 0, 26, 16, 34); b.put('plain', G.box, 0x8a8273, x, y + 4, z, 0, 26.3, 6, 34.3); b.put('plain', G.box, 0xd9cfb0, x, y + 14, z, 0, 14, 5, 22); },
   factory(b, x, y, z, o) { const G = lmkGeo(); b.put('plain', G.box, o.col, x, y - 2, z, 0.1, o.w, o.h, o.d); b.put('plain', G.box, 0x8a8f94, x + o.w * 0.3, y + o.h - 2, z, 0.1, o.w * 0.3, 6, o.d * 0.4);
     for (let i = 0; i < 3; i++) b.put('plain', G.cyl(10), 0xd6d8da, x - o.w * 0.4 + i * 14, y - 2, z + o.d * 0.6, 0, 5, o.h + 14, 5); addObst(x, z, o.w, o.d, -0.1, y - 2, y + o.h); },
   ribbons(b, x, y, z) { const G = lmkGeo(); b.put('plain', G.box, 0x5a5048, x, y - 2, z, 0, 40, 14, 30); for (let i = 0; i < 5; i++) b.put('plain', G.box, [0xd2401e, 0xe2621c, 0xc8301a, 0xe87a22, 0xb02818][i], x, y - 1 + i * 3.4, z, i * 0.12, 54 - i * 3, 2.6, 40 - i * 2); },
   hotels(b, x, y, z, o) { const R = rng(Math.round(x + z * 3)); for (let i = 0; i < o.n; i++) { const d = (i - (o.n - 1) / 2) * 70, hx = x - Math.sin(o.rot) * d * -1, hz = z + Math.cos(o.rot) * d, h = 50 + R() * 70;
       if (groundAt(hx, hz).water || nearRoad(hx, hz, 22)) continue; LMK_KIND.tower(b, hx, heightAt(hx, hz), hz, { h, w: 22, d: 46, col: [0xf0ede4, 0xe4e8ec, 0xe9e1cf][i % 3], ry: o.rot, top: 'flat' }); } },
-  ferris(b, x, y, z, o) { const G = lmkGeo(), r = o.r; b.put('plain', G.ring, 0xe8e8e8, x, y + r + 6, z, 0, r, r, r * 6); for (let k = 0; k < 8; k++) b.put('plain', G.box, 0xd0d0d0, x, y + r + 6, z, 0, 0.6, r * 2, 0.6, 0, k * 0.3927);
+  ferris(b, x, y, z, o) { const G = lmkGeo(), r = o.r; for (const dz of [-1.2, 1.2]) b.put('plain', G.ring, 0xe8e8e8, x, y + r + 6, z + dz, 0, r, r, 28); for (let k = 0; k < 8; k++) b.put('plain', G.box, 0xd0d0d0, x, y + r + 6, z, 0, 0.9, r * 2, 2.4, 0, k * 0.3927);
     for (const s of [-1, 1]) b.put('plain', G.box, 0xc8302a, x + s * r * 0.35, y, z, 0, 1.2, r + 8, 1.2, 0, s * -0.33);
     for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283; b.put('plain', G.box, [0xd2401e, 0x2a7bd8, 0xd8a62a][k % 3], x + Math.cos(a) * r, y + r + 6 + Math.sin(a) * r - 1.5, z, 0, 2.6, 3, 2.6); }
-    b.put('plain', G.cyl(20), 0x6a8a50, x + 60, y - 1.2, z + 40, 0, 70, 1.6, 50); b.put('plain', G.box, 0x2a7bd8, x + 50, y, z + 30, 0.5, 40, 12, 6, 0, 0.3); },
+  },
   watertower(b, x, y, z, o) { const G = lmkGeo(), h = o.h || 24; b.put('plain', G.cyl(10), o.col || 0xd8d4c8, x, y - 1, z, 0, 3.2, h, 3.2); b.put('plain', G.cyl(16), o.col || 0xd8d4c8, x, y + h - 1, z, 0, 9, 9, 9); b.put('plain', G.cone(16), 0x9aa0a4, x, y + h + 8, z, 0, 9.5, 4, 9.5); addObst(x, z, 18, 18, 0, y, y + h + 12); },
   fortress(b, x, y, z, o) { const G = lmkGeo(), s = o.s || 1, w = 90 * s; for (const [dx, dz, sx, sz] of [[0, -w / 2, w, 6], [0, w / 2, w, 6], [-w / 2, 0, 6, w], [w / 2, 0, 6, w]]) b.put('plain', G.box, STONE, x + dx, y - 2, z + dz, 0, sx, 14, sz);
     for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.put('plain', G.cyl(10), 0xcfc09c, x + dx * w / 2, y - 2, z + dz * w / 2, 0, 7 * s + 3, 19, 7 * s + 3); },

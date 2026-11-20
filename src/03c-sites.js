@@ -8,14 +8,18 @@ let siteLights = null;
 /** Step 1, before buildCities (called from planLandmarks): choose the sites and reserve their ground. */
 function planSites() {
   const nearLmk = (x, z, r) => LMK.list.some(l => Math.hypot(l.x - x, l.z - z) < r + l.r);
+  const mosques = SITES.filter(s => SITE_KINDS[s[0]] === 'mosque').map(s => [lon2x(s[1] / 1e5), lat2z(s[2] / 1e5)]);
+  const byMosque = (x, z) => mosques.some(([mx, mz]) => Math.abs(mx - x) < 45 && Math.abs(mz - z) < 45);       // a mosque model brings its own minaret
   for (const s of SITES) {
     const kind = SITE_KINDS[s[0]], x = lon2x(s[1] / 1e5), z = lat2z(s[2] / 1e5); if (x < X0 || x > X1 || z < Z0 || z > Z1) continue;
     const L = s[4] / 2, W = s[5] / 2, area = s[4] * s[5];
-    if (kind === 'synagogue' && area < 500) continue;              // the large ones stand out; the many small ones look like any building
+    if (kind === 'synagogue' && area < 1500) continue;             // only the very large ones; the many others look like any building
     if (kind === 'ruins' && area < 3000) continue;
     if (kind === 'tower' && s[3] && s[3] < 15) continue;
+    if (kind === 'minaret' && byMosque(x, z)) continue;
+    if (kind === 'stadium' && s[4] < 110) continue;              // OSM calls small sports grounds stadiums too; only real stadiums get the model
     const r = { tall: Math.max(L, W, 14) * 0.75, mosque: 18, church: 18, synagogue: 14, watertower: 10, tower: 8, mast: 4, chimney: 6, lighthouse: 6, tank: Math.max(L * 0.5, 6),
-      stadium: Math.max(L, W, 50) * 0.6, hospital: Math.max(L, W, 40) * 0.6, mall: Math.max(L, W, 35) * 0.6, plant: Math.max(L, W, 40) * 0.6, turbine: 6, fortress: Math.max(L, 22) * 0.6, ruins: Math.max(L, 16) * 0.6, silo: 9 }[kind];
+      stadium: Math.max(L, W, 50) * 0.6, hospital: Math.max(L, W, 40) * 0.6, mall: Math.max(L, W, 35) * 0.6, plant: Math.max(L, W, 40) * 0.6, turbine: 6, fortress: Math.max(L, 22) * 0.6, ruins: Math.max(L, 16) * 0.6, silo: 9, minaret: 5, belltower: 7, lookout: 6 }[kind];
     if (nearLmk(x, z, r + 30)) continue;                           // a hand-made landmark is already there
     if (groundAt(x, z).water || airfieldAt(x, z, r)) continue;
     SITE.list.push({ kind, x, z, h: s[3], L, W, rot: s[6] * DEG, r });
@@ -40,14 +44,15 @@ function siteModels() {
     mosque: rgb([B(24, 10, 22, 0, -1, 0, CREAM), C(7.4, 7.4, 3, 0, 9, 0, CREAM), D(7.6, 0, 12, 0, 0x6f9a86, 1.05), ...minaret(14, -12, 32, WHITE)]),
     mosqueG: rgb([B(24, 10, 22, 0, -1, 0, CREAM), C(7.4, 7.4, 3, 0, 9, 0, CREAM), D(7.6, 0, 12, 0, 0xd9a520, 1.05), ...minaret(14, -12, 32, WHITE)]),
     church: rgb([B(14, 13, 30, 0, -1, 0, STONE), P(15, 7, 30, 0, 12, 0, 0x9a4a32), B(7.5, 28, 7.5, 0, -1, -18, STONE), K(5.6, 9, 0, 27, -18, 0x6a6f74, 4)]),
-    synagogue: rgb([B(22, 13, 18, 0, -1, 0, CREAM), C(6, 6, 2, 0, 12, 0, CREAM), D(6.2, 0, 14, 0, 0xb9a26a)]),
+    synagogue: rgb([B(24, 14, 18, 0, -1, 0, CREAM), B(24.3, 6, 18.3, 0, 4, 0, 0x8d8576), B(13, 5, 10, 0, 13, 0, 0xddd3bb)]),      // a hall with tall windows and a raised roof, no dome
     watertower: rgb([C(2.4, 3, 22, 0, -1, 0, 0xd5d0c2), C(8.5, 7, 8, 0, 20, 0, 0xd8d4c8), K(9, 3.5, 0, 28, 0, 0x9aa0a4)]),
     tower: rgb([C(0.9, 3.6, 1, 0, 0, 0, 0xbcc0c4, 4), C(2.2, 2.2, 0.04, 0, 0.84, 0, 0xd8443a, 8), C(0.5, 0.5, 0.12, 0, 0.9, 0, 0xe8e8e8, 6)]),
     mast: rgb(bands(0.9, 0.5, 7, 0xd8443a, 0xf2f2f0)),
     chimney: rgb([C(3.4, 4.2, 0.72, 0, 0, 0, 0xd9d6cf, 12), ...bands(3.4, 3.0, 4, RED, WHITE).map(([g, c]) => [g.scale(1, 0.28, 1).translate(0, 0.72, 0), c])]),
     lighthouse: rgb([...bands(3.2, 2.4, 5, WHITE, RED), C(2.2, 2.2, 0.1, 0, 1, 0, 0xfff2b0, 10), K(2.6, 0.12, 0, 1.1, 0, DARK)]),
     tank: rgb([C(1, 1, 1, 0, 0, 0, 0xe9e9e4, 18), K(1.02, 0.12, 0, 1, 0, 0xcfd2d4, 18)]),
-    stadium: rgb([[new THREE.CylinderGeometry(1, 0.8, 1, 28, 1, true).translate(0, 0.5, 0), 0xc4c7ca], [new THREE.CylinderGeometry(0.62, 0.62, 0.06, 24).translate(0, 0.03, 0), 0x3f8f3a]]),
+    stadium: (() => { const G = lmkGeo(); return rgb([[G.stands.clone(), 0x5d6976], [G.wall.clone(), 0xd3d6d9], [G.roof.clone(), 0xeeeeea], [G.roof2.clone(), 0xeeeeea], [G.rim.clone(), 0xb9bec3], [G.pitch.clone(), 0x3d8f38], [new THREE.BoxGeometry(0.01, 0.006, 1.1).translate(0, 0.123, 0), 0xf2f2ee],
+      ...[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([a, c]) => [new THREE.CylinderGeometry(0.008, 0.012, 1.7, 5).translate(a * 0.86, 0.85, c * 0.62), 0xd0d4d8])]); })(),
     hospital: rgb([B(1, 15, 1, 0, -1, 0, 0xeceee9), B(0.34, 44, 0.42, -0.22, -1, 0.05, 0xe4e7e3), B(0.26, 36, 0.3, 0.2, -1, -0.18, 0xe8ebe6), C(0.11, 0.11, 0.5, 0.3, 14, 0.25, DARK, 12), B(0.05, 3, 0.05, -0.22, 43, 0.05, RED)]),
     mall: rgb([B(1, 16, 1, 0, -1, 0, 0xd9d4c8), B(1.01, 3.5, 1.01, 0, 10, 0, 0xc8302a), B(0.3, 2, 0.3, 0.2, 15, 0.15, 0x8a8f94)]),
     plant: rgb([B(1, 30, 0.6, 0, -1, -0.15, GREY), B(0.7, 18, 0.35, -0.1, -1, 0.35, 0xa9adb1)]),
@@ -55,6 +60,9 @@ function siteModels() {
     fortress: rgb([B(1, 12, 0.07, 0, -1, -0.47, STONE), B(1, 12, 0.07, 0, -1, 0.47, STONE), B(0.07, 12, 1, -0.47, -1, 0, STONE), B(0.07, 12, 1, 0.47, -1, 0, STONE),
       ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => C(0.09, 0.1, 17, a * 0.47, -1, b * 0.47, 0xcfc09c, 8))]),
     ruins: rgb([B(1, 1.5, 1, 0, -1, 0, 0xd2c39c), B(0.6, 5, 0.05, -0.1, 0, -0.4, 0xc9b88f), B(0.05, 4, 0.5, 0.42, 0, 0.1, 0xc9b88f), ...[0, 1, 2, 3, 4, 5].map(k => C(0.03, 0.03, 7 + (k % 3) * 2, -0.3 + k * 0.12, 0, 0.2, 0xe8dcc0, 6))]),
+    minaret: rgb([C(3.2, 3.6, 4, 0, -1, 0, CREAM), ...minaret(0, 0, 32, WHITE)]),
+    belltower: rgb([B(7, 24, 7, 0, -1, 0, STONE), B(7.6, 1, 7.6, 0, 16, 0, 0xcfc09c), K(5.4, 8, 0, 23, 0, 0x8a4a3a, 4)]),
+    lookout: rgb([C(2.2, 3.0, 13, 0, -1, 0, 0xcdc6b4, 8), B(6.5, 1, 6.5, 0, 12, 0, 0xb9b2a0), B(6.5, 3, 0.4, 0, 13, 3.1, 0xb9b2a0), B(6.5, 3, 0.4, 0, 13, -3.1, 0xb9b2a0), B(7, 0.6, 7, 0, 16, 0, 0x8a8f94)]),
     silo: rgb([C(4.4, 4.4, 1, -5, 0, 0, 0xd9d9d4, 12), C(4.4, 4.4, 1, 5, 0, 0, 0xd9d9d4, 12), C(4.4, 4.4, 1, 0, 0, 8, 0xd2d2cc, 12), B(4, 1.15, 4, 0, 0, -4, 0xb9bcc0)])
   };
 }
@@ -78,9 +86,12 @@ function buildSites() {
       case 'mast': { sy = clamp(s.h || 60, 15, 300); obst = [3, 3, y + sy]; light = y + sy + 1; break; }
       case 'chimney': { sy = clamp(s.h || 80, 20, 300); obst = [8, 8, y + sy]; light = y + sy + 1; break; }
       case 'lighthouse': { sy = clamp(s.h || 24, 10, 70); obst = [7, 7, y + sy]; break; }
+      case 'minaret': { const k = clamp((s.h || 32) / 32, 0.7, 1.6); sx = sz = clamp(k, 0.8, 1.2); sy = k; obst = [6, 6, y + 32 * k]; break; }
+      case 'belltower': { const k = clamp((s.h || 26) / 26, 0.7, 1.6); sx = sz = clamp(k, 0.8, 1.2); sy = k; obst = [8, 8, y + 31 * k]; break; }
+      case 'lookout': { const k = clamp((s.h || 15) / 16, 0.6, 2); sx = sz = 1; sy = k; ry = R() * 6.3; obst = [7, 7, y + 17 * k]; break; }
       case 'silo': { sy = clamp(s.h || 30, 10, 70); obst = [20, 20, y + sy]; break; }
       case 'tank': { const rr = clamp(s.L * 0.5, 4, 45); sx = sz = rr; sy = clamp(s.h || 14, 6, 30); yy = y - 0.5; break; }
-      case 'stadium': { sx = clamp(s.L * 0.55, 30, 120); sz = clamp(s.W * 0.55, 22, 95); sy = 22; yy = y - 2; obst = [sx * 2, sz * 2, y + 20]; break; }
+      case 'stadium': {     /* half way between the lowest point and the centre, so the pitch is never under the ground */ sx = clamp(s.L * 0.55, 30, 120); sz = clamp(s.W * 0.55, 22, 95); sy = 22; yy = (y + heightAt(s.x, s.z)) / 2 - 1; obst = [sx * 2, sz * 2, y + 20]; break; }
       case 'hospital': case 'mall': case 'plant': case 'fortress': case 'ruins': {
         sx = clamp(s.L, s.kind === 'ruins' ? 16 : 25, s.kind === 'plant' ? 220 : 140); sz = clamp(s.W, s.kind === 'ruins' ? 12 : 20, s.kind === 'plant' ? 160 : 110); if (s.kind !== 'ruins') obst = [sx, sz, y + (s.kind === 'hospital' ? 44 : s.kind === 'plant' ? 30 : 16)]; break; }
       case 'turbine': { ry = R() * 6.3; obst = [6, 6, y + 120]; light = y + 84; break; }

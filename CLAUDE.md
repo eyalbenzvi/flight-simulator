@@ -115,6 +115,15 @@ per size, zoom and language. On the enlarged map, two fingers or the mouse wheel
 the mouse pans, double-click zooms in, and a tap (not a drag, see `mapWasDragged`) opens and closes it. Names in the sky (`buildLabels`) show within 2.5–10 km of game world by town size, nearest first, and a farther
 name that would overlap a nearer one on screen is hidden.
 
+## Sites: what each model may look like
+
+- No domes on Jewish buildings: a dome reads as a mosque. Synagogues and yeshivas are halls (raised roof, tall windows); only the 39
+  largest OSM synagogues (1,500 m²+) are shown. Domes belong to mosques, churches that have them, the observatory.
+- OSM `man_made=tower` is split by `tower:type`: minaret (dropped beside a mosque model, which has its own), bell tower, lookout
+  (observation, watch, defensive), radio tower. Only `leisure=stadium` of 110 m and more get the stadium model (OSM tags small grounds too).
+- Stadium geometry is shared (`LG.stands`, `wall`, `roof`, `roof2`, `rim`, `pitch` in `lmkGeo`): open canopies only (a closed cylinder
+  segment draws a pie-slice cap over the pitch), and the pitch is thick enough to stay above uneven ground.
+
 ## Land cover and buildings from OpenStreetMap
 
 - `LCR` / `lcAt(x, z)`: one land-cover class per 60 m cell (`LCN`: forest, orchard, vineyard, fields, parks, scrub, sand, rock, water,

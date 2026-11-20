@@ -59,7 +59,7 @@ def bc_of(b, t):
     return 'other'
 
 # ---- identifiable sites ----
-SK = ['tall', 'mosque', 'church', 'synagogue', 'watertower', 'tower', 'mast', 'chimney', 'lighthouse', 'tank', 'stadium', 'hospital', 'mall', 'plant', 'turbine', 'fortress', 'ruins', 'silo']
+SK = ['tall', 'mosque', 'church', 'synagogue', 'watertower', 'tower', 'mast', 'chimney', 'lighthouse', 'tank', 'stadium', 'hospital', 'mall', 'plant', 'turbine', 'fortress', 'ruins', 'silo', 'minaret', 'belltower', 'lookout']
 def num(v):
     try: return float(str(v).split(';')[0].replace('m', '').strip())
     except Exception: return None
@@ -78,7 +78,13 @@ def site_of(t, is_area):
     if mm == 'lighthouse': return 'lighthouse'
     if mm == 'chimney': return 'chimney'
     if mm == 'mast': return 'mast'
-    if mm == 'tower': return 'tower'
+    if mm == 'tower':                       # OSM towers are many things: a minaret, a church bell tower, a lookout or guard post, a radio mast
+        tt = t.get('tower:type', '')
+        if tt == 'minaret': return 'minaret'
+        if tt == 'bell_tower': return 'belltower'
+        if tt in ('observation', 'watchtower', 'defensive', 'climbing'): return 'lookout'
+        if tt == 'cooling': return 'chimney'
+        return 'tower'
     if mm == 'silo': return 'silo'
     if mm == 'storage_tank' and is_area: return 'tank'
     if le == 'stadium' and is_area: return 'stadium'
