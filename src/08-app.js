@@ -95,6 +95,7 @@ function action(code) {
 }
 const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyF', 'KeyB', 'KeyP', 'KeyC', 'KeyT', 'KeyR', 'KeyM', 'KeyH', 'KeyL', 'KeyX', 'KeyZ', 'KeyV', 'KeyI', 'KeyO', 'KeyY', 'KeyN', 'KeyK', 'Space', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Equal', 'Minus', 'PageUp', 'PageDown']);
 window.addEventListener('keydown', e => {
+  if (PICK.open) return;                 // typing in the place search, not flying
   if (!S.started) { if (e.code === 'Enter' && !$('fly').disabled) $('fly').click(); return; }
   const dg = /^Digit(\d)$/.exec(e.code); if (dg && !S.paused && !PH.on) { S.thr = +dg[1] / 9; e.preventDefault(); return; }      // 0 = idle … 9 = full power
   if (HANDLED.has(e.code)) { e.preventDefault(); if (!keys[e.code] && !e.repeat) action(e.code); keys[e.code] = true; }
@@ -134,7 +135,7 @@ function gridButtons(el, items) {
     On the start screen a choice is only selected (FLY starts from it); in the pause menu a start point or aircraft starts at once. */
 let START = null, TAKEOFFS = [], AIRSTARTS = [];
 const OPEN = { start: new Set(['pl', 'lv']), pause: new Set(['pl', 'lv']) };
-const startName = (d, short) => d.type === 'ground' && short ? apName(AIRPORTS[d.rw.ap]) : tr(d.label.replace('Approach: ', ''));
+const startName = (d, short) => d.pick ? L(d.name[0], d.name[1]) : d.type === 'ground' && short ? apName(AIRPORTS[d.rw.ap]) : tr(d.label.replace('Approach: ', ''));
 function renderPanel(where) {
   const body = $(where === 'start' ? 'sBody' : 'mBody'), touchUI = document.body.classList.contains('touch'), cur = where === 'start' ? (START || FREE[0]) : S.lastSpawn, rer = () => renderPanel(where);
   const go = d => where === 'start' ? () => { START = d; spawn(d); $('toast').style.display = 'none'; rer(); } : () => { closeMenu(); spawn(d); };
@@ -144,7 +145,7 @@ function renderPanel(where) {
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
     ['lv', L('Difficulty', 'רמת קושי'), L(LV[S.mode][0], LV[S.mode][1]), el => levelButtons(el, rer)],
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
-    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) ? startName(cur) : '', starts(AIRSTARTS)],
+    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
@@ -154,6 +155,12 @@ function renderPanel(where) {
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
     const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
+}
+/** First in the air starts: any place in Israel, chosen on a map or by name (src/07b-picker.js). Shows the place chosen last. */
+function pickButton(el, where, cur, rer) {
+  const b = document.createElement('button'), on = !!(cur && cur.pick); b.className = 'pickB' + (on ? ' on' : ''); b.textContent = '📍 ' + (on ? startName(cur) : L('Choose any place on the map', 'בחירת מקום כלשהו על המפה'));
+  const s = document.createElement('small'); s.textContent = on ? L('Tap to choose another place', 'הקישו כדי לבחור מקום אחר') : L('Search a town or site, or tap the map', 'חיפוש ישוב או אתר, או הקשה על המפה'); b.appendChild(s);
+  b.addEventListener('click', () => openPicker(where, rer)); el.insertBefore(b, el.firstChild);
 }
 /** Settings as rows of option buttons: every choice visible, the current one marked (aria-pressed). */
 function settingsRows(el, where, rer) {
@@ -281,7 +288,7 @@ document.addEventListener('visibilitychange', () => { if (S.started && document.
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
-  buildMenu(); buildFun(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
+  buildMenu(); buildFun(); setupPicker(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   spawn(FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap();
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';

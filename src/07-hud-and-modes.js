@@ -310,7 +310,7 @@ function drawSys() {
 }
 
 // ---------- 12b. Settings, smoke trails, air traffic, weather, photo mode ----------
-const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; } catch (e) { /* no storage: defaults */ } return d; })();
+const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick; } catch (e) { /* no storage: defaults */ } return d; })();
 function persist() { try { localStorage.setItem('ifs-save', JSON.stringify(SAVE)); } catch (e) { /* storage unavailable: settings last for this session only */ } }
 Object.assign(S, { names: true, noEngine: false, gamHold: null, turb: 0, lt: 5, flash: 0, legend: true });
 const WXN = ['Clear', 'Dust haze', 'Storm'], PH = { on: false, az: 0.7, el: 0.22, d: 1.5, drag: null }, AIT = [];

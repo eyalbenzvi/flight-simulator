@@ -49,6 +49,7 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 | `src/05-aircraft.js` | 9 | `PLANES` specs, the four 3D models, flight deck, `selectPlane` |
 | `src/06-flight.js` | 10, 11 | State `S`, `spawn`, flight-law helpers (`pitchFor`, `rollFor`), `updateControls` (autoland, autopilot, assisted and manual laws), `physics`, `updateSystems`, cameras |
 | `src/07-hud-and-modes.js` | 12, 12b, 12d, 12e | PFD, minimap, hints, key guide; settings (`SAVE`), smoke trails, air traffic, weather, photo mode; Easy mode (`arcadeStep`), translations (`L`, `TRD`, `applyLang`); obstacle hash, explosion, level buttons |
+| `src/07b-picker.js` | 12f | Start anywhere: the place picker (`openPicker`), a full-screen map (tap to choose, drag, pinch or wheel to zoom) with a search over `LOCS` and `PICK_SITES` (Hebrew or English, spelling variants folded by `pickNorm` / `pickSkel`, `PICK_ALIAS`); height and direction rows; starts a little before the place, facing it. The last choice is kept in `SAVE.pick` |
 | `src/08-app.js` | 13–17 | Audio (`Snd`), input (`action`), menus, main `loop`, boot (`init`) |
 
 ## Canvas textures survive a GPU reset
@@ -61,7 +62,7 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 ## Menus and interface standard
 
 - The start screen and the pause menu are built by one function, `renderPanel('start' | 'pause')` (in `src/08-app.js`): the same folded
-  sections in the same order (aircraft, difficulty, take off from a runway `TAKEOFFS`, start in the air `AIRSTARTS`, practise a landing
+  sections in the same order (aircraft, difficulty, take off from a runway `TAKEOFFS`, start in the air `AIRSTARTS` (led by "choose any place on the map", `pickButton`), practise a landing
   `LANDTESTS`, settings, keyboard keys on desktop), each heading showing its current choice, and a sticky footer with a summary and
   the one main button (FLY / CONTINUE). Aircraft and difficulty are open by default; open/closed state is kept in `OPEN`.
 - On the start screen a choice only selects (`START`); in the pause menu a start point or aircraft starts at once.
@@ -110,8 +111,17 @@ Re-run these numbers after changing `PLANES` (the analytical part is a few lines
 
 ## Roads
 
+`tools/osm2roads.py` joins OSM ways into chains, keeps one line per divided road (only the parts of a one-way chain that run beside an
+opposite, parallel kept line of the same class are dropped, so a road never loses a stretch) and flags it `dual`. Loose chain ends are
+joined to the network: straight to a road within 60 m, or along tertiary roads and links up to 3 km. `OSM_ROADS` entries are
+[class, route number, delta-encoded lon/lat, dual].
+
 `roadLines()` (in `src/03-world.js`) turns `OSM_ROADS` into world polylines with points at most 45 m apart: class 2 motorway and trunk,
-1 primary, 0 secondary, half-widths in `ROAD_HW` (real widths, 7 / 10 / 22 m, since buildings are full size). The hand-drawn `ROADS` (spline through waypoints, with a gentle random wander) only fill in
+1 primary, 0 secondary. Half-widths come from `roadHW(cls, dual)` (real widths: single carriageway 7 / 10 / 12 m, divided 16 / 18 / 22 m, since
+buildings are full size). Divided roads use the two-carriageway texture with a median, single ones the two-lane texture (many trunk roads
+are single). `roadRank` lifts bigger roads slightly so smaller ones pass under them, and `roadJunctions` lays a plain asphalt patch on every
+level crossing and T-junction (on the through road, at its width) so markings do not cross; a road crossing a motorway is a bridge, no patch.
+The hand-drawn `ROADS` (spline through waypoints, with a gentle random wander) only fill in
 the stretches the OSM extract does not cover (Jordan, Lebanon, Sinai). Route shields go on numbered roads longer than about 7 km.
 
 ## Airfields

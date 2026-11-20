@@ -230,8 +230,11 @@ const ROADS = [
 const ROADNUM = ['2', '4', '1', '6', '90', '90', '40', '25', '31', '60', '65', '4', '85', '75', '', '34', '98', '', '', '40', '99', '', '20', '5', '443', '38', '71'], ROADLBL = [];
 ROADS.push([2, [[34.795, 32.115], [34.797, 32.07], [34.79, 32.03], [34.79, 31.99]]], [2, [[34.82, 32.11], [34.90, 32.115], [35.0, 32.11], [35.17, 32.105]]], [1, [[34.98, 31.87], [35.08, 31.88], [35.17, 31.85], [35.205, 31.83]]],
   [1, [[34.99, 31.84], [34.99, 31.75], [34.97, 31.66], [34.90, 31.60]]], [1, [[35.29, 32.61], [35.40, 32.56], [35.50, 32.50]]]);
-/** Half-widths in metres: secondary, primary, motorway and trunk (both carriageways and the median). */
-const ROAD_HW = { 0: 3.5, 1: 5, 2: 11 };       // real widths: 7 m, 10 m, 22 m (the buildings beside them are full size too)
+/** Half-width in metres (real widths, since the buildings beside them are full size too). A single carriageway: secondary 7 m,
+    primary 10 m, trunk 12 m. A divided road (both carriageways and the median, `dual` from tools/osm2roads.py): 16, 18 and 22 m. */
+const roadHW = (cls, dual) => dual ? [8, 9, 11][cls] : [3.5, 5, 6][cls];
+/** Drawing order where roads cross: a bigger road lies a little higher, so the smaller one passes under it instead of flickering. */
+const roadRank = (cls, dual) => dual ? (cls === 2 ? 4 : cls + 2) : cls;
 let ROADLINES = null;
 /** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
     (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
@@ -248,13 +251,13 @@ function railLines() {
 }
 function roadLines() {
   if (ROADLINES) return ROADLINES; ROADLINES = []; const cov = new Set(), C = 800, ck = (x, z) => Math.floor(x / C) * 100003 + Math.floor(z / C);
-  for (const [cls, ref, e] of OSM_ROADS) { const D = []; let lo = e[0], la = e[1], px = 0, pz = 0;
+  for (const [cls, ref, e, dual] of OSM_ROADS) { const D = []; let lo = e[0], la = e[1], px = 0, pz = 0;
     for (let i = 0; i < e.length; i += 2) { if (i) { lo += e[i]; la += e[i + 1]; } const x = lon2x(lo / 1e4), z = lat2z(la / 1e4);
       if (D.length) { const n = Math.ceil(Math.hypot(x - px, z - pz) / 45); for (let k = 1; k < n; k++) D.push([px + (x - px) * k / n, pz + (z - pz) * k / n]); }
       D.push([x, z]); px = x; pz = z; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) cov.add(ck(x + a * C, z + b * C)); }
-    ROADLINES.push({ cls, ref, D }); }
+    ROADLINES.push({ cls, ref, D, dual: !!dual }); }
   // a hand-drawn road keeps only the stretches the OSM extract does not cover (it reaches a few km past the borders)
-  ROADS.forEach(([cls, pts], i) => { let run = []; const flush = () => { if (run.length > 12) ROADLINES.push({ cls, ref: ROADNUM[i] || '', D: run }); run = []; };
+  ROADS.forEach(([cls, pts], i) => { let run = []; const flush = () => { if (run.length > 12) ROADLINES.push({ cls, ref: ROADNUM[i] || '', D: run, dual: cls === 2 }); run = []; };
     for (const p of splinePath(pts, 45)) { if (cov.has(ck(p[0], p[1]))) flush(); else run.push(p); } flush(); });
   return ROADLINES;
 }
@@ -265,7 +268,7 @@ function roadIndex() {
   ROADIDX = new Map(); const add = (D, hw) => { for (let i = 0; i + 1 < D.length; i++) { const [ax, az] = D[i], [bx, bz] = D[i + 1], seg = [ax, az, bx, bz, hw], e = hw + RIDX_PAD;
     for (let cz = Math.floor((Math.min(az, bz) - e) / RIDX_C); cz <= Math.floor((Math.max(az, bz) + e) / RIDX_C); cz++) for (let cx = Math.floor((Math.min(ax, bx) - e) / RIDX_C); cx <= Math.floor((Math.max(ax, bx) + e) / RIDX_C); cx++) {
       const k = cx * 100003 + cz; let a = ROADIDX.get(k); if (!a) ROADIDX.set(k, a = []); a.push(seg); } } };
-  for (const r of roadLines()) add(r.D, ROAD_HW[r.cls]);
+  for (const r of roadLines()) add(r.D, roadHW(r.cls, r.dual));
   for (const D of railLines()) add(D, 5);
 }
 /** True when a round object of radius r (metres) centred at x, z would touch a road or railway, with a 4 m verge. */
@@ -275,8 +278,43 @@ function nearRoad(x, z, r) {
     if (Math.hypot(x - ax - dx * t, z - az - dz * t) < hw + r + 4) return true; }
   return false;
 }
+/** Level junctions and crossings get a plain asphalt patch on top, so the edge lines and dashes of the roads that meet do not run
+    across each other. A patch sits on the wider road's centreline with that road's asphalt half-width, so it never spills past it.
+    A road that crosses a motorway (not ending on it) is taken to be a bridge or an underpass: no patch, the smaller road passes under. */
+let ROAD_JUNCTIONS = [];
+function roadJunctions() {
+  const L = roadLines(), C = 120, grid = new Map(), J = [];
+  L.forEach((r, li) => { r.hw = roadHW(r.cls, r.dual); r.mw = r.cls === 2 && r.dual; const D = r.D;
+    for (let i = 0; i + 1 < D.length; i++) { const [ax, az] = D[i], [bx, bz] = D[i + 1];
+      for (let cz = Math.floor(Math.min(az, bz) / C); cz <= Math.floor(Math.max(az, bz) / C); cz++) for (let cx = Math.floor(Math.min(ax, bx) / C); cx <= Math.floor(Math.max(ax, bx) / C); cx++) {
+        const k = cx * 100003 + cz; let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(li, i); } } });
+  const add = (x, z, r, m) => J.push([x, z, r, m]);
+  // crossings: two segments of different roads that intersect
+  for (const a of grid.values()) for (let p = 0; p < a.length; p += 2) for (let q = p + 2; q < a.length; q += 2) {
+    const la = a[p], lb = a[q]; if (la === lb) continue; const A = L[la], B = L[lb]; if (A.mw || B.mw) continue;
+    const [ax, az] = A.D[a[p + 1]], [bx, bz] = A.D[a[p + 1] + 1], [cx, cz] = B.D[a[q + 1]], [dx, dz] = B.D[a[q + 1] + 1];
+    const e1x = bx - ax, e1z = bz - az, e2x = dx - cx, e2z = dz - cz, den = e1x * e2z - e1z * e2x; if (Math.abs(den) < 1e-6) continue;
+    const t = ((cx - ax) * e2z - (cz - az) * e2x) / den, u = ((cx - ax) * e1z - (cz - az) * e1x) / den; if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+    const W = A.hw >= B.hw ? A : B; add(ax + e1x * t, az + e1z * t, W.hw, Math.max(A.hw, B.hw) === Math.min(A.hw, B.hw) ? 0 : 1); }
+  // T-junctions: the end of a road that lies on another road
+  L.forEach((r, li) => { for (const [ex, ez] of [r.D[0], r.D[r.D.length - 1]]) { const a = grid.get(Math.floor(ex / C) * 100003 + Math.floor(ez / C)); if (!a) continue; let best = null;
+    for (let p = 0; p < a.length; p += 2) { if (a[p] === li) continue; const B = L[a[p]], [ax, az] = B.D[a[p + 1]], [bx, bz] = B.D[a[p + 1] + 1], dx = bx - ax, dz = bz - az;
+      const t = clamp(((ex - ax) * dx + (ez - az) * dz) / (dx * dx + dz * dz || 1), 0, 1), px = ax + dx * t, pz = az + dz * t, d = Math.hypot(ex - px, ez - pz);
+      if (d < B.hw + 2 && (!best || d < best.d)) best = { d, px, pz, B }; }
+    if (best) add(best.px, best.pz, best.B.hw, 1); } });      // on the through road, at its width (a wider road ending on it would leave a round bulb)
+  // one patch per junction (crossings found in several cells, both ends of a short link), off water and airfields
+  const P = [], N = [], I = [], seen = new Map(), S2 = 20;
+  for (const [x, z, hw] of J) { const k = Math.round(x / S2) * 100003 + Math.round(z / S2); if (seen.has(k)) continue; seen.set(k, 1);
+    if (groundAt(x, z).water || airfieldAt(x, z, hw)) continue; ROAD_JUNCTIONS.push([x, z, hw]); const r = hw * 0.78, n = 14, c0 = P.length / 3, hc = triHeight(x, z);
+    P.push(x, hc + 3.3, z); N.push(0, 1, 0);
+    for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, vx = x + Math.cos(a) * r, vz = z + Math.sin(a) * r; P.push(vx, Math.max(triHeight(vx, vz), hc) + 3.3, vz); N.push(0, 1, 0); }
+    for (let i = 0; i < n; i++) I.push(c0, c0 + 1 + (i + 1) % n, c0 + 1 + i); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex(I);
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: 0x6a6c6f, side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m);
+  return ROAD_JUNCTIONS.length;
+}
 function buildRoads() {
-  // surfaces: a two-lane road, and a dual carriageway with a planted median for the numbered motorways
+  // surfaces: a two-lane road, and a dual carriageway with a planted median for divided roads
   const mk = (w, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = 64; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
   // asphalt grey, light shoulders, white edge lines and dashes. The strips face up (their winding used to face down, so the lit
   // side was the underside and roads, rails and rivers looked black)
@@ -284,18 +322,18 @@ function buildRoads() {
     2: mk(64, x => { x.fillStyle = '#958f7e'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#66686b'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#6f8a52'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#c9c9c4'; x.fillRect(28, 0, 1, 64); x.fillRect(35, 0, 1, 64);
       x.fillStyle = '#eeece4'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
   const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
-  for (const { cls, D } of roadLines()) {
+  for (const [li, { cls, D, dual }] of roadLines().entries()) {
     // where a road meets water or an airfield it is cut (runways are full size on the compressed map, so they cover real roads);
     // a short stub left beside an airfield is dropped rather than drawn as a road that ends in a field
-    const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, ROAD_HW[cls]) ? 2 : 0), runs = [];
+    const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, roadHW(cls, dual)) ? 2 : 0), runs = [];
     for (let i = 0; i < D.length;) { if (cut[i]) { i++; continue; } let j = i; while (j + 1 < D.length && !cut[j + 1]) j++;
       const nearField = (i > 0 && cut[i - 1] === 2) || (j + 1 < D.length && cut[j + 1] === 2); if (j - i >= (nearField ? 10 : 2)) runs.push([i, j]); i = j + 1; }
-    const hw = ROAD_HW[cls], { P, U, N, I } = G[cls === 2 ? 2 : 1];
+    const hw = roadHW(cls, dual), lift = 2.2 + roadRank(cls, dual) * 0.2 + (cls === 2 && dual ? (li % 4) * 0.04 : 0), { P, U, N, I } = G[dual ? 2 : 1];
     for (const [i0, i1] of runs) { let prev = -1, path = [], len = 0;
       for (let i = i0; i <= i1; i++) {
         const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl;
         const k = P.length / 3; len += i > i0 ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
-        for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + 2.2 + cls * 0.2, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
+        for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + lift, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
         if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k);
         prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
       }
@@ -303,6 +341,7 @@ function buildRoads() {
   }
   for (const cls of [1, 2]) { const { P, U, N, I } = G[cls], g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I);
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex[cls], side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); }
+  roadJunctions();
   // route-number shields for the map: the middle of each numbered road longer than about 7 km, one per number within 36 km
   for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
     if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
