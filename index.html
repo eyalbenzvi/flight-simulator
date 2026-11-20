@@ -84,7 +84,18 @@ body.touch #pfd{bottom:calc(150px + var(--sb));width:min(70vw,320px)}
 body.touch #toast{top:calc(min(20vh,160px) + 22px + var(--st));font-size:14px;padding:6px 12px}
 body.touch #alert{top:36%}
 body.touch #mission{white-space:normal;line-height:1.25}
-@media (orientation:landscape){ body.touch #pfd{bottom:calc(8px + var(--sb));width:min(32vw,290px)} body.touch #ctx{bottom:calc(16px + var(--sb));right:calc(72px + var(--sr));flex-direction:row;align-items:flex-end} body.touch #map{height:min(34vh,160px)} }
+@media (orientation:landscape){ body.touch #pfd{bottom:calc(8px + var(--sb));width:min(32vw,290px)} body.touch #ctx{bottom:calc(16px + var(--sb));right:calc(72px + var(--sr));flex-direction:row;align-items:flex-end} body.touch #map{height:min(34vh,160px)}
+  body.touch #map.big{right:calc(72px + var(--sr))} }
+/* --- small screens: keep the HUD pieces apart (the map canvas is 160:294, so its width is 0.545 × its height) --- */
+@media (orientation:portrait){
+  body.touch #top{max-width:calc(100vw - 2 * (min(20vh,160px) * 0.545 + 24px) - var(--sl) - var(--sr))}
+  body.touch.nopfd #hint{margin-top:56px} body.touch:not(.nopfd) #hint{margin-top:90px}
+  /* the enlarged map opens centred, below the level button and between the action buttons and the stick */
+  body.touch #map.big{right:auto;left:50%;transform:translateX(-50%);top:calc(104px + var(--st));height:min(56vh,480px,calc((100vw - 172px) * 1.8375),calc(100vh - 290px))}
+}
+@media (max-width:340px){ body.touch #strip{font-size:12px;padding:4px 7px} body.touch #strip b{font-size:13.5px} body.touch #strip span{margin:0 4px 0 1px} }
+@media (max-width:900px){ body:not(.touch) #pfd{left:auto;right:calc(10px + var(--sr));transform:none} }
+#hud:has(#map.big) #hint,#hud:has(#map.big) #place{display:none}
 /* --- overlays --- */
 .ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:calc(16px + var(--st)) 14px calc(16px + var(--sb));overflow:auto;touch-action:pan-y;
   background:radial-gradient(ellipse at 50% 30%,rgba(20,44,70,.86),rgba(4,7,11,.95))}

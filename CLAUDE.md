@@ -48,6 +48,19 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - Autoland (`S.land`) and the autopilot (`S.ap.on`) always run on the physics path, also from Easy mode.
 - Pitch input is positive = nose up in every mode; `SAVE.inv` flips it for people who want a real stick.
 
+## Keeping roads clear
+
+`nearRoad(x, z, r)` (in `src/03-world.js`) is true when a round object of radius `r` would touch a road or railway. It uses an index of the
+same centreline splines the road and rail meshes are built from (`ROADS`, `RAIL_LINES`). Every placement routine (city buildings, houses, trees,
+ponds, pivot circles, Nahalal, minarets, heliostats, turbines) checks it, so call it for anything new that is placed on the ground.
+
+## Minimap and names
+
+`drawMap` sizes the map canvas to its on-screen size × devicePixelRatio and sizes text in CSS pixels. `mapLabels` places labels by priority
+(waypoints, cities of 100k+, motorway numbers, smaller towns, regional road numbers) and drops any that would overlap; the layout is cached
+per size, zoom and language. Names in the sky (`buildLabels`) show within 2.5–10 km of game world by town size, nearest first, and a farther
+name that would overlap a nearer one on screen is hidden.
+
 ## Settlement data
 
 One pixel of `BLD_PNG` is one 60 m game block (240 m of real ground): R height in metres, G style in bits 0–2

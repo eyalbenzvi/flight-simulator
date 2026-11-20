@@ -77,26 +77,72 @@ function drawPFD() {
   { const lbl = S.land ? 'AUTOLAND' : S.ap.on ? 'AP  ALT  HDG  SPD' : S.arc ? 'EASY' : S.assist ? 'ASSISTED' : 'MANUAL'; P.fillStyle = S.land ? '#ff66ee' : '#40f58c'; P.textAlign = 'center'; P.font = '12px ' + FONT; P.fillText(lbl, cx, 12); }
   if (S.stallWarn) { P.fillStyle = '#ff5252'; P.font = 'bold 22px ' + FONT; P.textAlign = 'center'; P.fillText('STALL', cx, ay + 44); }
 }
+/** The minimap. The canvas is sized to its on-screen size × devicePixelRatio, so it stays sharp when enlarged on a phone.
+    Text is sized in CSS pixels, and labels are placed by priority without overlapping (see mapLabels). */
+const MAPW = 160, MAPH = 294;
+const WP_NAMES = { TLV: ['Tel Aviv', 'תל אביב'], JRS: ['Jerusalem', 'ירושלים'], HFA: ['Haifa', 'חיפה'], 'DEAD SEA': ['Dead Sea', 'ים המלח'], MASADA: ['Masada', 'מצדה'], EILAT: ['Eilat', 'אילת'] };
+let mapLbl = null;
+function sizeMap() {
+  const ch = mapC.clientHeight; if (!ch) return 0;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3), h = Math.round(ch * dpr), w = Math.round(h * MAPW / MAPH);
+  if (mapC.height !== h || mapC.width !== w) { mapC.width = w; mapC.height = h; mapLbl = null; }
+  return ch / MAPH;                                   // CSS pixels per map unit
+}
+/** Label layout: one list of text boxes in map units, cached until the map size, its zoom or the language changes.
+    Order of priority: waypoints, big cities, motorway numbers, smaller towns, regional road numbers. A label that would touch
+    another one, or leave the map, is tried on the other sides of its dot and then dropped. */
+function mapLabels(W, H, u, big) {
+  const key = big + ':' + u.toFixed(4) + ':' + SAVE.lang; if (mapLbl && mapLbl.key === key) return mapLbl.items;
+  const items = [], boxes = [], px = v => v / u, fits = b => b.x0 >= 0 && b.y0 >= 0 && b.x1 <= W && b.y1 <= H && !boxes.some(o => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+  const mx = x => (x - X0) / (X1 - X0) * W, mz = z => (z - Z0) / (Z1 - Z0) * H, gap = px(big ? 3 : 2);
+  boxes.push({ x0: W - px(18), y0: 0, x1: W, y1: px(18) });                                       // the N marker
+  for (const ap of AIRPORTS) { const x = mx(ap.x), y = mz(ap.z); boxes.push({ x0: x - 2, y0: y - 2, x1: x + 2, y1: y + 2 }); }
+  const font = (size, bold) => (bold ? 'bold ' : '') + px(size).toFixed(3) + 'px ' + FONT;
+  const label = (text, x, y, size, bold, kind, sides) => {
+    M.font = font(size, bold); const tw = M.measureText(text).width, th = px(size), o = px(kind === 'loc' ? 4 : 6);
+    const dot = kind === 'loc' ? { x0: x - px(2.5), y0: y - px(2.5), x1: x + px(2.5), y1: y + px(2.5) } : null; if (dot && !fits(dot)) return false;
+    for (const s of sides) { const lx = s === 'r' ? x + o : s === 'l' ? x - o - tw : x - tw / 2, ly = s === 'u' ? y - o - th / 2 : s === 'd' ? y + o + th / 2 : y;
+      const b = { x0: lx - gap, y0: ly - th / 2 - gap, x1: lx + tw + gap, y1: ly + th / 2 + gap }; if (!fits(b)) continue;
+      boxes.push(b); if (dot) boxes.push(dot); items.push({ text, x: lx, y: ly, font: M.font, kind, dx: x, dy: y }); return true; }
+    return false;
+  };
+  const shield = r => { const x = mx(r.x), y = mz(r.z), size = 9, th = px(size + 4); M.font = font(size, true); const w = M.measureText(r.n).width + px(5);
+    const b = { x0: x - w / 2 - gap, y0: y - th / 2 - gap, x1: x + w / 2 + gap, y1: y + th / 2 + gap }; if (!fits(b)) return; boxes.push(b); items.push({ text: r.n, x, y, w, h: th, font: M.font, kind: 'road', cls: r.cls }); };
+  // waypoints: short codes on the small map, place names on the big one
+  const wps = WAYPOINTS.map(([n, lo, la]) => [n, mx(lon2x(lo)), mz(lat2z(la)), lo]);
+  for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : n; label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
+  if (big) {
+    const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14));
+    const locs = LOCS.filter(l => l[4] >= 20).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
+    for (const [t, x, y, pop] of locs) if (pop >= 100 && !near(x, y)) label(t, x, y, 12, true, 'loc', ['r', 'l', 'u', 'd']);
+    for (const r of ROADLBL) if (r.cls === 2) shield(r);
+    for (const [t, x, y, pop] of locs) if (pop < 100 && !near(x, y)) label(t, x, y, 10.5, false, 'loc', ['r', 'l', 'u', 'd']);
+    for (const r of ROADLBL) if (r.cls !== 2) shield(r);
+  }
+  mapLbl = { key, items }; return items;
+}
 function drawMap() {
-  const W = 160, H = 294, mx = x => (x - X0) / (X1 - X0) * W, mz = z => (z - Z0) / (Z1 - Z0) * H;
-  M.setTransform(2, 0, 0, 2, 0, 0); M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
-  M.lineWidth = 1; M.strokeStyle = '#ff66ee';                                           // ILS approach feathers
+  const u = sizeMap(); if (!u) return;
+  const W = MAPW, H = MAPH, k = mapC.height / H, big = mapC.classList.contains('big'), mx = x => (x - X0) / (X1 - X0) * W, mz = z => (z - Z0) / (Z1 - Z0) * H, px = v => v / u;
+  M.setTransform(k, 0, 0, k, 0, 0); M.imageSmoothingQuality = 'high'; M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = big ? 'rgba(0,10,20,.28)' : 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
+  M.lineWidth = px(1.2); M.strokeStyle = '#ff66ee';                                     // ILS approach feathers
   for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * 9000), ey = mz(rw.tz - rw.dz * 9000);
     M.beginPath(); M.moveTo(x, y); M.lineTo(ex, ey); M.stroke(); }
-  M.fillStyle = '#fff'; for (const ap of AIRPORTS) M.fillRect(mx(ap.x) - 2, mz(ap.z) - 2, 4, 4);
-  if (mapC.classList.contains('big')) {            // enlarged map: name the towns
-    M.font = '4.6px ' + FONT; M.textBaseline = 'middle'; M.textAlign = 'left'; M.fillStyle = '#fff'; M.strokeStyle = 'rgba(0,0,0,.75)'; M.lineWidth = 1.1;
-    for (const l of LOCS) if (l[4] >= 35) { const x = mx(lon2x(l[2])) + 2.5, y = mz(lat2z(l[3])), t = L(l[1], l[0]); M.strokeText(t, x, y); M.fillText(t, x, y); }
-    M.font = 'bold 4px ' + FONT; M.textAlign = 'center';          // road-number shields: blue for motorways, green for regional roads
-    for (const r of ROADLBL) { const x = mx(r.x), y = mz(r.z), w = 2.6 + r.n.length * 1.3; M.fillStyle = r.cls === 2 ? '#1d58b4' : '#2f8a45'; M.fillRect(x - w / 2, y - 2.6, w, 5.2); M.fillStyle = '#fff'; M.fillText(r.n, x, y + 0.2); } }
-  M.lineWidth = 1; M.font = '9px ' + FONT; M.textBaseline = 'middle';
-  for (const [n, lo, la] of WAYPOINTS) { const x = mx(lon2x(lo)), y = mz(lat2z(la)); M.fillStyle = '#55d6ff'; M.beginPath(); M.arc(x, y, 2.2, 0, 7); M.fill();
-    M.textAlign = lo < 35 ? 'right' : 'left'; M.fillStyle = '#fff'; M.fillText(n, x + (lo < 35 ? -5 : 5), y); }
-  const px = clamp(mx(S.pos.x), 3, W - 3), py = clamp(mz(S.pos.z), 3, H - 3), h = S.hdg * DEG;
-  M.strokeStyle = '#ffd21f'; M.lineWidth = 1.2; M.beginPath(); M.moveTo(px, py); M.lineTo(px + Math.sin(h) * 34, py - Math.cos(h) * 34); M.stroke();
-  if (S.ap.on) { const b = S.ap.hdg * DEG; M.strokeStyle = '#ff66ee'; M.setLineDash([3, 3]); M.beginPath(); M.moveTo(px, py); M.lineTo(px + Math.sin(b) * 34, py - Math.cos(b) * 34); M.stroke(); M.setLineDash([]); }
-  M.save(); M.translate(px, py); M.rotate(h); M.fillStyle = '#ffd21f'; M.strokeStyle = '#000'; M.beginPath(); M.moveTo(0, -7); M.lineTo(5, 5); M.lineTo(0, 2); M.lineTo(-5, 5); M.closePath(); M.fill(); M.stroke(); M.restore();
-  M.fillStyle = '#fff'; M.textAlign = 'center'; M.font = '10px ' + FONT; M.fillText('N', W - 10, 10);
+  M.fillStyle = '#fff'; for (const ap of AIRPORTS) { const s = Math.max(px(4), 2.5); M.fillRect(mx(ap.x) - s / 2, mz(ap.z) - s / 2, s, s); }
+  M.textBaseline = 'middle'; M.textAlign = 'left'; M.lineJoin = 'round';
+  for (const it of mapLabels(W, H, u, big)) {
+    M.font = it.font;
+    if (it.kind === 'road') { M.fillStyle = it.cls === 2 ? '#1d58b4' : '#2f8a45'; M.fillRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h); M.strokeStyle = 'rgba(255,255,255,.8)'; M.lineWidth = px(0.8); M.strokeRect(it.x - it.w / 2, it.y - it.h / 2, it.w, it.h);
+      M.fillStyle = '#fff'; M.textAlign = 'center'; M.fillText(it.text, it.x, it.y + px(0.5)); M.textAlign = 'left'; continue; }
+    if (it.kind === 'wp') { M.fillStyle = '#55d6ff'; M.strokeStyle = 'rgba(0,0,0,.7)'; M.lineWidth = px(1); M.beginPath(); M.arc(it.dx, it.dy, px(3.5), 0, 7); M.fill(); M.stroke(); }
+    else { M.fillStyle = '#fff'; M.strokeStyle = 'rgba(0,0,0,.7)'; M.lineWidth = px(1); M.beginPath(); M.arc(it.dx, it.dy, px(2), 0, 7); M.fill(); M.stroke(); }
+    M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = px(3); M.strokeText(it.text, it.x, it.y); M.fillStyle = it.kind === 'wp' ? '#fff' : '#f2ede2'; M.fillText(it.text, it.x, it.y);
+  }
+  const px0 = clamp(mx(S.pos.x), 3, W - 3), py0 = clamp(mz(S.pos.z), 3, H - 3), h = S.hdg * DEG, len = Math.max(34, px(40)), a = Math.max(px(9), 5);
+  M.strokeStyle = '#ffd21f'; M.lineWidth = px(1.6); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(h) * len, py0 - Math.cos(h) * len); M.stroke();
+  if (S.ap.on) { const b = S.ap.hdg * DEG; M.strokeStyle = '#ff66ee'; M.setLineDash([px(4), px(4)]); M.beginPath(); M.moveTo(px0, py0); M.lineTo(px0 + Math.sin(b) * len, py0 - Math.cos(b) * len); M.stroke(); M.setLineDash([]); }
+  M.save(); M.translate(px0, py0); M.rotate(h); M.scale(a / 7, a / 7); M.fillStyle = '#ffd21f'; M.strokeStyle = '#000'; M.lineWidth = 1; M.beginPath(); M.moveTo(0, -7); M.lineTo(5, 5); M.lineTo(0, 2); M.lineTo(-5, 5); M.closePath(); M.fill(); M.stroke(); M.restore();
+  M.fillStyle = '#fff'; M.textAlign = 'center'; M.font = 'bold ' + px(12).toFixed(3) + 'px ' + FONT; M.strokeStyle = 'rgba(0,0,0,.8)'; M.lineWidth = px(3); M.strokeText('N', W - px(9), px(9)); M.fillText('N', W - px(9), px(9));
 }
 function hintText() {
   const T = document.body.classList.contains('touch'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓', ft = m => (Math.round(m * FT / 50) * 50).toLocaleString('en') + ' ft';
