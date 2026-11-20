@@ -994,8 +994,8 @@ const ROADS = [
 const ROADNUM = ['2', '4', '1', '6', '90', '90', '40', '25', '31', '60', '65', '4', '85', '75', '', '34', '98', '', '', '40', '99', '', '20', '5', '443', '38', '71'], ROADLBL = [];
 ROADS.push([2, [[34.795, 32.115], [34.797, 32.07], [34.79, 32.03], [34.79, 31.99]]], [2, [[34.82, 32.11], [34.90, 32.115], [35.0, 32.11], [35.17, 32.105]]], [1, [[34.98, 31.87], [35.08, 31.88], [35.17, 31.85], [35.205, 31.83]]],
   [1, [[34.99, 31.84], [34.99, 31.75], [34.97, 31.66], [34.90, 31.60]]], [1, [[35.29, 32.61], [35.40, 32.56], [35.50, 32.50]]]);
-/** Half-widths in game metres: motorway and trunk, primary, secondary (wider than life so they read from the air). */
-const ROAD_HW = { 0: 6, 1: 9, 2: 16 };
+/** Half-widths in metres: secondary, primary, motorway and trunk (both carriageways and the median). */
+const ROAD_HW = { 0: 3.5, 1: 5, 2: 11 };       // real widths: 7 m, 10 m, 22 m (the buildings beside them are full size too)
 let ROADLINES = null;
 /** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
     (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
@@ -1044,8 +1044,8 @@ function buildRoads() {
   const mk = (w, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = 64; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
   // asphalt grey, light shoulders, white edge lines and dashes. The strips face up (their winding used to face down, so the lit
   // side was the underside and roads, rails and rivers looked black)
-  const tex = { 1: mk(32, x => { x.fillStyle = '#a9a290'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#66686c'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#e8e6de'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
-    2: mk(64, x => { x.fillStyle = '#a9a290'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#606266'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#6f8a52'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#c9c9c4'; x.fillRect(28, 0, 1, 64); x.fillRect(35, 0, 1, 64);
+  const tex = { 1: mk(32, x => { x.fillStyle = '#958f7e'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#6c6e71'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#e8e6de'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),
+    2: mk(64, x => { x.fillStyle = '#958f7e'; x.fillRect(0, 0, 64, 64); x.fillStyle = '#66686b'; x.fillRect(4, 0, 24, 64); x.fillRect(36, 0, 24, 64); x.fillStyle = '#6f8a52'; x.fillRect(29, 0, 6, 64); x.fillStyle = '#c9c9c4'; x.fillRect(28, 0, 1, 64); x.fillRect(35, 0, 1, 64);
       x.fillStyle = '#eeece4'; for (const u of [5, 26, 37, 58]) x.fillRect(u, 0, 1, 64); x.fillRect(15, 0, 1, 30); x.fillRect(48, 0, 1, 30); }) };
   const G = { 1: { P: [], U: [], N: [], I: [] }, 2: { P: [], U: [], N: [], I: [] } };
   for (const { cls, D } of roadLines()) {

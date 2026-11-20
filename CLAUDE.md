@@ -92,7 +92,7 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 ## Roads
 
 `roadLines()` (in `src/03-world.js`) turns `OSM_ROADS` into world polylines with points at most 45 m apart: class 2 motorway and trunk,
-1 primary, 0 secondary, half-widths in `ROAD_HW`. The hand-drawn `ROADS` (spline through waypoints, with a gentle random wander) only fill in
+1 primary, 0 secondary, half-widths in `ROAD_HW` (real widths, 7 / 10 / 22 m, since buildings are full size). The hand-drawn `ROADS` (spline through waypoints, with a gentle random wander) only fill in
 the stretches the OSM extract does not cover (Jordan, Lebanon, Sinai). Route shields go on numbered roads longer than about 7 km.
 
 ## Airfields
