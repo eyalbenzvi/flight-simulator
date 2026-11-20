@@ -46,19 +46,21 @@ function readAttitude() { eul.setFromQuaternion(S.q, 'YXZ'); S.pitch = eul.x; S.
 
 // --- flight-law helpers shared by Easy mode, the autopilot and autoland ---
 /** Stick needed to fly a flight-path angle: pitch = path + 1 g angle of attack + a bounded correction (which also keeps it below the stall). */
-function pitchFor(gT) {
-  const cb = Math.cos(S.bank), a1 = Math.min(S.a1g / Math.max(cb, 0.2), ASTALL - 0.05), da = clamp(3.0 * (gT - S.gam) / Math.max(cb, 0.3), -0.12, Math.max(0, Math.min(0.24, ASTALL - 0.035 - a1)));
+function pitchFor(gT, unload) {            // unload: too slow, so the nose may come all the way down to the flight path (a fighter on full afterburner otherwise hangs on its thrust)
+  const cb = Math.cos(S.bank), a1 = Math.min(S.a1g / Math.max(cb, 0.2), ASTALL - 0.05), da = clamp(3.0 * (gT - S.gam) / Math.max(cb, 0.3), unload ? -(a1 + 0.05) : -0.12, Math.max(0, Math.min(0.24, ASTALL - 0.035 - a1)));
   S.gErr = gT - S.gam; return clamp((S.gam + (a1 + da) * cb - S.pitch) * 1.28 / PL.pitch / Math.max(Math.abs(cb), 0.35), -1, 1);   // loop gain is the same for every aircraft
 }
 const rollFor = bT => { const e = bT - S.bank; return clamp(Math.atan2(Math.sin(e), Math.cos(e)) * 4.4 / PL.roll, -1, 1); };                          // stick needed to hold a bank angle
 const gammaForAlt = alt => Math.asin(clamp(clamp((alt - S.pos.y) * 0.12, -10, 10) / Math.max(S.V, 50), -0.25, 0.25));
 /** Runway under the wheels, in the direction the aircraft is facing. */
 function runwayUnder() {
+  let best = null;                           // where runways cross or lie side by side: the one the aircraft is lined up with, nearest its centreline
   for (const rw of RUNWAYS) {
     const rx = S.pos.x - rw.x, rz = S.pos.z - rw.z, al = rx * rw.dx + rz * rw.dz, cr = rx * -rw.dz + rz * rw.dx;
-    if (Math.abs(al) < rw.len / 2 + 60 && Math.abs(cr) < rw.w) { const rev = Math.abs(wrap180(rw.hdg - S.hdg)) > 90; return { rw, hdg: rev ? (rw.hdg + 180) % 360 : rw.hdg, cross: rev ? -cr : cr, fromThr: (rev ? -al : al) + rw.len / 2 }; }
+    if (Math.abs(al) < rw.len / 2 + 60 && Math.abs(cr) < rw.w) { const rev = Math.abs(wrap180(rw.hdg - S.hdg)) > 90, off = Math.abs(wrap180((rev ? rw.hdg + 180 : rw.hdg) - S.hdg)), sc = Math.abs(cr) + (off > 30 ? 1000 : 0);
+      if (!best || sc < best.sc) best = { sc, rw, hdg: rev ? (rw.hdg + 180) % 360 : rw.hdg, cross: rev ? -cr : cr, fromThr: (rev ? -al : al) + rw.len / 2 }; }
   }
-  return null;
+  return best;
 }
 const centreline = () => { const ru = runwayUnder(); return ru ? clamp(wrap180(ru.hdg - S.hdg) * 0.1 - ru.cross * 0.03, -1, 1) : 0; };
 
@@ -72,17 +74,18 @@ function updateControls(dt) {
   // throttle (reverse thrust becomes available on the ground below idle)
   const tu = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, td = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;
   if (tu) S.thr += 0.45 * dt; if (td) S.thr -= 0.45 * dt;
-  S.thr = clamp(S.thr, S.onGround ? -0.35 : 0, 1);
+  S.thr = clamp(S.thr, S.onGround && !PL.tricks ? -0.35 : 0, 1);          // reverse thrust: the two transports only
   S.brake = !!(keys.KeyB || keys.Space); S.prot = ''; S.boost = 0;
   const air = !S.onGround, climb = ud;                          // Easy mode: "up" means climb
   let pt = ud, rt = lr;
   if (S.trick) {
     // ---- AEROBATICS: one automatic aileron roll or loop ----
     const tr = S.trick; tr.t += dt; S.boost = 1; yt = 0;
-    if (tr.type === 'roll') { rt = tr.dir; pt = 0.04; tr.ang += Math.abs(S.rr) * dt; }
+    const rollOut = tr.type === 'roll' && tr.ang > Math.PI * 2 - 1.2;          // the last part of a roll: back to wings level, and only then done
+    if (tr.type === 'roll') { rt = rollOut ? rollFor(0) : tr.dir; pt = 0.04; tr.ang += Math.abs(S.rr) * dt; }
     else { rt = 0; pt = clamp((ASTALL * 0.78 - S.alpha) * 8, 0.12, 1); tr.ang += Math.max(S.pr, 0) * dt; }
-    const bad = tr.t > 20 || S.ra < 40;
-    if (bad || tr.ang > Math.PI * 2 - (tr.type === 'roll' ? 0.5 : 0.25)) { toast(bad ? 'Manoeuvre cut short' : tr.type === 'roll' ? 'Aileron roll!' : 'Loop!'); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
+    const bad = tr.t > 45 || S.ra < 40;
+    if (bad || (tr.type === 'roll' ? rollOut && Math.abs(S.bank) < 0.1 && Math.abs(S.rr) < 0.35 : tr.ang > Math.PI * 2 - 0.25)) { S.gamHold = tr.type === 'roll' ? 0 : null; toast(bad ? 'Manoeuvre cut short' : tr.type === 'roll' ? 'Aileron roll!' : 'Loop!'); if (!bad) Snd.chime(820, 0.25); S.trick = null; S.holdAlt = null; }
   } else if (S.land) {
     // ---- AUTOLAND: follow the ILS, configure, flare, brake to a stop ----
     const rw = S.land; yt = 0;
@@ -91,8 +94,12 @@ function updateControls(dt) {
       const il = ilsOf(rw, true);
       if (S.landPh === 'rollout') { S.thr = 0; rt = rollFor(0); pt = clamp((0.03 - S.pitch) * 1.6 / PL.pitch, -1, 1); }     // a bounce after touching down: hold it level and let it settle
       // capture the final approach once lined up inside the approach cone; if blown off it, fly back round to the approach
-      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < il.along * 0.15 + 200 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
-      if (S.landPh === 'final' && il && il.along > 300 && il.along < 1600 && il.gs > 7 && S.ra > 60) { S.landPh = 'intercept'; S.landJoin = false; }     // far too high close in: go round and come back down the approach
+      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < il.along * 0.1 + 80 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
+      // close in and far too high, too fast, or not over the runway: go round and come back down the approach (and give up after a few tries rather than circle for ever)
+      if (S.landPh === 'final' && il && S.ra > 25 && ((il.along > 300 && il.along < 1600 && (il.gs > 7 || (il.along < 500 && S.V > 1.7 * S.vs0))) || (il.along > 60 && il.along < 350 && Math.abs(il.cross) > Math.max(rw.w * 0.5, 18)))) {
+        S.landPh = 'intercept'; S.landJoin = false; S.landTries = (S.landTries || 0) + 1;
+        if (S.landTries > 3) { S.land = null; S.landTries = 0; toast(L('Could not line up with the runway. Fly farther out and press Land again', 'לא הצלחנו להתיישר מול המסלול. מתרחקים ולוחצים שוב על נחיתה'), 6); return; }
+        toast(L('Going around for another approach', 'הולכים סביב לגישה נוספת'), 4); }
       if (S.landPh === 'final' && !il) { S.landPh = 'intercept'; S.landJoin = false; }
       if (S.landPh === 'rollout') {}
       else if (S.landPh !== 'final') {
@@ -100,7 +107,7 @@ function updateControls(dt) {
         //      corrected by up to 60° in proportion to the distance off the centreline (the gain keeps the turn within 25° of bank).
         //      From beside or behind it: first fly to an entry point far out on the extended centreline. Height follows the glide path. ----
         const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
-        const R = S.V * S.V / (G * Math.tan(25 * DEG)) * hsAt(S.ra), entry = Math.max(gsDist(420), 2.5 * R + 1500);       // R: turn radius at 25° of bank, on the map
+        const R = S.V * S.V / (G * Math.tan(25 * DEG)) * hsAt(S.ra), entry = Math.max(gsDist(420), 4 * R + 1500);       // R: turn radius at 25° of bank, on the map
         if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) S.landJoin = false;
         else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 800 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
         let hT;
@@ -109,15 +116,17 @@ function updateControls(dt) {
         const bl = !S.landJoin && S.ra < 250 ? 10 : 25; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -bl, bl) * DEG);     // low down, climb before turning hard
         const gsAlt = rw.elev + GEAR_H + gsHeight((S.landJoin ? Math.max(along, 0) : entry) + 300);
         const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12 * hsAt(S.ra), S.pos.z + S.vel.z * 12 * hsAt(S.ra)).h) + (S.landJoin ? clamp(along * 0.06, 40, 180) : 180);     // terrain clearance, less close to the runway
-        pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, 0.09));
-        const dT = realDist(rx, rz), vT = S.vs0 * (dT < 25000 ? 1.4 : 1.6); S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 18;
+        const low = terr - S.pos.y > 20;                       // below the safe height: full power and a steep climb come before speed and turning
+        pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, low ? 0.2 : 0.09));
+        const dT = realDist(rx, rz), vT = S.vs0 * (dT < 25000 ? 1.4 : 1.6); S.thr = low ? 1 : clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = !low && S.V > vT + 18; if (low) S.boost = 1;
         if (dT < 15000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
       } else {
         const hR = S.pos.y - GEAR_H - rw.elev; if (hR < 700) S.gear = true;     // configure by height on the glide path
         S.flapIdx = Math.max(S.flapIdx, fi(hR < 230 ? 3 : hR < 400 ? 2 : hR < 650 ? 1 : 0));
-        const hT = rw.hdg - clamp(il.cross * 0.03, -35, 35); rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -25, 25) * DEG);
-        const vT = S.vs0 * 1.3; S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT + 12;
-        if (S.ra < 12) { S.thr = 0; S.brake = false; rt = rollFor(0); pt = clamp((0.07 - S.pitch) * 1.6 / PL.pitch, -1, 1); } else pt = pitchFor(clamp(-3 - il.gs * 1.5, -9, 1) * DEG);     // up to 9° down when high (valley airfields)
+        // localizer: the intercept angle grows with the distance off the centreline; the gain allows for the map scale (ground speed across the map is hsAt of the airspeed)
+        const hs = hsAt(S.ra), xr = (S.vel.x * -rw.dz + S.vel.z * rw.dx) * hs, hT = rw.hdg - clamp(il.cross * 0.07 / hs + xr * 0.25, -30, 30); rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -25, 25) * DEG);
+        const vT = S.vs0 * 1.3; S.thr = clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = S.V > vT * 1.1;
+        if (S.ra < 12) { if (S.ra < 6) S.thr = 0; S.brake = false; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -4, 4) * DEG); pt = pitchFor(-Math.max(0.6, S.ra * 0.25) / Math.max(S.V, 40)); } else pt = pitchFor     /* flare on the flight path: sink 3 m/s at 12 m easing to 0.6 */(clamp(-3 - il.gs * 1.5, -9, 1) * DEG);     // up to 9° down when high (valley airfields)
       }
     }
   } else if (S.ap.on) {
@@ -126,6 +135,7 @@ function updateControls(dt) {
     else {
       S.ap.hdg = (S.ap.hdg + lr * 14 * dt + 360) % 360; S.ap.alt += climb * 25 * dt;
       rt = rollFor(clamp(wrap180(S.ap.hdg - S.hdg) * 1.2, -25, 25) * DEG); pt = pitchFor(gammaForAlt(S.ap.alt)); yt = 0;
+      if (tu || td) S.ap.spd = clamp(S.ap.spd + (tu ? 5 : -5) * dt, S.vs0 * 1.3, PL.vmo * (PL.sonic ? 1.4 : 1));       // the power keys move the speed the autopilot holds
       S.thr = clamp(S.thr + ((S.ap.spd - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1);       // autothrottle
     }
   } else if (S.assist && air) {
@@ -147,23 +157,24 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Low-altitude protection', 'הגנת גובה נמוך');
+        if (gReq > 4 * DEG) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
     }
     const vmin = S.vs0 * 1.2;                                                    // stall protection: lower the nose, add power
     if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
-    pt = pitchFor(gT);
+    pt = pitchFor(gT, S.V < vmin && S.ra > 20);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
     pt = 0; S.holdAlt = null;
     if (Math.abs(lr) < 0.1 && Math.abs(yt) < 0.1 && S.V > 3) rt = centreline();
     if (S.thr > 0.5 && S.V > S.vs0 * 1.12) pt = clamp((PL.rot * DEG - S.pitch) * 1.28 / PL.pitch, 0, 0.6);
     if (S.thr > 0.3) S.landed = false;
-    if (S.landed && S.thr < 0.1 && S.V > 1) S.brake = true;
+    if (S.thr < 0.1 && (S.landed ? S.V > 1 : S.thr < 0.05 && S.V > 8)) S.brake = true;          // after landing, and when a take-off is abandoned (power back to idle)
   } else if (air) {
     // ---- EXPERT in the air: the stick commands pitch and roll rate directly, but letting go holds the flight path
     //      (so turns and speed changes do not drop the nose), small banks level themselves, and pull fades near the stall ----
-    if (Math.abs(ud) > 0.05) { S.gamHold = null; pt = ud * 0.85; if (pt > 0) pt *= clamp((ASTALL - 0.015 - S.alpha) * 9, 0, 1); }
+    if (Math.abs(ud) > 0.05) { S.gamHold = null; pt = ud * 0.85; if (pt > 0) pt *= clamp((ASTALL - 0.015 - S.alpha) * 9, 0, 1);
+      if (!PL.tricks) pt *= pt > 0 ? clamp((30 * DEG - S.pitch) / (8 * DEG), 0, 1) : clamp((S.pitch + 20 * DEG) / (8 * DEG), 0, 1); }       // the airliner and the business jet stay within 30° nose up and 20° nose down
     else { if (S.gamHold === null) S.gamHold = S.gam; if (!S.stalled) pt = pitchFor(S.gamHold); }
     const free = !!PL.tricks, steep = Math.abs(S.bank) > 1.2;
     if (steep && Math.abs(ud) <= 0.05) pt = 0;                              // path hold only makes sense the right way up
@@ -192,18 +203,18 @@ function physics(dt) {
   if (alpha > ASTALL) CL = CLmax * Math.max(0.3, 1 - (alpha - ASTALL) * 3.2);
   CL = Math.max(CL, -1) * (1 - 0.25 * spoil);
   const CD = CD0 + KIND * CL * CL + (PL.fixedGear ? 0 : 0.02) * S.gearPos + 0.0015 * S.flapDeg + 0.06 * spoil + Math.max(0, eas - PL.vmo) * 0.0008 + waveDrag(mach) + (alpha > ASTALL ? (alpha - ASTALL) * 1.5 : 0);
-  const L = qd * SW * CL, D = qd * SW * CD;
+  const Lf = qd * SW * CL, Df = qd * SW * CD;          // not L and D: L is the translation function, and shadowing it broke the hard-landing message
   S.stalled = !S.onGround && alpha > ASTALL; S.stallWarn = !S.onGround && S.airTime > 1 && alpha > ASTALL - 0.045;
   S.vs0 = Math.sqrt(2 * MASS * G / (rho * SW * CLmax));
   S.a1g = clamp((MASS * G / Math.max(qd * SW, 1) - CL0 - flapCL) / CLA, -0.05, ASTALL - 0.035); S.gam = V > 5 ? Math.asin(clamp(S.vel.y / V, -1, 1)) : 0;
   F.set(0, -MASS * G, 0);
-  if (V > 0.5) { vdir.copy(S.vel).multiplyScalar(1 / V); F.addScaledVector(vdir, -D); ldir.crossVectors(right, vdir).normalize(); F.addScaledVector(ldir, L); F.addScaledVector(right, -qd * SW * 1.2 * beta); }
+  if (V > 0.5) { vdir.copy(S.vel).multiplyScalar(1 / V); F.addScaledVector(vdir, -Df); ldir.crossVectors(right, vdir).normalize(); F.addScaledVector(ldir, Lf); F.addScaledVector(right, -qd * SW * 1.2 * beta); }
   // --- thrust: engines spool, thrust lapses with speed and altitude ---
   { const sp = PL.spool || 0.4; S.n1 += clamp((S.noEngine ? 0 : S.thr >= 0 ? Math.max(S.thr, S.boost) : S.thr) - S.n1, -sp * dt, sp * dt); }     // engines take seconds to spool
   if (S.turb > 0 && !S.onGround) { const tb = S.turb * MASS; F.x += (Math.random() - 0.5) * tb * 5; F.y += (Math.random() - 0.5) * tb * 9; F.z += (Math.random() - 0.5) * tb * 5; S.rr += (Math.random() - 0.5) * S.turb * 0.05; S.pr += (Math.random() - 0.5) * S.turb * 0.015; }   // storm turbulence
   let T = S.n1 * TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V) * (S.trick && S.trick.type === 'loop' ? 1.6 : 1);
   if (S.n1 < 0 && u < 1) T = 0;
-  F.addScaledVector(fwd, T); S.nLoad = L / (MASS * G);
+  F.addScaledVector(fwd, T); S.nLoad = Lf / (MASS * G);
   // --- rotation: rate command scaled by control authority ---
   eul.setFromQuaternion(S.q, 'YXZ'); const theta = eul.x, phi = -eul.z;
   const auth = clamp((V - 0.35 * PL.vs) / (0.75 * PL.vs), 0, 1);
@@ -212,13 +223,15 @@ function physics(dt) {
     prT -= (1 - clamp((V - 0.28 * PL.vs) / (0.55 * PL.vs), 0, 1)) * 0.28;                                                   // nose drops when slow
     if (S.stalled) { prT = -0.3 + ctl.pitch * 0.08; rrT = rrT * 0.4 + Math.sin(TNOW * 2.3) * 0.15; }
     else if (PL.nmax && prT > 0) {                                                // load-factor limit: no pull beyond the structural g
-      const aN = (PL.nmax * MASS * G / Math.max(qd * SW, 1) - CL0 - flapCL) / CLA; if (S.alpha > aN - 0.02) prT = Math.min(prT, Math.max(0, (aN - S.alpha) * 6)); }
+      const aN = (PL.nmax * MASS * G / Math.max(qd * SW, 1) - CL0 - flapCL) / CLA; if (S.alpha > aN - 0.02) prT = Math.min(prT, Math.max(0, (aN - S.alpha) * 6));
+      prT = Math.min(prT, Math.max(0, (PL.nmax - S.nLoad) * G / Math.max(V, 40) * 2.5)); }          // and on the load itself: the angle of attack is filtered and lags a hard pull
+    else if (prT < 0 && !S.stalled) prT = Math.max(prT, Math.min(0, ((PL.tricks ? (PL.key === 'stunt' ? -6 : -3) : -1) - S.nLoad) * G / Math.max(V, 40) * 2.5));      // negative g limit
     const om = clamp(S.nLoad, 0, 2.5) * G * Math.sin(phi) / Math.max(V, 40);     // coordinated turn: bank pulls the nose round
     prT += om * Math.sin(phi) * Math.cos(theta); yrT += om * Math.cos(phi) * Math.cos(theta) + beta * 0.9 * auth;
     rrT += ctl.yaw * 0.12 * auth;
   } else {
     yrT = (ctl.yaw + ctl.roll) * 0.45 * clamp(V / 12, 0, 1) * (1 - 0.65 * clamp(V / 80, 0, 1));   // nosewheel steering
-    rrT = 0; if (L < MASS * G * 0.9 && ctl.pitch <= 0.05) prT -= 0.12;
+    rrT = 0; if (Lf < MASS * G * 0.9 && ctl.pitch <= 0.05) prT -= 0.12;
   }
   const kk = Math.min(1, 4 * dt); S.pr += (prT - S.pr) * kk; S.rr += (rrT - S.rr) * kk; S.yr += (yrT - S.yr) * kk;
   S.q.multiply(dq.setFromAxisAngle(XA, S.pr * dt)).multiply(dq.setFromAxisAngle(ZA, -S.rr * dt)).multiply(dq.setFromAxisAngle(YA, -S.yr * dt)).normalize();
@@ -235,10 +248,13 @@ function physics(dt) {
     const vs = S.vel.y;
     if (g.water) return crash('The aircraft hit the water.');
     if (!S.onGround && S.airTime > 1.5) {
-      if (S.gearPos < 0.9) return crash('Touched down with the landing gear up.');
-      if (vs < (S.assist || S.land ? -9.5 : -7)) return crash(L('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.', 'פגיעה בקרקע במהירות ירידה של ' + Math.round(-vs * 196.85) + ' רגל לדקה'));
-      if (!g.field && V > 45) return crash('Flew into terrain.');
+      // the reason given is the first that applies, most violent first; limits: autoland 9.5 m/s, Medium 7.5, Expert 5.5 (jets) or 6.5
+      const sinkMax = S.land ? 9.5 : S.assist ? 7.5 : PL.tricks ? 6.5 : 5.5;
+      if (vs < -sinkMax) return crash(L('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.', 'פגיעה בקרקע במהירות ירידה של ' + Math.round(-vs * 196.85) + ' רגל לדקה'));
+      if (V > 2 * S.vs0) return crash(g.field ? 'Touched down far too fast.' : 'Flew into terrain.');
+      if (!g.field && V > Math.max(45, 1.3 * S.vs0)) return crash('Flew into terrain.');
       if (Math.abs(phi) > 0.26 || theta < -0.1) return crash('Wing or nose struck the ground.');
+      if (S.gearPos < 0.9) return crash('Touched down with the landing gear up.');
       S.landed = true; S.shake = clamp(-vs * 0.12, 0.1, 0.8); toast(landingScore(vs), 5);
     }
     if (!g.field && V > 55) return crash('Left the airfield at speed.');
@@ -266,11 +282,17 @@ function updateSystems(dt) {
     if (!S.onGround) {
       if (PL.fixedGear) S.gear = true;
       else if (S.gear && S.vel.y > 2 && S.ra > 40 && (V > 92 * K || S.ra > 350)) S.gear = false;
-      else if (!S.gear && ((S.ra < 300 && V < 92 * K && S.vel.y < 0.5) || (S.ra < 120 && S.vel.y < -0.5 && AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R + 5000)))) S.gear = true;
+      else if (!S.gear && ((S.ra < 300 && V < 92 * K && S.vel.y < 0.5) || (S.ra < 150 && S.vel.y < 1 && V < 130 * K && AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R + 5000)))) S.gear = true;
       if (S.gear && !PL.fixedGear && !S.toClimb && S.airTime > 8 && S.vel.y < 1) S.flapIdx = Math.max(S.flapIdx, fi(V < 82 * K ? 3 : V < 90 * K ? 2 : V < 100 * K ? 1 : 0));
       else if (!S.gear) { if (V > 105 * K) S.flapIdx = 0; else if (V < 98 * K && S.flapIdx < 1) S.flapIdx = fi(1); }
     } else if (V < 30 * K && !S.landed) S.flapIdx = fi(1);
   }
+  // the edge of the map: a warning 5 km (real) inside it; beyond it Easy and Medium turn back by themselves, Expert is only told
+  { const m = Math.min(S.pos.x - X0, X1 - S.pos.x, S.pos.z - Z0, Z1 - S.pos.z);
+    if (m < 1250 && !S.onGround && !S.crashed && TNOW > (S.edgeT || 0)) { S.edgeT = TNOW + 10; toast(m < 0 && S.assist ? L('The map ends here: turning back towards Israel', 'כאן נגמרת המפה: פונים חזרה לישראל') : L('The edge of the map is near: turn back', 'קצה המפה קרוב: כדאי לפנות חזרה'), 5); }
+    if (m >= 0) S.edgeDir = 0;
+    if (m < 0 && S.assist && !S.onGround && !S.land) { const hT = Math.atan2((X0 + X1) / 2 - S.pos.x, -((Z0 + Z1) / 2 - S.pos.z)) / DEG, e = wrap180(hT - S.hdg);
+      if (Math.abs(e) > 4) { const sg = Math.abs(e) > 120 && S.edgeDir ? S.edgeDir : Math.sign(e) || 1, a = sg * 9 * DEG * dt; S.edgeDir = sg;          /* heading straight out, either way round is as good: keep to one */ if (S.arc && !S.ap.on) A.psi += a; else { S.q.premultiply(dq.setFromAxisAngle(YA, -a)); S.vel.applyAxisAngle(YA, -a); if (S.ap.on) S.ap.hdg = (S.hdg + 360) % 360; } } } }
   if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
 }
 

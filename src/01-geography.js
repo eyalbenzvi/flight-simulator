@@ -116,7 +116,7 @@ function waterLevel(lon, lat, h) {
 function dirOf(hdg) { const r = hdg * DEG; return { x: Math.sin(r), z: -Math.cos(r) }; }
 const AIRPORTS = [
   { code: 'LLBG', name: 'Ben Gurion', lon: 34.885, lat: 32.005, R: 2150, term: [400, 0], big: true },
-  { code: 'LLHA', name: 'Haifa', lon: 35.043, lat: 32.81, R: 1450, term: [-350, 0] },
+  { code: 'LLHA', setElev: 8,       /* the real field is by the bay at 8 m; the formula terrain has the Carmel's flank here, which put the runway 135 m above the water just before it */ name: 'Haifa', lon: 35.043, lat: 32.81, R: 1450, term: [-350, 0] },
   { code: 'LLER', name: 'Eilat Ramon', lon: 35.005, lat: 29.72, R: 1850, term: [-420, 0] },
   { code: 'LLIB', name: 'Rosh Pina', lon: 35.572, lat: 32.985, R: 1000, term: [-260, 0] },
   { code: 'LLMZ', name: 'Masada (Bar Yehuda)', lon: 35.392, lat: 31.328, R: 1000, term: [-260, 0] },
@@ -153,7 +153,7 @@ const WAYPOINTS = [['TLV', 34.78, 32.075], ['JRS', 35.21, 31.78], ['HFA', 35.0, 
 // ---------- 4. Terrain grid ----------
 const HGT = new Float32Array((NX + 1) * (NZ + 1));
 function buildHeights() {
-  for (const ap of AIRPORTS) { ap.x = lon2x(ap.lon); ap.z = lat2z(ap.lat); { const e0 = Math.round(rawHeight(ap.lon, ap.lat)); ap.elev = e0 > -5 ? Math.max(6, e0) : e0; } }
+  for (const ap of AIRPORTS) { ap.x = lon2x(ap.lon); ap.z = lat2z(ap.lat); { const e0 = ap.setElev !== undefined ? ap.setElev : Math.round(rawHeight(ap.lon, ap.lat)); ap.elev = e0 > -5 ? Math.max(6, e0) : e0; } }
   for (const rw of RUNWAYS) {
     const ap = AIRPORTS[rw.ap], d = dirOf(rw.hdg);
     rw.x = ap.x + rw.off[0]; rw.z = ap.z + rw.off[1]; rw.elev = ap.elev; rw.dx = d.x; rw.dz = d.z;

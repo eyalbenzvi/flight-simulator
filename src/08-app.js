@@ -49,11 +49,11 @@ const Snd = { ctx: null, muted: false,
 // ---------- 14. Input ----------
 function startTrick(type) {
   if (S.arc && !S.land && !S.ap.on) {      // Easy mode: every aircraft can roll and loop
-    if (S.trick || S.onGround) return; if (S.ra < 40) return toast(L('Climb a little higher first', 'קודם מטפסים קצת')); S.trick = { type, t: 0, ang: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 }; return; }
+    if (S.trick || S.onGround) return; if (S.ra < (type === 'loop' ? 120 : 40)) return toast(L('Climb a little higher first', 'קודם מטפסים קצת')); A.gam = Math.max(A.gam, 0); S.trick = { type, t: 0, ang: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 }; return; }
   if (!PL.tricks) return toast(L('The ' + PL.name.toLowerCase() + ' is not built for aerobatics. Try the fighter or the aerobatic plane', tr(PL.name) + ' לא בנוי לפעלולים. נסו את מטוס הקרב או את מטוס הפעלולים'), 4);
   if (S.trick || S.land || S.crashed) return;
-  if (S.onGround || S.ra < (type === 'loop' ? 450 : 150)) return toast(L('Climb higher first', 'קודם מטפסים גבוה יותר'));
-  if (type === 'loop' && S.V < S.vs0 * 1.7) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
+  if (S.onGround || S.ra < (type === 'loop' ? Math.max(450, S.V * S.V / (G * 2.5)) : 150)) return toast(       /* a fast loop is a big one: it needs the height */L('Climb higher first', 'קודם מטפסים גבוה יותר'));
+  if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
 function action(code) {
@@ -79,7 +79,7 @@ function action(code) {
     else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
     else { const t = landTarget();
       if (!t || !t.inRange) toast(L('No airport within 40 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 40 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
-      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
+      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.landTries = 0; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
   if (code === 'KeyG' && PL.fixedGear) return toast(L('This aircraft has fixed landing gear', 'למטוס הזה גלגלים קבועים'));
