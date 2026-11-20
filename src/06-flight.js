@@ -15,9 +15,9 @@ let toastT = 0; function toast(msg, dur) { const t = document.getElementById('to
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
 function trimFor(V, alt, gamma, flapDeg, gear) {
-  const rho = 1.225 * Math.exp(-alt / 8500), qd = 0.5 * rho * V * V, CL = MASS * G * Math.cos(gamma) / (qd * SW);
+  const rho = isa(alt).rho, qd = 0.5 * rho * V * V, CL = MASS * G * Math.cos(gamma) / (qd * SW);
   const CD = CD0 + KIND * CL * CL + (gear && !PL.fixedGear ? 0.02 : 0) + 0.0015 * flapDeg, T = qd * SW * CD + MASS * G * Math.sin(gamma);
-  return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
+  return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
   if (!def.keep) S.lastSpawn = def; S.crashed = false; $('crash').style.display = 'none';
@@ -38,7 +38,7 @@ function spawn(def) {
     S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = 0; S.boost = 0; if (S.noEngine) S.thr = S.n1 = 0;
-  S.vs0 = Math.sqrt(2 * MASS * G / (1.225 * Math.exp(-Math.max(S.pos.y, -500) / 8500) * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
+  S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
   A.sync = true; toast(tr(def.label));
 }
 
@@ -174,18 +174,24 @@ function updateControls(dt) {
   ctl.pitch += clamp(pt - ctl.pitch, -k, k); ctl.roll += clamp(rt - ctl.roll, -k, k); ctl.yaw += clamp(yt - ctl.yaw, -k, k);
 }
 
+/** Compressibility: past the drag-rise Mach a subsonic jet meets a steep wall; a supersonic type a transonic hump that eases past Mach 1.2. */
+function waveDrag(M) {
+  const mc = PL.mcr || 0.8; if (M <= mc) return 0;
+  if (!PL.sonic) return 2.4 * (M - mc) * (M - mc) + 0.4 * Math.max(0, M - mc - 0.08) ** 2 * 10;
+  return 0.032 * Math.min(1, (M - mc) / 0.15) * (M > 1.2 ? 1.2 / M : 1);
+}
 function physics(dt) {
   fwd.set(0, 0, -1).applyQuaternion(S.q); up.set(0, 1, 0).applyQuaternion(S.q); right.set(1, 0, 0).applyQuaternion(S.q);
   const V = S.vel.length(), u = S.vel.dot(fwd), w = S.vel.dot(up), sd = S.vel.dot(right);
   let alpha = 0, beta = 0; if (V > 3) { alpha = Math.atan2(-w, Math.max(u, 0.1)); beta = Math.atan2(sd, Math.max(u, 0.1)); }
   S.alpha += (alpha - S.alpha) * Math.min(1, 6 * dt);
-  const rho = 1.225 * Math.exp(-Math.max(S.pos.y, -500) / 8500), qd = 0.5 * rho * V * V;
+  const atm = isa(S.pos.y), rho = atm.rho, qd = 0.5 * rho * V * V, mach = V / atm.a, eas = V * Math.sqrt(rho / 1.225); S.mach = mach;
   const flapCL = 0.03 * S.flapDeg, spoil = (S.brake && !S.onGround) ? 1 : 0;
   // --- aerodynamics: lift curve with stall break, parabolic drag polar ---
   let CL = CL0 + CLA * alpha + flapCL; const CLmax = CL0 + CLA * ASTALL + flapCL;
   if (alpha > ASTALL) CL = CLmax * Math.max(0.3, 1 - (alpha - ASTALL) * 3.2);
   CL = Math.max(CL, -1) * (1 - 0.25 * spoil);
-  const CD = CD0 + KIND * CL * CL + (PL.fixedGear ? 0 : 0.02) * S.gearPos + 0.0015 * S.flapDeg + 0.06 * spoil + Math.max(0, V - PL.vmo) * 0.0008 + (alpha > ASTALL ? (alpha - ASTALL) * 1.5 : 0);
+  const CD = CD0 + KIND * CL * CL + (PL.fixedGear ? 0 : 0.02) * S.gearPos + 0.0015 * S.flapDeg + 0.06 * spoil + Math.max(0, eas - PL.vmo) * 0.0008 + waveDrag(mach) + (alpha > ASTALL ? (alpha - ASTALL) * 1.5 : 0);
   const L = qd * SW * CL, D = qd * SW * CD;
   S.stalled = !S.onGround && alpha > ASTALL; S.stallWarn = !S.onGround && S.airTime > 1 && alpha > ASTALL - 0.045;
   S.vs0 = Math.sqrt(2 * MASS * G / (rho * SW * CLmax));
@@ -193,9 +199,9 @@ function physics(dt) {
   F.set(0, -MASS * G, 0);
   if (V > 0.5) { vdir.copy(S.vel).multiplyScalar(1 / V); F.addScaledVector(vdir, -D); ldir.crossVectors(right, vdir).normalize(); F.addScaledVector(ldir, L); F.addScaledVector(right, -qd * SW * 1.2 * beta); }
   // --- thrust: engines spool, thrust lapses with speed and altitude ---
-  S.n1 += clamp((S.noEngine ? 0 : S.thr >= 0 ? Math.max(S.thr, S.boost) : S.thr) - S.n1, -0.4 * dt, 0.4 * dt);
+  { const sp = PL.spool || 0.4; S.n1 += clamp((S.noEngine ? 0 : S.thr >= 0 ? Math.max(S.thr, S.boost) : S.thr) - S.n1, -sp * dt, sp * dt); }     // engines take seconds to spool
   if (S.turb > 0 && !S.onGround) { const tb = S.turb * MASS; F.x += (Math.random() - 0.5) * tb * 5; F.y += (Math.random() - 0.5) * tb * 9; F.z += (Math.random() - 0.5) * tb * 5; S.rr += (Math.random() - 0.5) * S.turb * 0.05; S.pr += (Math.random() - 0.5) * S.turb * 0.015; }   // storm turbulence
-  let T = S.n1 * TMAX * Math.pow(rho / 1.225, 0.7) * Math.max(0.35, 1 - PL.lapse * V) * (S.trick && S.trick.type === 'loop' ? 1.6 : 1);
+  let T = S.n1 * TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V) * (S.trick && S.trick.type === 'loop' ? 1.6 : 1);
   if (S.n1 < 0 && u < 1) T = 0;
   F.addScaledVector(fwd, T); S.nLoad = L / (MASS * G);
   // --- rotation: rate command scaled by control authority ---
@@ -205,6 +211,8 @@ function physics(dt) {
   if (!S.onGround) {
     prT -= (1 - clamp((V - 0.28 * PL.vs) / (0.55 * PL.vs), 0, 1)) * 0.28;                                                   // nose drops when slow
     if (S.stalled) { prT = -0.3 + ctl.pitch * 0.08; rrT = rrT * 0.4 + Math.sin(TNOW * 2.3) * 0.15; }
+    else if (PL.nmax && prT > 0) {                                                // load-factor limit: no pull beyond the structural g
+      const aN = (PL.nmax * MASS * G / Math.max(qd * SW, 1) - CL0 - flapCL) / CLA; if (S.alpha > aN - 0.02) prT = Math.min(prT, Math.max(0, (aN - S.alpha) * 6)); }
     const om = clamp(S.nLoad, 0, 2.5) * G * Math.sin(phi) / Math.max(V, 40);     // coordinated turn: bank pulls the nose round
     prT += om * Math.sin(phi) * Math.cos(theta); yrT += om * Math.cos(phi) * Math.cos(theta) + beta * 0.9 * auth;
     rrT += ctl.yaw * 0.12 * auth;
@@ -263,7 +271,7 @@ function updateSystems(dt) {
       else if (!S.gear) { if (V > 105 * K) S.flapIdx = 0; else if (V < 98 * K && S.flapIdx < 1) S.flapIdx = fi(1); }
     } else if (V < 30 * K && !S.landed) S.flapIdx = fi(1);
   }
-  if (V > 335 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if (V < 310) S.mach1 = false;
+  if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
 }
 
 // ---------- 11. Cameras ----------

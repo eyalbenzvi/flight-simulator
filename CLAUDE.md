@@ -73,6 +73,23 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
 - Easy mode climbs over rising ground by itself when low (`arcadeStep`), so letting go never flies into a hill; flat ground can still be landed on.
 
+## Flight model
+
+Point mass with lift, drag, thrust and weight, rate-command rotation (not a moment model). The atmosphere is ISA (`isa(h)`: density and
+speed of sound, troposphere and lower stratosphere). Drag: parabolic polar + gear, flaps, spoilers, an overspeed term past `vmo` (an
+indicated-airspeed limit) and compressibility (`waveDrag`: a wall past `mcr` for subsonic jets, a transonic hump for the fighter). Thrust
+lapses with speed (`lapse`) and density (`rhoExp`: 0.7 jets, 1.7 the piston engine); engines spool at `spool` per second. `nmax` caps the
+load factor in Expert. Validated against real types (sea level unless stated):
+
+| | Stall clean | Max speed | 10 km | Climb | Ceiling | g limit | Roll | Real reference |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| airliner | 142 kt | 385 kt | M0.80 | 4,900 fpm | 43,000 ft | 2.5 | ~25°/s | A320: 145 kt, VMO 350 kt, MMO 0.82, 39,800 ft, 2.5 g |
+| bizjet | 106 kt | 356 kt | M0.76 | 5,200 fpm | 47,600 ft | 3 | ~45°/s | mid-size jet: ~100 kt, VMO ~320 kt, M0.8, 45,000 ft |
+| fighter | 118 kt | M1.07 | M1.49 | 44,600 fpm | 64,800 ft | 9 | ~250°/s | F-16C: ~125 kt, M1.2 low, M2 high, 50,000 fpm, 9 g |
+| stunt | 58 kt | 187 kt | – | 2,600 fpm | 21,000 ft | 10 | ~330°/s | Extra 300: 55 kt, 185 kt, 3,200 fpm, 16,000 ft, ±10 g |
+
+Re-run these numbers after changing `PLANES` (the analytical part is a few lines over `isa`, `waveDrag` and the polar).
+
 ## Flight modes (`S.mode`, set only through `setMode`)
 
 - 0 Easy (`S.arc`): `arcadeStep` replaces the physics. The stick steers the flight path directly, the lever sets speed,
