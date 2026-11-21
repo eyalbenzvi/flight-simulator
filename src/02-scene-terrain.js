@@ -93,6 +93,7 @@ function landCoverMask() {
 }
 /** Per-vertex baked light for the terrain: x = in the sun (0 in a mountain's shadow), y = valley occlusion. The shadow is marched across the height
     grid toward the sun, once per time of day (cached); it costs nothing per frame. */
+let TERRAIN_MAT = null;
 const TLIT = { attr: null, ao: null, cache: {} };
 function bakeTerrainLight(key, sd) {
   if (!TLIT.attr || TLIT.cur === key) return; TLIT.cur = key; const W = NX + 1, H = NZ + 1, arr = TLIT.attr.array;
@@ -116,7 +117,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC, tLCa; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS; uniform vec2 uOrg; uniform vec4 uLCr, uB;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -192,7 +193,16 @@ const TERRAIN_FS = `
       emis+=warm*uLights*(1.0-arid*0.92)*step(0.80,hv)*smoothstep(0.07,0.0,length(fract(cq)-0.5))*0.8*step(-405.0,vW.y); }
     // light: sun (dimmed under drifting cloud shadows) + sky/ground hemisphere
     float cs=smoothstep(0.50,0.70,nz((P+vec2(uTime*6.0,uTime*2.0))/16000.0+0.2));
-    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*vLit.x;                        // vLit: baked mountain shadow and valley occlusion
+    // buildings cast shadows on the ground: the main block of each 60 m cell is in a texture (offset, half-size, height); a fragment looks at its own
+    // cell and the cells toward the sun, in two columns. No shadow map: 77,000 blocks drawn twice would not run on a phone.
+    float bsh=0.0;
+    if(uBS>0.5 && vDist<3800.0){ vec2 sd2=normalize(sunDir.xz+vec2(1e-5)), lat=vec2(-sd2.y,sd2.x); float lenK=length(sunDir.xz)/max(sunDir.y,0.10);
+      for(int n=0;n<5;n++){ for(int m=0;m<2;m++){ vec2 cp=P+sd2*(60.0*float(n))+lat*(m==0?0.0:(fract(dot((P-uLCr.xy)/60.0,lat))<0.5?-60.0:60.0));
+          vec2 cell=floor((cp-uLCr.xy)/60.0); vec4 b=texture2D(tBS,(cell+0.5)*60.0*uLCr.zw); float H=b.a*255.0; if(H<1.0) continue;
+          vec2 ctr=uLCr.xy+(cell+0.5)*60.0+(b.xy-0.5)*60.0; float half2=b.z*42.0; vec2 rel=ctr-P; float t=dot(rel,sd2), l=abs(dot(rel,lat));
+          float s=smoothstep(half2+2.5,half2-1.0,l)*smoothstep(-half2-2.0,-half2+1.5,t)*smoothstep(H*lenK+half2,H*lenK*0.82+half2-2.0,t); bsh=max(bsh,s); } }
+      bsh*=1.0-smoothstep(2600.0,3800.0,vDist); }
+    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*vLit.x*(1.0-0.80*bsh);                        // vLit: baked mountain shadow and valley occlusion
     vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5)*mix(0.80,1.0,vLit.x)*vLit.y)+emis;
     { float k=hazeK(vDist,cameraPosition.y,vW.y,fogDen)*(1.0+max(outside,0.0)/9000.0); vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); c=c*T+hazeCol(fogCol,vW-cameraPosition,sunDir,sunCol)*(1.0-T); }
     c=toneC(c);
@@ -279,10 +289,10 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
-  mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false };
+  mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;
   const CX = NX / 8, CZ = NZ / 11;
   for (let cj = 0; cj < NZ; cj += CZ) for (let ci = 0; ci < NX; ci += CX) {
     const ix = new Uint32Array(CX * CZ * 6); let t = 0, lo = 1e9, hi = -1e9, edge = false;

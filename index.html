@@ -182,7 +182,9 @@ button{border-radius:var(--r1);transition:transform .08s ease-out, background va
 #toast{top:calc(96px + var(--st));border-radius:var(--r2);background:var(--glass-solid);box-shadow:var(--elev)} body.toasting #hint{visibility:hidden}
 #hint{border-radius:var(--r2);padding:4px 12px;background:var(--glass)}
 /* --- the simple readout strip: cells with a hierarchy --- */
-#strip{padding:5px 4px;border-radius:var(--r2)} #strip i{display:inline-flex;align-items:baseline;gap:3px;padding:0 10px;font-style:normal} #strip i + i{border-inline-start:1px solid var(--line)}
+#strip{padding:5px 4px;border-radius:var(--r2);max-width:100%;white-space:normal} body.nopfd #strip{display:flex;flex-wrap:wrap;justify-content:center;row-gap:2px}          /* it wraps to a second row rather than run under the map */
+#strip i{white-space:nowrap}
+@media (orientation:portrait){ body.touch #top{left:calc(60px + var(--sl));right:calc(min(20vh,160px) * 0.545 + 20px + var(--sr));transform:none;width:auto;max-width:none} body.touch #strip i{padding:0 5px} } #strip i{display:inline-flex;align-items:baseline;gap:3px;padding:0 10px;font-style:normal} #strip i + i{border-inline-start:1px solid var(--line)}
 #strip b{font-size:18px;font-weight:700;min-width:2.2ch;text-align:end;display:inline-block} #strip i.s b{font-size:15px;font-weight:600} #strip span{margin:0;font-size:10.5px} #strip svg{width:13px;height:13px;align-self:center;opacity:.9}
 body.touch #strip i{padding:0 6px} body.touch #strip b{font-size:15.5px} body.touch #strip i.s b{font-size:13.5px}
 @media (max-width:340px){ body.touch #strip i{padding:0 4px} body.touch #strip b{font-size:13.5px} body.touch #strip i.s b{font-size:12.5px} }

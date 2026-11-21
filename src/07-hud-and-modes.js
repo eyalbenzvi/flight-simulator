@@ -34,6 +34,8 @@ function landTarget() {
   if (best) { best.brg = (Math.atan2(best.rw.tx - S.pos.x, -(best.rw.tz - S.pos.z)) / DEG + 360) % 360; best.inRange = best.dist < LAND_RANGE; }
   return best;
 }
+/** Where the nearest airport with an approach is: an arrow, its name and the distance. Shown in the pause menu, not on the flight screen. */
+function nearestAirportTxt() { const t = landTarget(); return t ? relArrow(t.brg - S.hdg) + ' ' + apName(t.ap) + ' ' + kmTxt(t.dist) : ''; }
 /** The landing panel under the speed strip, and the state of the landing buttons: is landing possible, is it running, what is automatic. */
 function landPanel(touchUI) {
   const air = !S.onGround, t = landTarget(), auto = S.assist || !!S.land, el = $('landP');
@@ -46,7 +48,7 @@ function landPanel(touchUI) {
   } else if (air && t.inRange) {
     // the way to the nearest airport is only shown when it is useful: for a few seconds on coming into range, and when low and near (on touch the green Land button already says it can land)
     if (!S.landSeen) { S.landSeen = true; S.landSeenT = TNOW + 7; }
-    if (TNOW < S.landSeenT || (S.ra < 900 && t.dist < 15000)) { cls = 'ready'; main = '<b>' + relArrow(t.brg - S.hdg) + ' ' + apName(t.ap) + ' ' + kmTxt(t.dist) + '</b>' + (touchUI ? '' : ' · ' + L('L lands', 'L: נחיתה אוטומטית')); }
+    /* the nearest airport and its distance are not shown in flight: they are in the pause menu's footer (nearestAirportTxt) */
   } else S.landSeen = false;
   let chips = '';
   if (cls && (S.land ? air && S.ra < 900 : !S.assist && S.ra < 600)) {          // gear and flaps: while they matter (low, in Expert or during an automatic landing)

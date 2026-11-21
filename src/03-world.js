@@ -154,6 +154,11 @@ function buildCities() {
     const R = rng(Math.round(l[2] * 9973 + l[3] * 7919)), n = clamp(Math.round(6 + l[4] * 4), 6, 22);
     for (let k = 0; k < n; k++) { const a = k * 2.39996 + R() * 0.4, r = 22 + 15 * Math.sqrt(k) + R() * 6, hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r; if (nearRoad(hx, hz, 10)) continue;
       push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 11 + R() * 6, 8 + R() * 3, 10 + R() * 5, Math.floor(R() * 4) * 0.785, 0.93 + R() * 0.07]); } }
+  // the ground-shadow texture (desktop): per 60 m cell, the tallest block standing in it as [offset x, offset z, half-size, height]
+  if (HIRES && TERRAIN_MAT) { const a = new Uint8Array(w * h * 4), put = b => { const ci = Math.floor((b[0] - X0) / 60), cj = Math.floor((b[2] - Z0) / 60); if (ci < 0 || cj < 0 || ci >= w || cj >= h) return; const o = (cj * w + ci) * 4, top = b[4] - (b[4] > 12 ? 8 : 4), H = clamp(Math.round(top), 1, 255); if (H <= a[o + 3]) return;
+      a[o] = clamp(Math.round(((b[0] - X0) / 60 - ci) * 255), 0, 255); a[o + 1] = clamp(Math.round(((b[2] - Z0) / 60 - cj) * 255), 0, 255); a[o + 2] = clamp(Math.round((b[3] + b[5]) / 4 / 42 * 255), 1, 255); a[o + 3] = H; };
+    for (const list of boxes.values()) list.forEach(put); for (const list of flat.values()) list.forEach(b => { if (b[6] === 0 && b[4] > 6) put(b); });
+    const t = new THREE.DataTexture(a, w, h, THREE.RGBAFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; TERRAIN_MAT.uniforms.tBS.value = t; TERRAIN_MAT.uniforms.uBS.value = 1; }
   const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 400)]; };
   for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
     list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
