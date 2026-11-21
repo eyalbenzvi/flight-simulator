@@ -134,6 +134,8 @@ the map image changes (checked every 3 s). A canvas texture created after start-
   shows speed, altitude, height above the ground (`b.agl`) and heading; the PFD shows `AGL` at every height.
 - No credits or attribution lines anywhere in the game (the owner's decision); the data sources are credited in `README.md`.
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
+- On touch, Land, Roll and Loop are folded behind one "⋯" button (`cMore`, `ctxMore`, `foldMore`): it opens them, and they fold away after a choice or 7 s.
+  The button is magenta during an automatic landing (cancel is inside). Only View, and in Expert gear, flaps and brake, stay out.
 - HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
 - Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.
 - `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) ; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.

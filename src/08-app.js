@@ -56,6 +56,8 @@ function startTrick(type) {
   if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
+let moreT = 0;
+function foldMore(close) { const m = $('cMore'), box = $('ctxMore'); clearTimeout(moreT); box.hidden = !!close; m.setAttribute('aria-expanded', String(!close)); if (!close) moreT = setTimeout(() => foldMore(true), 7000); }
 /** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
     It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
 function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
@@ -122,7 +124,9 @@ function setupTouch() {
   th.addEventListener('pointerup', () => thOn = false); th.addEventListener('pointercancel', () => thOn = false);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
-    else tapButton(b, () => action(k)); });
+    else tapButton(b, () => { action(k); if (b.parentNode.id === 'ctxMore') foldMore(true); }); });
+  // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
+  tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
   $('map').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); $('map').classList.toggle('big'); } });
 }

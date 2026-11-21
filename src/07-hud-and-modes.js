@@ -320,6 +320,7 @@ function drawSys() {
   else al.style.display = 'none';
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
+    { const m = $('cMore'), any = !$('cLand').hidden || !$('cRoll').hidden; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
     const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
@@ -537,6 +538,7 @@ function applyLang() {
   aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
+  $('cMore').setAttribute('aria-label', L('More actions: land, roll, loop', 'עוד פעולות: נחיתה, גלגול, לולאה'));
   set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
   { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }

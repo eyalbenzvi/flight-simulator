@@ -227,6 +227,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
 #thrTf{background:rgba(85,214,255,.25);border-radius:0 0 11px 11px} #thrTf::after{content:"";position:absolute;left:3px;right:3px;top:-11px;height:22px;border-radius:7px;background:linear-gradient(#bfefff,#2aa7d6);box-shadow:0 3px 8px rgba(0,0,0,.5)}
 #thrT span{top:auto;bottom:-18px;font-size:12px;text-shadow:0 1px 2px #000} #thrT em{display:none}
 #ctx button{border-radius:12px;background:var(--glass-solid);box-shadow:var(--elev)}
+#ctxMore{display:flex;flex-direction:inherit;gap:7px;align-items:inherit;animation:fadeIn .16s var(--ease)} #cMore{font-size:22px;line-height:1;font-weight:700;padding:6px 8px} #cMore.active{border-color:var(--mag);color:var(--mag)} #cMore[aria-expanded="true"]{background:rgba(255,255,255,.18)}
 /* --- phone: full instruments stay clear of the controls --- */
 @media (orientation:portrait){ body.touch:not(.nopfd) #pfd{left:calc(10px + var(--sl));transform:none;width:min(calc(100vw - 100px),300px);bottom:calc(176px + var(--sb))} }
 @media (orientation:landscape){ body.touch:not(.nopfd) #ctx{flex-direction:column;flex-wrap:wrap-reverse;max-height:calc(100vh - 190px);right:calc(14px + var(--sr));bottom:calc(178px + var(--sb))} body.touch:not(.nopfd) #pfd{width:min(30vw,270px)} }
@@ -264,9 +265,12 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   <div id="touch">
     <div id="stick"><div id="knob"></div><span id="stU"></span><span id="stD"></span><span id="stL">◀</span><span id="stR">▶</span></div>
     <div id="ctx">
-      <button id="cLand" hidden data-k="KeyL" class="hot">Land</button>
-      <button id="cRoll" hidden data-k="KeyX">Roll</button>
-      <button id="cLoop" hidden data-k="KeyZ">Loop</button>
+      <div id="ctxMore" hidden>
+        <button id="cLand" hidden data-k="KeyL" class="hot">Land</button>
+        <button id="cRoll" hidden data-k="KeyX">Roll</button>
+        <button id="cLoop" hidden data-k="KeyZ">Loop</button>
+      </div>
+      <button id="cMore" aria-expanded="false">⋯</button>
       <button id="cGear" hidden data-k="KeyG">Gear</button>
       <button id="cFlap" hidden data-k="KeyF">Flaps</button>
       <button id="cBrake" hidden data-k="KeyB" data-hold="1">Brake</button>
@@ -3156,6 +3160,7 @@ function drawSys() {
   else al.style.display = 'none';
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
+    { const m = $('cMore'), any = !$('cLand').hidden || !$('cRoll').hidden; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
     const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
@@ -3373,6 +3378,7 @@ function applyLang() {
   aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
+  $('cMore').setAttribute('aria-label', L('More actions: land, roll, loop', 'עוד פעולות: נחיתה, גלגול, לולאה'));
   set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
   { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }
@@ -3686,6 +3692,8 @@ function startTrick(type) {
   if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
+let moreT = 0;
+function foldMore(close) { const m = $('cMore'), box = $('ctxMore'); clearTimeout(moreT); box.hidden = !!close; m.setAttribute('aria-expanded', String(!close)); if (!close) moreT = setTimeout(() => foldMore(true), 7000); }
 /** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
     It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
 function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
@@ -3752,7 +3760,9 @@ function setupTouch() {
   th.addEventListener('pointerup', () => thOn = false); th.addEventListener('pointercancel', () => thOn = false);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
-    else tapButton(b, () => action(k)); });
+    else tapButton(b, () => { action(k); if (b.parentNode.id === 'ctxMore') foldMore(true); }); });
+  // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
+  tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
   $('map').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); $('map').classList.toggle('big'); } });
 }
