@@ -332,6 +332,7 @@ function menuOffset() { const w = window.innerWidth, h = window.innerHeight; if 
 // ---------- 16. Main loop ----------
 let last = 0, frame = 0;
 function loop(now) {
+  const pT = PERF.on ? performance.now() : 0;
   if (last && S.started && !S.paused) autoRes(now - last);
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now; frame++;
@@ -363,6 +364,7 @@ function loop(now) {
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
   updateExtras(dt, run, run || !S.started); updateWeapons(sdt, run);
+  if (PERF.on) { PERF.acc(performance.now() - pT); if (PERF.busy) return; }          /* ?perf=1: the measurement draws its own frames */
   renderFrame();
 }
 

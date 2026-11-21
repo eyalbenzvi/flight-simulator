@@ -202,3 +202,45 @@ function updateExtras(dt, run, moved) {
       for (let k = 0; k < 16; k++) { const f = k / 15, y = top + (g - top) * f, w = 5 + 9 * (1 - f); if (k) { x += (Math.random() - 0.5) * 130; z += (Math.random() - 0.5) * 130; } p.setXYZ(k * 2, x - px * w, y, z - pz * w); p.setXYZ(k * 2 + 1, x + px * w, y, z + pz * w); } p.needsUpdate = true; }
     XT.bolt.visible = on; }
 }
+
+// ---------- 12g-2. Where the frame time goes: `?perf=1` ----------
+/**
+ * A measurement for a real device (the game was only ever run on a software renderer here). Open the page with `?perf=1`, start a flight, and after a
+ * moment it flies itself to three places and draws each one a few dozen times in different ways, waiting for the graphics chip to finish every frame
+ * (a one-pixel read), so the numbers are real drawing times and not capped by the screen's 60 frames a second. Then it shows a table to photograph:
+ * the whole frame, without the post pass, at half the resolution in each direction (a quarter of the pixels: if the time falls with it, pixels are the
+ * cost), and without the terrain, the water, the buildings or the sky (what each one costs); the triangles and draw calls; the time the game's own
+ * code takes per frame. Nothing of this runs or shows without the parameter.
+ */
+const PERF = { on: /[?&]perf=1/.test(location.search), jsAcc: 0, jsN: 0, busy: false };
+PERF.acc = ms => { PERF.jsAcc += ms; PERF.jsN++; };
+async function perfRun() {
+  if (PERF.busy) return; PERF.busy = true; const gl = renderer.getContext(), px = new Uint8Array(4), wait = ms => new Promise(r => setTimeout(r, ms)), raf = () => new Promise(r => requestAnimationFrame(r));
+  const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:0;right:0;top:0;max-height:100%;overflow:auto;z-index:99;background:rgba(6,10,16,.93);color:#e8eef5;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;padding:10px;white-space:pre;direction:ltr;text-align:left;user-select:text;-webkit-user-select:text;pointer-events:auto';
+  document.body.appendChild(box); const say = t => { box.textContent = t; };
+  const isTerr = m => m.material && m.material.uniforms && m.material.uniforms.tLC, wk = WATER_FS.slice(0, 24), isWater = m => m.material && typeof m.material.fragmentShader === 'string' && m.material.fragmentShader.slice(0, 24) === wk;
+  const terr = scene.children.filter(isTerr), water = scene.children.filter(isWater), bld = [...cityMeshes, ...LMK.meshes, ...SITE.meshes], skyG = [sky, clouds, glare].filter(Boolean);
+  const draw = n => { for (let i = 0; i < 3; i++) { renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } const t0 = performance.now(); for (let i = 0; i < n; i++) { renderFrame(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } return (performance.now() - t0) / n; };
+  const without = (list, n) => { const was = list.map(m => m.visible); for (const m of list) m.visible = false; const t = draw(n); list.forEach((m, i) => m.visible = was[i]); return t; };
+  const places = [['Tel Aviv, low', 34.775, 32.06, 250, 0, 0], ['Jerusalem hills', 35.08, 31.78, 600, 90, 0], ['high over the south', 34.95, 31.45, 0, 0, 6000]], rows = [], N = 10;
+  const post0 = POST.on, pr0 = RES.pr, fixed0 = RES.fixed, mode0 = S.mode, cam0 = S.cam; RES.fixed = RES.pr;          /* the automatic resolution must not move during the measurement */
+  for (const [name, lon, lat, agl, hdg, alt] of places) {
+    say('measuring: ' + name + ' …'); setMode(0); S.cam = 1; spawn(alt ? { type: 'air', lon, lat, alt, hdg, spd: 115, label: name } : { type: 'air', lon, lat, agl, hdg, spd: 115, label: name }); PERF.jsAcc = PERF.jsN = 0;
+    for (let i = 0; i < 50; i++) await raf(); await wait(300); const js = PERF.jsN ? PERF.jsAcc / PERF.jsN : 0;
+    const r = { name, js }; POST.on = post0; r.full = draw(N); await raf();
+    POST.on = false; r.noPost = draw(N); renderer.info.reset(); renderer.render(scene, camera); r.calls = renderer.info.render.calls; r.tris = renderer.info.render.triangles;
+    { const cnt = list => { const was = list.map(m => m.visible); for (const m of list) m.visible = false; renderer.info.reset(); renderer.render(scene, camera); list.forEach((m, i) => m.visible = was[i]); return [r.tris - renderer.info.render.triangles, r.calls - renderer.info.render.calls]; }; r.gT = cnt(terr); r.gB = cnt(bld); r.gW = cnt(water); }
+    { const t0 = performance.now(); for (let i = 0; i < N; i++) renderer.render(scene, camera); r.submit = (performance.now() - t0) / N; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); } await raf();
+    renderer.setPixelRatio(pr0 * 0.5); resize(); r.half = draw(N); renderer.setPixelRatio(pr0); resize(); await raf();
+    r.noTerr = without(terr, N); r.noWater = without(water, N); await raf(); r.noBld = without(bld, N); r.noSky = without(skyG, N); r.onlyTerr = without(scene.children.filter(m => !isTerr(m) && m.type !== 'HemisphereLight' && m.type !== 'DirectionalLight'), N);
+    POST.on = post0; rows.push(r); await raf(); }
+  RES.fixed = fixed0; setMode(mode0); S.cam = cam0;
+  const f = v => (v < 10 ? ' ' : '') + v.toFixed(1), dbg = gl.getExtension('WEBGL_debug_renderer_info'), buf = renderer.getDrawingBufferSize(new THREE.Vector2());
+  let out = 'FRAME TIME, ms per frame (16.7 = 60 fps, 33 = 30 fps)\n' + (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'gpu unknown') + '\nscreen ' + innerWidth + 'x' + innerHeight + ' css, drawn ' + buf.x + 'x' + buf.y + ' (x' + pr0 + '), post pass ' + (post0 ? 'on' : 'off') + ', terrain grid ' + NX + 'x' + NZ + '\n';
+  for (const r of rows) { const pixShare = Math.max(0, Math.min(1, (r.noPost - r.half) / r.noPost / 0.75));
+    out += '\n' + r.name.toUpperCase() + '\n  whole frame        ' + f(r.full) + '\n  no post pass       ' + f(r.noPost) + '   (post pass costs ' + f(r.full - r.noPost) + ')\n  quarter the pixels ' + f(r.half) + '   -> about ' + Math.round(pixShare * 100) + '% of the drawing time is per pixel'
+      + '\n  without terrain    ' + f(r.noTerr) + '   (terrain costs ' + f(r.noPost - r.noTerr) + ')\n  without water      ' + f(r.noWater) + '   (water ' + f(r.noPost - r.noWater) + ')\n  without buildings  ' + f(r.noBld) + '   (buildings ' + f(r.noPost - r.noBld) + ')\n  without sky/clouds ' + f(r.noSky) + '   (sky ' + f(r.noPost - r.noSky) + ')\n  terrain alone      ' + f(r.onlyTerr)
+      + '\n  triangles ' + r.tris.toLocaleString('en') + ', draw calls ' + r.calls + ', sending them ' + f(r.submit) + ' ms\n    of which terrain ' + r.gT[0].toLocaleString('en') + ' / ' + r.gT[1] + ', buildings and sites ' + r.gB[0].toLocaleString('en') + ' / ' + r.gB[1] + ', water ' + r.gW[0].toLocaleString('en') + ' / ' + r.gW[1] + ', the rest ' + (r.tris - r.gT[0] - r.gB[0] - r.gW[0]).toLocaleString('en') + ' / ' + (r.calls - r.gT[1] - r.gB[1] - r.gW[1]) + '\n  game code (flight, map, HUD) ' + f(r.js) + ' ms\n'; }
+  out += '\n' + L('Take a screenshot of this and send it. Tap to close.', 'צלמו את המסך הזה ושלחו. נגיעה סוגרת.'); say(out); PERF.result = rows; PERF.text = out; box.addEventListener('click', () => box.remove()); PERF.busy = false;
+}
+if (PERF.on) { const iv = setInterval(() => { if (typeof WORLD !== 'undefined' && WORLD.ready && S.started && !S.paused && !S.crashed) { clearInterval(iv); setTimeout(perfRun, 2500); } }, 500); }

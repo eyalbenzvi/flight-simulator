@@ -224,6 +224,15 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   `pickPlane`, cleared when a start point is chosen): without it nobody could change aircraft once a range start had been chosen.
 - Motion is in map space like the aircraft (ground speed × `hsAt`), so the aiming mark and the bomb agree. `updateWeapons` gets `sdt` (fast forward applies).
 
+## Measuring where the frame time goes (`?perf=1`)
+
+`perfRun` (end of `src/07c-extras.js`) is for a real device: with `?perf=1` in the address, a few seconds into a flight it flies to three places and draws
+each a few dozen times in different ways, waiting for the graphics chip after every frame (a one-pixel read), then shows a table to photograph: whole
+frame, no post pass, a quarter of the pixels, without terrain / water / buildings / sky, triangles and draw calls per group, and the game code's own
+time. First numbers (software renderer, so only the counts mean anything; touch configuration): 1.3 to 1.8 million triangles and 380 to 850 draw calls
+a frame, of which buildings and sites 0.8 to 1.1 million, terrain about 100,000, the water pass as much again as the terrain (it redraws the terrain's
+tiles), the rest 260,000 to 460,000 and up to 530 draw calls at altitude; game code 1 to 2 ms. No phone has reported yet.
+
 ## Start-up
 
 `init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then
