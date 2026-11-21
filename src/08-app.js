@@ -185,12 +185,13 @@ function gridButtons(el, items) {
 /** The start screen and the pause menu share one set of folded sections, in the same order, built here. where: 'start' or 'pause'.
     On the start screen a choice is only selected (FLY starts from it); in the pause menu a start point or aircraft starts at once. */
 let START = null, TAKEOFFS = [], AIRSTARTS = [];
+let PLHOLD = false;          // true once the player picked an aircraft after the start point: spawn then leaves the aircraft alone
 const OPEN = { start: new Set(['pl', 'lv']), pause: new Set(['pl', 'lv']) };
 const startName = (d, short) => d.pick ? L(d.name[0], d.name[1]) : d.type === 'ground' && short ? apName(AIRPORTS[d.rw.ap]) : tr(d.label.replace('Approach: ', ''));
 function renderPanel(where) {
   const body = $(where === 'start' ? 'sBody' : 'mBody'), touchUI = document.body.classList.contains('touch'), cur = where === 'start' ? (START || FREE[0]) : S.lastSpawn, rer = () => renderPanel(where);
-  const go = d => where === 'start' ? () => { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } : () => { closeMenu(); spawn(d); };
-  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); if (S.onGround || S.crashed) spawn(S.lastSpawn || FREE[0]); else spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: Math.max(S.ra, 120), hdg: S.hdg, spd: 120, label: L('New aircraft, same place', 'מטוס חדש, אותו מקום'), keep: true }); } };          /* in the air the new aircraft carries on from where the old one was */
+  const go = d => where === 'start' ? () => { PLHOLD = false; START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } : () => { PLHOLD = false; closeMenu(); spawn(d); };
+  const pickPlane = k => { PLHOLD = true; if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); if (S.onGround || S.crashed) spawn(S.lastSpawn || FREE[0]); else spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: Math.max(S.ra, 120), hdg: S.hdg, spd: 120, label: L('New aircraft, same place', 'מטוס חדש, אותו מקום'), keep: true }); } };          /* in the air the new aircraft carries on from where the old one was */
   const starts = (list, short) => el => gridButtons(el, list.map(d => [startName(d, short), '', go(d), d === cur]));
   const secs = [
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
@@ -218,7 +219,7 @@ function savePhoto() {
 const SURPRISE = [[34.76, 32.06, 350, 20], [35.20, 31.775, 500, 80], [35.0, 32.84, 450, 200], [35.45, 31.45, 300, 180], [34.80, 30.60, 600, 60], [35.78, 33.28, 900, 30], [34.95, 29.60, 400, 190], [35.55, 32.78, 350, 0], [35.36, 31.33, 500, 20], [34.90, 32.50, 250, 180], [35.30, 32.70, 500, 250], [34.65, 31.80, 300, 30]];
 function surpriseButton(el, where, rer) {
   const b = document.createElement('button'); b.className = 'pickB'; b.textContent = '🎲 ' + L('Surprise me', 'תפתיעו אותי'); const s = document.createElement('small'); s.textContent = L('A place, an aircraft and a time of day at random', 'מקום, מטוס ושעה ביום באקראי'); b.appendChild(s);
-  b.addEventListener('click', () => { let i; do i = (Math.random() * SURPRISE.length) | 0; while (i === surpriseButton.last); surpriseButton.last = i; const [lon, lat, agl, hdg] = SURPRISE[i], k = PLANE_ORDER[(Math.random() * PLANE_ORDER.length) | 0];
+  b.addEventListener('click', () => { let i; do i = (Math.random() * SURPRISE.length) | 0; while (i === surpriseButton.last); surpriseButton.last = i; PLHOLD = false; const [lon, lat, agl, hdg] = SURPRISE[i], k = PLANE_ORDER[(Math.random() * PLANE_ORDER.length) | 0];
     const d = { label: 'A surprise flight', type: 'air', lon, lat, agl, hdg, spd: 115, tod: Math.random() < 0.55 ? 0 : Math.random() < 0.6 ? 1 : 2, wx: 0 };
     if (WORLD.ready) selectPlane(k); else { PL = PLANES[k]; SAVE.plane = k; persist(); } if (where === 'start') { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } else { closeMenu(); spawn(d); } });
   el.insertBefore(b, el.firstChild);

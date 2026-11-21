@@ -217,6 +217,8 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   (`WPN.pick`); otherwise the target nearest the aiming mark is locked by itself (`WPN.lock`). The gun fires at the lead point (`wpnLead`) while the lock
   is within 16 degrees of the nose and 2.2 km (`#aim.hot`), else straight ahead. Fire with a ground lock arms the bombs (`WPN.auto`) and they are let go
   by themselves when the predicted impact reaches the target; guided bombs steer to the lock. Tested in the page: gun hits up to 11 degrees off the nose.
+- A start with `armed` or `plane` brings its aircraft only when the start is chosen. An aircraft the player picks afterwards stands (`PLHOLD`, set by
+  `pickPlane`, cleared when a start point is chosen): without it nobody could change aircraft once a range start had been chosen.
 - Motion is in map space like the aircraft (ground speed × `hsAt`), so the aiming mark and the bomb agree. `updateWeapons` gets `sdt` (fast forward applies).
 
 ## Start-up
