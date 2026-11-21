@@ -335,7 +335,7 @@ function setupLook() {
   canvas.addEventListener('pointermove', e => { if (e.pointerId !== LOOK.id) return; const k = 3.2 / Math.max(window.innerWidth, 600);
     LOOK.moved = (LOOK.moved || 0) + Math.abs(e.clientX - LOOK.x) + Math.abs(e.clientY - LOOK.y);
     LOOK.yaw = clamp(LOOK.yaw + (e.clientX - LOOK.x) * k, -2.7, 2.7); LOOK.pitch = clamp(LOOK.pitch - (e.clientY - LOOK.y) * k, -1.1, 0.9); LOOK.x = e.clientX; LOOK.y = e.clientY; LOOK.t = TNOW; });
-  const up = e => { if (e.pointerId !== LOOK.id) return; LOOK.id = null; if (TNOW - (LOOK.t || -9) > 0.25 || LOOK.moved < 8) { const now = performance.now(); if (now - (LOOK.tap || 0) < 350) LOOK.yaw = LOOK.pitch = 0; LOOK.tap = now; } }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  const up = e => { if (e.pointerId !== LOOK.id) return; LOOK.id = null; if (TNOW - (LOOK.t || -9) > 0.25 || LOOK.moved < 8) { if (e.type === 'pointerup' && (LOOK.moved || 0) < 8 && typeof wpnTap === 'function' && wpnTap(e.clientX, e.clientY)) { LOOK.tap = 0; return; }          /* a tap on the world chooses a target while the weapons are live */ const now = performance.now(); if (now - (LOOK.tap || 0) < 350) LOOK.yaw = LOOK.pitch = 0; LOOK.tap = now; } }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 }
 let SHADOW = null, SHADOW_TEX = null, LPOOL = null, ENVRT = null;
 /** A soft silhouette of an aircraft, drawn once: the ground shadow (a texture made during init, so the canvas guard covers it). */

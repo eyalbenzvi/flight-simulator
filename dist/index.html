@@ -274,6 +274,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   /* aiming help: a mark on every practice target in view (tap one to choose it), the aiming mark turning red when the shot will hit */
   .tmk { position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: none; box-sizing: border-box; pointer-events: auto; touch-action: none; border: 2px solid rgba(255, 122, 26, .9); border-radius: 50%; border-left-color: transparent; border-right-color: transparent; }
   .tmk::after { content: ""; position: absolute; inset: -12px; } .tmk.pk { border-color: #ff4b3a; border-width: 3px; }
+  .tmk.fr { border-radius: 3px; transform-origin: 13px 13px; border-color: #ff4b3a; border-left-color: #ff4b3a; border-right-color: #ff4b3a; border-style: dashed; }
   #aim.hot { border-color: #ff4b3a; color: #ff8a7a; box-shadow: 0 0 0 3px rgba(255, 75, 58, .35); } #aim.auto { border-style: solid; animation: flyWait .6s ease-in-out infinite; }
 </style>
 </head>
@@ -3148,7 +3149,7 @@ function setupLook() {
   canvas.addEventListener('pointermove', e => { if (e.pointerId !== LOOK.id) return; const k = 3.2 / Math.max(window.innerWidth, 600);
     LOOK.moved = (LOOK.moved || 0) + Math.abs(e.clientX - LOOK.x) + Math.abs(e.clientY - LOOK.y);
     LOOK.yaw = clamp(LOOK.yaw + (e.clientX - LOOK.x) * k, -2.7, 2.7); LOOK.pitch = clamp(LOOK.pitch - (e.clientY - LOOK.y) * k, -1.1, 0.9); LOOK.x = e.clientX; LOOK.y = e.clientY; LOOK.t = TNOW; });
-  const up = e => { if (e.pointerId !== LOOK.id) return; LOOK.id = null; if (TNOW - (LOOK.t || -9) > 0.25 || LOOK.moved < 8) { const now = performance.now(); if (now - (LOOK.tap || 0) < 350) LOOK.yaw = LOOK.pitch = 0; LOOK.tap = now; } }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  const up = e => { if (e.pointerId !== LOOK.id) return; LOOK.id = null; if (TNOW - (LOOK.t || -9) > 0.25 || LOOK.moved < 8) { if (e.type === 'pointerup' && (LOOK.moved || 0) < 8 && typeof wpnTap === 'function' && wpnTap(e.clientX, e.clientY)) { LOOK.tap = 0; return; }          /* a tap on the world chooses a target while the weapons are live */ const now = performance.now(); if (now - (LOOK.tap || 0) < 350) LOOK.yaw = LOOK.pitch = 0; LOOK.tap = now; } }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 }
 let SHADOW = null, SHADOW_TEX = null, LPOOL = null, ENVRT = null;
 /** A soft silhouette of an aircraft, drawn once: the ground shadow (a texture made during init, so the canvas guard covers it). */
@@ -4313,7 +4314,7 @@ function wpnGate() {          // the owner's code. It is in the page's source, s
   const r = window.prompt(L('For a grown-up. Type the code to let the weapons fire anywhere on the map:', 'להורים. הקלידו את הקוד כדי לאפשר ירי בכל מקום במפה:'), '');
   return r !== null && String(r).trim() === '1234';
 }
-function wpnRearm() { const a = armsOf(PL); WPN.ammo = {}; WPN.sel = 0; if (a) for (const [k, n] of a) WPN.ammo[k] = n; }
+function wpnRearm() { const a = armsOf(PL); WPN.ammo = {}; WPN.sel = 0; wpnUnpick(); WPN.auto = null; if (a) for (const [k, n] of a) WPN.ammo[k] = n; }
 
 function buildWeapons() {
   const lam = c => new THREE.MeshLambertMaterial({ color: c }), ORANGE = 0xff7a1a;
@@ -4339,15 +4340,35 @@ function buildWeapons() {
     for (let i = 0; i < 14; i++) { const m = new THREE.Mesh(body, new THREE.MeshLambertMaterial({ vertexColors: true })); m.visible = false; m.frustumCulled = false; scene.add(m); WPN.shots.push({ m, on: false, p: m.position, v: new THREE.Vector3() }); } }
   for (let i = 0; i < 6; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: 0xffa040, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending })); s.visible = false; scene.add(s); WPN.blasts.push({ s, t: 9, k: 1 }); }
   // the marks on the targets: six small screen elements; a tap on one chooses that target
-  WPN.marks = []; for (let i = 0; i < 6; i++) { const m = document.createElement('div'); m.className = 'tmk'; m.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); if (m._t) { WPN.pick = m._t; buzz(10); } }); $('hud').appendChild(m); WPN.marks.push(m); }
+  WPN.marks = []; for (let i = 0; i < 6; i++) { const m = document.createElement('div'); m.className = 'tmk'; m.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); if (m._t) { if (WPN.pick === m._t) wpnUnpick(); else { wpnUnpick(); WPN.pick = m._t; } buzz(10); } }); $('hud').appendChild(m); WPN.marks.push(m); }
   wpnRearm();
 }
 const wpnPos = t => t.p || (t.p = new THREE.Vector3(t.x, t.y, t.z)), wpnIsDrone = t => t.a !== undefined;
+function wpnUnpick() { WPN.pick = null; WPN.free = null; }
+/**
+ * A tap (or a click) on the world chooses what is there as the target: the ground, the sea, a roof, anything. It is only a place to aim at: nothing
+ * there is damaged. A tap near a practice target or a drone takes that instead. The chosen place carries a mark; a tap on the mark lets it go.
+ * Returns true when the tap chose something.
+ */
+function wpnTap(cx, cy) {
+  if (!WPN.on || !armsOf(PL)) return false; const w = window.innerWidth, h = window.innerHeight;
+  // a practice target or a drone under the finger (within 34 px) comes first
+  let near = null, nd = 34; for (const t of [...WPN.drones, ...WPN.targets]) { if (t.dead > 0 || wpnPos(t).distanceTo(S.pos) > 6000) continue; const v = tmpV.copy(wpnPos(t)).project(camera); if (v.z > 1) continue; const d = Math.hypot((v.x * 0.5 + 0.5) * w - cx, (-v.y * 0.5 + 0.5) * h - cy); if (d < nd) { nd = d; near = t; } }
+  if (near) { wpnUnpick(); WPN.pick = near; buzz(10); return true; }
+  // otherwise the first thing the line of sight meets, out to 12 km: a building or the ground
+  const o = tmpV.set(cx / w * 2 - 1, -(cy / h) * 2 + 1, 0.5).unproject(camera), c = camera.getWorldPosition(tmpV2), dx = o.x - c.x, dy = o.y - c.y, dz = o.z - c.z, n = Math.hypot(dx, dy, dz), ux = dx / n, uy = dy / n, uz = dz / n;
+  const inside = t => { const x = c.x + ux * t, y = c.y + uy * t, z = c.z + uz * t; return y <= groundAt(x, z).h || hitObstacle(x, y, z, 0); };
+  let t0 = 20, t1 = -1; for (let t = 20; t < 12000; t += Math.max(6, t * 0.012)) { if (inside(t)) { t1 = t; break; } t0 = t; }
+  if (t1 < 0) return false; for (let i = 0; i < 12; i++) { const m = (t0 + t1) / 2; if (inside(m)) t1 = m; else t0 = m; }
+  const x = c.x + ux * t1, y = c.y + uy * t1, z = c.z + uz * t1; WPN.free = { x, y, z, p: new THREE.Vector3(x, y, z), dead: 0, free: true }; WPN.pick = WPN.free; WPN.auto = null; buzz(10);
+  if (!WPN.freeSaid) { WPN.freeSaid = true; toast(L('Target chosen. Tap its mark to let it go', 'המטרה נבחרה. נגיעה בסימן שלה משחררת אותה'), 3.5); }
+  return true;
+}
 /** Where to shoot to hit a target: its place when the shell arrives (drones move along their circle). */
 function wpnLead(t, out) { out.copy(wpnPos(t)); if (wpnIsDrone(t)) { const tm = out.distanceTo(S.pos) / 900, sp = t.dir * 38; out.x += -Math.sin(t.a) * sp * tm; out.z += Math.cos(t.a) * sp * tm; } return out; }
 /** Let the bombs or the missile go. */
 function wpnRelease(kind, per, tgt) { const hs = hsAt(S.ra), a = armsOf(PL); fwd.set(0, 0, -1).applyQuaternion(S.q); WPN.cool = kind === 'missile' ? 0.5 : 0.35;
-  for (let n = 0; n < per && WPN.ammo[kind] > 0; n++) { const sh = WPN.shots.find(q => !q.on); if (!sh) break; WPN.ammo[kind]--; sh.on = true; sh.kind = kind; sh.t = -n * 0.16; sh.m.visible = n === 0; sh.tgt = kind === 'missile' ? (WPN.lock && wpnIsDrone(WPN.lock) ? WPN.lock : null) : (tgt || null); sh.guided = PL.key === 'stealth';
+  for (let n = 0; n < per && WPN.ammo[kind] > 0; n++) { const sh = WPN.shots.find(q => !q.on); if (!sh) break; WPN.ammo[kind]--; sh.on = true; sh.kind = kind; sh.t = -n * 0.16; sh.m.visible = n === 0; sh.tgt = kind === 'missile' ? (WPN.lock && (wpnIsDrone(WPN.lock) || WPN.lock.free) ? WPN.lock : null) : (tgt || null); sh.guided = PL.key === 'stealth';
     sh.p.copy(S.pos); sh.p.y -= 2; if (kind === 'missile') sh.v.set(S.vel.x * hs + fwd.x * 120, S.vel.y + fwd.y * 120, S.vel.z * hs + fwd.z * 120); else sh.v.set(S.vel.x * hs, S.vel.y, S.vel.z * hs); sh.m.scale.setScalar(kind === 'missile' ? 1 : 1.5); }
   if (kind === 'missile') wpnSound('whoosh'); buzz(15);
   if (!WPN.ammo[kind] && a.length > 1) { const nx = a.findIndex(([k]) => WPN.ammo[k] > 0); if (nx >= 0) WPN.sel = nx; } }
@@ -4385,7 +4406,7 @@ function updateWeapons(dt, run) {
   const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && (rg.in || SAVE.wpnAll) && !S.crashed && !S.paused && !PH.on);
   // the buttons and marks exist only for an armed aircraft inside a range
   if (WPN.on !== live || WPN.uiPl !== PL.key) { WPN.on = live; WPN.uiPl = PL.key; $('cFire').hidden = !live; $('cWpn').hidden = !(live && a && a.length > 1); if (!live) { $('aim').style.display = 'none'; $('aimLock').style.display = 'none'; keys.Enter = false; }
-    if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Aim at the orange targets and press Fire', 'מכוונים אל המטרות הכתומות ולוחצים "אש"') : L('Aim at the orange targets. Enter fires, U changes weapon', 'מכוונים אל המטרות הכתומות. Enter יורה, U מחליף נשק')), 6); } }
+    if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Tap a target, or any place, to aim at it, then press Fire', 'נוגעים במטרה, או בכל מקום, כדי לכוון אליו, ולוחצים "אש"') : L('Click a target, or any place, to aim at it. Enter fires, U changes weapon', 'לוחצים על מטרה, או על כל מקום, כדי לכוון אליו. Enter יורה, U מחליף נשק')), 6); } }
   if (S.landed && S.onGround && a && S.V < 2 && !WPN.rearmed) { WPN.rearmed = true; wpnRearm(); } else if (!S.onGround) WPN.rearmed = false;
   // drones fly their circles everywhere (they are part of the range), targets come back after a while
   for (const d of WPN.drones) { const R = RANGES[d.range]; if (run) d.a += d.dir * 38 / d.r * dt;          /* slow enough to hit with the gun without leading far */ d.p.set(R.x + Math.cos(d.a) * d.r, d.alt, R.z + Math.sin(d.a) * d.r); d.m.position.copy(d.p); d.m.rotation.set(0, Math.atan2(Math.sin(d.a) * d.dir, -Math.cos(d.a) * d.dir), -d.dir * 0.25, 'YXZ'); d.m.scale.setScalar(2.2);
@@ -4406,7 +4427,7 @@ function updateWeapons(dt, run) {
   for (const s of WPN.shots) { if (!s.on) continue; s.t += dt; if (s.t < 0) { s.p.copy(S.pos); s.p.y -= 2; const hs = hsAt(S.ra); s.v.set(S.vel.x * hs, S.vel.y, S.vel.z * hs); continue; } s.m.visible = true;
     if (s.kind === 'missile') { const d = s.tgt && s.tgt.dead <= 0 ? s.tgt : null, sp = Math.min(s.v.length() + 500 * dt, 720); if (d) { tmpV.copy(d.p).sub(s.p).normalize(); s.v.normalize().lerp(tmpV, Math.min(1, 4.5 * dt)).normalize(); } else s.v.normalize(); s.v.multiplyScalar(sp);
       s.p.addScaledVector(s.v, dt); if ((s.n = (s.n | 0) + 1) % 2 === 0) puff(s.p.x, s.p.y, s.p.z, 1.6, 0.5);
-      if (d && s.p.distanceTo(d.p) < 28) { killDrone(d); s.on = false; } else if (s.t > 9 || s.p.y < groundAt(s.p.x, s.p.z).h) { wpnBlast(s.p.x, s.p.y, s.p.z, 0.8, true); s.on = false; } }
+      if (d && s.p.distanceTo(d.p) < 28) { if (d.free) wpnBlast(s.p.x, s.p.y, s.p.z, 1.2); else killDrone(d); s.on = false; } else if (hitObstacle(s.p.x, s.p.y, s.p.z, 0)) { wpnBlast(s.p.x, s.p.y, s.p.z, 1.2); s.on = false; } else if (s.t > 9 || s.p.y < groundAt(s.p.x, s.p.z).h) { wpnBlast(s.p.x, s.p.y, s.p.z, 0.8, true); s.on = false; } }
     else { s.v.y -= G * dt; if (s.guided && s.t > 0.6) { let best = s.tgt && s.tgt.dead <= 0 ? s.tgt : null, bd = 420; if (!best) for (const t of WPN.targets) if (t.dead <= 0) { const dd = Math.hypot(t.x - s.p.x, t.z - s.p.z); if (dd < bd) { bd = dd; best = t; } } if (best) { const tt = Math.max((s.p.y - best.y) / Math.max(-s.v.y, 20), 0.3); s.v.x += ((best.x - s.p.x) / tt - s.v.x) * Math.min(1, 2.5 * dt); s.v.z += ((best.z - s.p.z) / tt - s.v.z) * Math.min(1, 2.5 * dt); } }
       s.p.addScaledVector(s.v, dt); const gh = hitObstacle(s.p.x, s.p.y, s.p.z, 1) ? s.p.y : groundAt(s.p.x, s.p.z).h; if (s.p.y <= gh) { wpnBlast(s.p.x, gh + 2, s.p.z, 2.2);          /* on a roof it bursts on the roof: a picture only, nothing is damaged */ for (const t of WPN.targets) if (t.dead <= 0 && Math.hypot(t.x - s.p.x, t.z - s.p.z) < 38) killTgt(t); s.on = false; } }
     if (s.on) { tmpV.copy(s.p).add(s.v); s.m.lookAt(tmpV); s.m.rotateY(Math.PI); } else s.m.visible = false; }
@@ -4417,8 +4438,9 @@ function updateWeapons(dt, run) {
     const ap = kind === 'bomb' ? wpnImpact(new THREE.Vector3()) : new THREE.Vector3().copy(S.pos).addScaledVector(fwd, 900), apW = ap.clone(), apOn = ndc(ap);
     // the targets this weapon is for, nearest first; each one in view gets a mark, and the one nearest the aiming mark is locked (or the one tapped)
     const pool = (kind === 'bomb' ? WPN.targets : kind === 'missile' ? WPN.drones : [...WPN.drones, ...WPN.targets]).filter(t => t.dead <= 0 && wpnPos(t).distanceTo(S.pos) < 6000).sort((p, q) => wpnPos(p).distanceTo(S.pos) - wpnPos(q).distanceTo(S.pos));
+    if (WPN.free) { if (WPN.free.p.distanceTo(S.pos) < 14000) pool.unshift(WPN.free); else wpnUnpick(); }
     if (WPN.pick && (WPN.pick.dead > 0 || !pool.includes(WPN.pick))) WPN.pick = null; let best = null, bd = kind === 'bomb' ? 0.9 : 0.5;
-    for (const t of pool) { const v = tmpV2.copy(wpnPos(t)); if (!ndc(v)) continue; if (nm < WPN.marks.length) { const m = WPN.marks[nm++]; m._t = t; at(m, v, 13); m.classList.toggle('pk', t === WPN.pick); }
+    for (const t of pool) { const v = tmpV2.copy(wpnPos(t)); if (!ndc(v)) continue; if (nm < WPN.marks.length) { const m = WPN.marks[nm++]; m._t = t; at(m, v, 13); m.classList.toggle('pk', t === WPN.pick); m.classList.toggle('fr', !!t.free); }
       const d = apOn ? Math.hypot(v.x - ap.x, (v.y - ap.y) * h / w) : Math.hypot(v.x, v.y * h / w) + 0.2; if (d < bd && (kind !== 'missile' || tmpV.copy(wpnPos(t)).sub(S.pos).normalize().dot(fwd) > 0.8)) { bd = d; best = t; } }
     WPN.lock = WPN.pick || best;
     let hot = false; if (kind === 'gun' && WPN.lock) { wpnLead(WPN.lock, tmpV).sub(S.pos); const dist = tmpV.length(); hot = dist < 2200 && tmpV.multiplyScalar(1 / dist).dot(fwd) > 0.96; }
@@ -4426,9 +4448,9 @@ function updateWeapons(dt, run) {
     aim.className = kind + (hot ? ' hot' : '') + (WPN.auto ? ' auto' : ''); if (hot && kind === 'gun') { const v = wpnLead(WPN.lock, tmpV2); if (ndc(v)) at(aim, v, 14); else aim.style.display = 'none'; } else if (apOn) at(aim, ap, 14); else aim.style.display = 'none';
     if (WPN.lock) { const v = tmpV2.copy(wpnPos(WPN.lock)); if (ndc(v)) at(lk, v, 17); else lk.style.display = 'none'; } else lk.style.display = 'none';
     // the armed drop: release as the bombs' landing point reaches the target (or stops closing on it close by); given up after a while or when the target is gone
-    if (WPN.auto) { const A2 = WPN.auto, d = Math.hypot(apW.x - A2.t.x, apW.z - A2.t.z); if (kind !== 'bomb' || A2.t.dead > 0 || TNOW - A2.t0 > 60 || S.onGround) WPN.auto = null; else if (d < 30 || (d > A2.prev && A2.prev < 140)) { WPN.auto = null; if (WPN.ammo.bomb) wpnRelease('bomb', A2.per, A2.t); } else A2.prev = d; }
+    if (WPN.auto) { const A2 = WPN.auto, d = Math.hypot(apW.x - A2.t.x, apW.z - A2.t.z); if (kind !== 'bomb' || A2.t.dead > 0 || TNOW - A2.t0 > 150 || S.onGround) WPN.auto = null; else if (d < 30 || (d > A2.prev && A2.prev < 140)) { WPN.auto = null; if (WPN.ammo.bomb) wpnRelease('bomb', A2.per, A2.t); } else A2.prev = d; }
     const fb = $('cFire'), ft = L('Fire', 'אש') + ' · ' + (WPN.ammo[kind] || 0); if (fb.textContent !== ft) fb.textContent = ft; const wb = $('cWpn'), wt = L(WPN_NAME[kind][0], WPN_NAME[kind][1]); if (wb.textContent !== wt) wb.textContent = wt; }
-  else WPN.auto = null;
+  else { WPN.auto = null; if (!live) wpnUnpick(); }
   for (let i = nm; i < WPN.marks.length; i++) { WPN.marks[i].style.display = 'none'; WPN.marks[i]._t = null; }
 }
 

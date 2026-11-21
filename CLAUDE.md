@@ -217,6 +217,11 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   (`WPN.pick`); otherwise the target nearest the aiming mark is locked by itself (`WPN.lock`). The gun fires at the lead point (`wpnLead`) while the lock
   is within 16 degrees of the nose and 2.2 km (`#aim.hot`), else straight ahead. Fire with a ground lock arms the bombs (`WPN.auto`) and they are let go
   by themselves when the predicted impact reaches the target; guided bombs steer to the lock. Tested in the page: gun hits up to 11 degrees off the nose.
+- Any place as a target (the owner asked for it): a tap or a click on the world while the weapons are live (`wpnTap`, called from `setupLook`'s
+  pointer-up when the finger did not drag) marches the line of sight to the first roof or ground within 12 km and makes that place the target
+  (`WPN.free`, also `WPN.pick`); a tap within 34 px of a practice target or a drone takes that instead. The place gets a square dashed mark
+  (`.tmk.fr`); a tap on a picked mark lets it go (`wpnUnpick`), as does a new start. The gun, the armed bomb drop, guided bombs and missiles all go
+  to it. It is still only a place to aim at: the burst is a picture and nothing in the world is damaged.
 - A start with `armed` or `plane` brings its aircraft only when the start is chosen. An aircraft the player picks afterwards stands (`PLHOLD`, set by
   `pickPlane`, cleared when a start point is chosen): without it nobody could change aircraft once a range start had been chosen.
 - Motion is in map space like the aircraft (ground speed × `hsAt`), so the aiming mark and the bomb agree. `updateWeapons` gets `sdt` (fast forward applies).
