@@ -256,6 +256,11 @@ What was done with that (round eight, softening):
   (`scatter.job`); the first build and one after a jump are still done at once. `?perf=1` now starts with a low, fast pass and counts late frames
   (over 25 ms of 240), the worst one, and the game code's worst frame. Not yet confirmed on the phone that this was the whole cause: the map
   redraw every fourth frame and first-time uploads of city buckets are the next suspects.
+- The detail governor (`DET`, `autoDetail` in `src/02-scene-terrain.js`, before `autoRes` in the loop): the phone at full density held 60 frames a
+  second on the coast and fell to 30 in the Jerusalem hills (184 late frames of 240). When 45 frames average over 19.5 ms the extras are given back
+  one step at a time: building shadows, draw distance to 75% then 55% (`DET.far` in the cull; thick forests go with the last), and in the "best"
+  setting the pixel density in quarter steps to 1.5. One way for the visit. A browser that caps at 30 frames a second (a power-saving mode) will
+  walk down all the steps: known, accepted.
 - Left for later, each needs its own round: rounded terrain between grid points (the mesh must stay equal to `triHeight`), road shoulders (needs
   transparency over a logarithmic depth buffer), districts by character, more hand-made landmarks, and real elevation data.
 
