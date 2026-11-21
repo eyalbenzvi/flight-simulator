@@ -164,6 +164,22 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - By day a landing light is a small point (`AC.landSet` in `applyTODv`); the explosion is orange and red turning to black smoke, only a third of it additive.
 - Easy has the same speed limits as the physics (`arcadeAccel` includes the airspeed-limit and wave-drag terms). The map is larger on a phone held sideways.
 
+## Graphic QA rules (from an automated audit of the whole map)
+
+The audit scripts counted, over the whole map: obstacle boxes that run through each other, things on roads, water and airfields, road ends that touch
+nothing, water courses that climb, flat sites on slopes, and buildings against the land cover. What it led to, and what any new placement must keep:
+
+- Sites never stand in each other: `planSites` places them in order of importance (`PRI`) and leaves out a site that would overlap one already placed
+  (`clash`). That took the overlapping pairs from 4,584 to 79 (what is left is meant: a power station and its chimneys, the Masada rock) and the placed
+  sites from about 24,000 to about 14,700. Pitches, courts, pools, sewage works and stations are left out on a slope (over 4.5 m across them).
+- Roads (`roadLines`): a piece that touches no other road at either end is dropped unless it is over 6.5 km; a spur under 1.6 km whose loose end is not at
+  a settlement, water, an airfield or the edge of the map is dropped; a longer road ending nowhere loses its tail back to the last junction (within 3 km).
+- Water courses (`riverLines`): going downstream, any stretch more than 14 m above the lowest point passed is left out (the modelled ground has ridges
+  the real valley does not), and scraps under 350 m that touch no water and no other course are dropped.
+- Buildings against the land cover (`buildCities`): a cell only the satellite calls built is not built on forest, orchard, vineyard, field, park, scrub,
+  sand, rock, solar field; nothing generic on cemeteries or water; a residential or industrial cell with nothing in or beside it gets a house or a shed
+  (half of them). Hand-made landmarks move inland when part of them would stand in water, and keep off airfields; salt pans are not laid on slopes.
+
 ## Start-up
 
 `init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then

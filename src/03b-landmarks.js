@@ -101,8 +101,11 @@ function planLandmarks() {
   for (const city in LANDMARKS) for (const [lon, lat, kind, o] of LANDMARKS[city]) {
     let x = lon2x(lon), z = lat2z(lat); const r = (R[kind] || 40) * (o.s || 1), wet = kind === 'port' || kind === 'marina';
     if (r && !wet) { let best = null;                   // nudge off roads: rings of 8 directions out to 3 radii
-      for (let k = 0; k <= 6 && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) { const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water) { best = [px, pz]; break; } }
+      for (let k = 0; k <= 6 && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) { const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water && !airfieldAt(px, pz, r)) { best = [px, pz]; break; } }
       if (best) [x, z] = best; }
+    if (!wet && r && wetAt(x, z, r * 0.8)) { let ok = false;          // part of it would stand in the sea or a lake: move it inland, up to 500 m, or leave it out
+      for (let k = 1; k <= 10 && !ok; k++) for (let q = 0; q < 8; q++) { const px = x + Math.cos(q * 0.785) * k * 50, pz = z + Math.sin(q * 0.785) * k * 50; if (!wetAt(px, pz, r * 0.8) && !nearRoad(px, pz, r * 0.7)) { x = px; z = pz; ok = true; break; } }
+      if (!ok) continue; }
     if (!wet && groundAt(x, z).water) continue;
     LMK.list.push({ city, x, z, kind, o, r });
     if (r) reserveGround(x, z, r + 15);
@@ -184,7 +187,7 @@ const LMK_KIND = {
     b.put('plain', G.cyl(16), 0x2e3236, x + 45, y + 16, z - 12, 0, 9, 0.6, 9); b.put('plain', G.box, 0xe8e8e0, x + 45, y + 16.4, z - 12, 0, 9, 0.3, 2); b.put('plain', G.box, 0xe8e8e0, x + 45, y + 16.4, z - 12, 0, 2, 0.3, 9);
     b.put('plain', G.box, 0xd8322a, x - 40, y + 46, z, 0.3, 8, 8, 2); },
   park(b, x, y, z, o) { const G = lmkGeo(), R = rng(Math.round(x * 3 + z)), r = o.r;
-    b.put('plain', G.cyl(28), 0x5b8a40, x, y - 1.2, z, 0, r * 0.9, 1.6, r * 0.6);
+    b.put('plain', G.cyl(28), 0x4f7a3c, x, y - 1.2, z, 0, r * 0.9, 1.6, r * 0.6);
     if (o.lake) b.put('shiny', G.cyl(24), 0x3e7a98, x + r * 0.2, y - 0.9, z, 0, r * 0.32, 1.6, r * 0.2);
     for (let i = 0; i < (o.trees ? 70 : 40); i++) { const a = R() * 6.283, d = Math.sqrt(R()) * r * 0.85, tx = x + Math.cos(a) * d, tz = z + Math.sin(a) * d * 0.66; if (o.lake && Math.hypot((tx - x - r * 0.2) / 0.32, (tz - z) / 0.2) < r * 1.05) continue;
       const th = 9 + R() * 8; b.put('plain', G.cone(6), 0x2f5a26 + ((R() * 3) | 0) * 0x020400, tx, heightAt(tx, tz) - 0.5, tz, 0, 4 + R() * 3, th, 4 + R() * 3); } },

@@ -154,13 +154,21 @@ function buildCities() {
   const styleNear = (i, j) => { for (let r = 1; r <= 3; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue; const oo = (jj * w + ii) * 4; if (d[oo + 3]) return d[oo + 1] & 7; } return 0; };
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const o = (j * w + i) * 4, inRaster = d[o + 3] > 0, cov = bo[o] / 255, bc = bo[o + 1] & 15, nlog = bo[o + 1] >> 4, bh = bo[o + 2], lc = LCR.d[o];
-    if (!inRaster && !((cov >= 0.012 && nlog >= 2) || nlog >= 3 || cov >= 0.03)) continue;          /* also the few houses of a small village, a farmyard, a lone large building (it used to take eight buildings or 5% cover) */
+    // the ground and what stands on it agree: a cell the satellite alone calls built (no mapped building) is not built where the land cover says forest,
+    // orchard, field, scrub, sand, rock, solar field or cemetery; and a cell mapped as residential or industrial with nothing in it or beside it gets a
+    // house or a shed (half of them), so no painted neighbourhood stands empty
+    let fill = false;
+    if (inRaster && !nlog && cov === 0 && (lc === 1 || lc === 2 || lc === 3 || lc === 4 || lc === 5 || lc === 6 || lc === 7 || lc === 8 || lc === 14 || lc === 16)) continue;
+    if (lc === 16 || lc === 9) continue;
+    if (!inRaster && !((cov >= 0.012 && nlog >= 2) || nlog >= 3 || cov >= 0.03)) { if ((lc !== 11 && lc !== 12) || hash2(i * 0.73 + 1.3, j * 1.19 + 4.1) > 0.5) continue;
+      let near = false; for (let a = -1; a <= 1 && !near; a++) for (let c = -1; c <= 1; c++) { const ii = i + a, jj = j + c; if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue; const oo = (jj * w + ii) * 4; if (d[oo + 3] > 0 || (bo[oo + 1] >> 4) >= 2) { near = true; break; } } if (near) continue; fill = true; }          /* also the few houses of a small village, a farmyard, a lone large building (it used to take eight buildings or 5% cover) */
     const sd = inRaster ? d[o + 2] / 255 : hash2(i * 1.7 + 3.1, j * 2.3 + 1.7), s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1, szc = inRaster ? d[o + 1] >> 3 : Math.min(3, Math.round(cov * 6)), szk = 0.7 + 0.13 * szc;
     let st = inRaster ? d[o + 1] & 7 : 0, ht = inRaster ? d[o] : 0;
     if (bc === 3 || (lc === 12 && (bc === 0 || bc === 4) && cov > 0.04)) st = 5;                              // industrial sheds
     else if ((bc === 6 || lc === 13) && !inRaster) st = 6;                                                     // greenhouses
     else if (inRaster) { if (bc === 2 && st === 3) st = 1; else if (bc === 1 && st === 1 && ht < 14) st = 3; }  // apartments or houses, as mapped
     else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
+    if (fill) st = lc === 12 ? 5 : 3;
     if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
     const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || wetAt(x, z, 34) || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;          /* not in the sea, and not on a mapped lake or reservoir either */
@@ -301,6 +309,13 @@ function riverLines() {
     if (D.length > 1) RIVERLINES.push({ D, hw: e[0] ? 8 : 5 }); }
   for (const pts of [[[34.7, 31.2], [34.55, 31.28], [34.42, 31.44]], [[34.8, 30.83], [34.95, 30.88], [35.15, 30.92], [35.33, 30.93]], [[34.75, 30.15], [34.95, 30.35], [35.15, 30.42], [35.22, 30.5]], [[35.1, 30.0], [35.2, 30.45], [35.32, 30.85]], [[35.3, 31.84], [35.4, 31.845], [35.47, 31.84]], [[35.25, 31.5], [35.33, 31.465], [35.385, 31.455]], [[35.0, 31.22], [34.82, 31.235], [34.7, 31.2]]])
     RIVERLINES.push({ D: splinePath(pts, 40), hw: 14, dry: true });
+  // Water does not run uphill. The ground here is modelled, not surveyed, so a mapped course sometimes crosses a ridge that is not there in reality: going
+  // downstream, any stretch that stands more than 14 m above the lowest point passed so far is left out, and so are scraps under 350 m that touch nothing.
+  { const out = []; for (const r of RIVERLINES) { let D = r.D; if (groundAt(D[0][0], D[0][1]).h < groundAt(D[D.length - 1][0], D[D.length - 1][1]).h) D = D.slice().reverse(); let lo = Infinity, run = [];
+      const flush = () => { if (run.length >= 5) out.push({ D: run, hw: r.hw, dry: r.dry }); run = []; };
+      for (const p of D) { const h = groundAt(p[0], p[1]).h; if (h <= lo + 14) run.push(p); else flush(); lo = Math.min(lo, h); } flush(); }
+    const touches = (p, i) => groundAt(p[0], p[1]).water || lcAt(p[0], p[1]) === 9 || out.some((o, j) => j !== i && o.D.some(q => Math.abs(q[0] - p[0]) < 110 && Math.abs(q[1] - p[1]) < 110));
+    RIVERLINES = out.filter((r, i) => { let len = 0; for (let k = 1; k < r.D.length; k++) len += Math.hypot(r.D[k][0] - r.D[k - 1][0], r.D[k][1] - r.D[k - 1][1]); return len > 350 || touches(r.D[0], i) || touches(r.D[r.D.length - 1], i); }); }
   return RIVERLINES;
 }
 /** True on water: the sea and the lakes of the terrain, and the lakes, reservoirs and ponds of the land cover (class 9), at the point or within `r` of it. */
@@ -328,6 +343,19 @@ function roadLines() {
   // a hand-drawn road keeps only the stretches the OSM extract does not cover (it reaches a few km past the borders)
   ROADS.forEach(([cls, pts], i) => { let run = []; const flush = () => { if (run.length > 12) ROADLINES.push({ cls, ref: ROADNUM[i] || '', D: run, dual: cls === 2 }); run = []; };
     for (const p of splinePath(pts, 45)) { if (cov.has(ck(p[0], p[1]))) flush(); else run.push(p); } flush(); });
+  // Roads that lead nowhere are left out: a piece that touches no other road at either end (unless it is long), and a short spur whose loose end is not
+  // at a settlement, the edge of the map, water or an airfield. (About 300 ends of 18,000 were loose: left-overs of the extract, not real roads' ends.)
+  { const PH = new Map(), all = ROADLINES; all.forEach((r, i) => r.D.forEach(p => { const k = Math.floor(p[0] / 80) + ':' + Math.floor(p[1] / 80); (PH.get(k) || PH.set(k, []).get(k)).push([p[0], p[1], i]); }));
+    const loose = (p, i) => { const [x, z] = p; if (x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500 || groundAt(x, z).water || airfieldAt(x, z, 250)) return 0;
+      for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + a) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 70) return 0;
+      if (urbanAt(x, z) > 0.02 || LOCS.some(l => Math.abs(lon2x(l[2]) - x) < 900 && Math.abs(lat2z(l[3]) - z) < 900)) return 1; return 2; };          // 1: ends at a settlement, 2: ends nowhere
+    ROADLINES = all.filter((r, i) => { let len = 0; for (let k = 1; k < r.D.length; k++) len += Math.hypot(r.D[k][0] - r.D[k - 1][0], r.D[k][1] - r.D[k - 1][1]); const a = loose(r.D[0], i), b = loose(r.D[r.D.length - 1], i);
+      if (a && b && len < 6500) return false; if ((a === 2 || b === 2) && len < 1600) return false;
+      // a longer road with an end in the middle of nowhere: its tail is cut back to the last junction (when that is within 3 km)
+      const cutAt = (D) => { let t = 0; for (let k = 1; k < D.length; k++) { t += Math.hypot(D[k][0] - D[k - 1][0], D[k][1] - D[k - 1][1]); if (t > 3000) return 0; const [x, z] = D[k];
+          for (let u = -1; u <= 1; u++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + u) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 60) return k; } return 0; };
+      if (a === 2) { const k = cutAt(r.D); if (k) r.D = r.D.slice(k); } if (b === 2) { const k = cutAt(r.D.slice().reverse()); if (k) r.D = r.D.slice(0, r.D.length - k); }
+      return r.D.length >= 2; }); }
   return ROADLINES;
 }
 /** Road and railway corridors, so nothing is built on a road. Every centreline segment (the same splines the road meshes use)
@@ -509,6 +537,7 @@ function buildDetails() {
   const P = [], C = [], I = [], col = new THREE.Color();
   const ponds = (lon, lat, cols, rows, w, d, pal, rot) => { const cx = lon2x(lon), cz = lat2z(lat), R = rng(Math.round(lon * 977 + lat * 131)), ca = Math.cos(rot), sa = Math.sin(rot);
     for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || airfieldAt(x, z, Math.hypot(w, d) / 2) || nearRoad(x, z, Math.hypot(w, d) / 2) || obstBox(x, z, w / 2, d / 2)) continue;
+      { const hs = [triHeight(x - w * 0.4, z), triHeight(x + w * 0.4, z), triHeight(x, z - d * 0.4), triHeight(x, z + d * 0.4)]; if (Math.max(...hs) - Math.min(...hs) > 7) continue; }          /* a pan is level water: not on a slope, where it would hang in the air as a tilted slab */
       const y = triHeight(x, z) + 2.5, k = P.length / 3; col.setHex(pal[(R() * pal.length) | 0]);
       for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) { const ox = sx * w / 2, oz = sz * d / 2; P.push(x + ox * ca - oz * sa, y, z + ox * sa + oz * ca); C.push(col.r, col.g, col.b); }
       I.push(k, k + 1, k + 2, k + 2, k + 1, k + 3); } };
@@ -726,6 +755,7 @@ function updateTrains(dt) {
 }
 
 /** Streams draped on the terrain: perennial rivers in blue over a green bank, desert wadis as pale gravel beds. */
+let DIAMOND = null;
 function buildRivers() {
   // a strip per water course: for a river a green bank and the water on it, at its real width; for a dry stream bed pale gravel. Where a line runs
   // into the sea or a lake it stops; roads are laid higher, so a road that crosses reads as a bridge
@@ -739,5 +769,6 @@ function buildRivers() {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); };
   mk(r => !r.dry, r => r.hw + 7, 1.1, 0x4a6034); mk(r => !r.dry, r => r.hw, 1.6, 0x3d6f7c); mk(r => r.dry, r => r.hw, 1.2, 0xdccba4);
   // Ramat Gan's Diamond Exchange tower, the tallest thing on the Tel Aviv skyline for years
-  const tx = lon2x(34.803), tz = lat2z(32.084), tw = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 235, 20), windowize(new THREE.MeshPhongMaterial({ color: 0x9fb4c4, shininess: 100 }))); tw.position.set(tx, heightAt(tx, tz) + 117, tz); scene.add(tw);
+  let tx = lon2x(34.803), tz = lat2z(32.084); for (let k = 0, done = false; k <= 6 && !done; k++) for (let q = 0; q < (k ? 8 : 1); q++) { const px = lon2x(34.803) + Math.cos(q * 0.785) * k * 22, pz = lat2z(32.084) + Math.sin(q * 0.785) * k * 22; if (!nearRoad(px, pz, 24)) { tx = px; tz = pz; done = true; break; } }          /* off the road it used to stand on */
+  DIAMOND = [tx, tz]; const tw = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 235, 20), windowize(new THREE.MeshPhongMaterial({ color: 0x9fb4c4, shininess: 100 }))); tw.position.set(tx, heightAt(tx, tz) + 117, tz); scene.add(tw);
 }

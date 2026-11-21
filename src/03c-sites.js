@@ -10,7 +10,13 @@ function planSites() {
   const nearLmk = (x, z, r) => LMK.list.some(l => Math.hypot(l.x - x, l.z - z) < r + l.r);
   const mosques = SITES.filter(s => SITE_KINDS[s[0]] === 'mosque').map(s => [lon2x(s[1] / 1e5), lat2z(s[2] / 1e5)]);
   const byMosque = (x, z) => mosques.some(([mx, mz]) => Math.abs(mx - x) < 45 && Math.abs(mz - z) < 45);       // a mosque model brings its own minaret
-  for (const s of SITES) {
+  // the important and the large first, so that where two sites would stand in each other the lesser one is left out (footprints are drawn at half size but
+  // the map is compressed 4:1, so the buildings of one campus, or a pitch and its neighbour, used to run through each other: 4,500 pairs)
+  const PRI = ['stadium', 'tall', 'hospital', 'plant', 'mall', 'fortress', 'mosque', 'church', 'station', 'synagogue', 'hotel', 'school', 'civic', 'warehouse', 'shop', 'sewage', 'watertower', 'chimney', 'tower', 'mast', 'lighthouse', 'silo', 'turbine', 'tank', 'ruins', 'pitch', 'pool', 'barn', 'fuel', 'court', 'belltower', 'minaret', 'lookout', 'monument'];
+  const order = SITES.map((s, i) => i).sort((a, b) => (PRI.indexOf(SITE_KINDS[SITES[a][0]]) - PRI.indexOf(SITE_KINDS[SITES[b][0]])) || (SITES[b][4] * SITES[b][5] - SITES[a][4] * SITES[a][5]) || a - b);
+  const placed = new Map(), pkey = (x, z) => Math.floor(x / 120) + ':' + Math.floor(z / 120);
+  const clash = (x, z, r) => { for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) for (const q of (placed.get((Math.floor(x / 120) + a) + ':' + (Math.floor(z / 120) + c)) || [])) if (Math.hypot(q[0] - x, q[1] - z) < (r + q[2]) * 0.92 + 2) return true; return false; };
+  for (const si of order) { const s = SITES[si];
     const kind = SITE_KINDS[s[0]], x = lon2x(s[1] / 1e5), z = lat2z(s[2] / 1e5); if (x < X0 || x > X1 || z < Z0 || z > Z1) continue;
     const L = s[4] / 2, W = s[5] / 2, area = s[4] * s[5];
     if (kind === 'synagogue' && area < 450) continue;              // the larger ones; the many small ones look like any building
@@ -31,6 +37,9 @@ function planSites() {
     if (wetAt(px, pz, kind === 'lighthouse' ? 0 : Math.min(r, 40)) || airfieldAt(px, pz, r)) continue;          // not in the sea, a lake or a reservoir
     if (kind !== 'mosque' && kind !== 'church' && kind !== 'minaret' && kind !== 'belltower' && kind !== 'fortress' && kind !== 'ruins' && kind !== 'monument' && inOldCity(px, pz)) continue;
     if ((kind === 'tall' || kind === 'mall' || kind === 'hospital' || kind === 'plant') && inOldCity(px, pz)) continue;          // no modern blocks inside the Old City walls (it is drawn larger than its place on the map)
+    if (clash(px, pz, Math.min(r, 110))) continue;                 // something more important already stands here
+    if (kind === 'pitch' || kind === 'court' || kind === 'pool' || kind === 'sewage' || kind === 'station') { const e = Math.min(r, 30), hs = [heightAt(px - e, pz), heightAt(px + e, pz), heightAt(px, pz - e), heightAt(px, pz + e)]; if (Math.max(...hs) - Math.min(...hs) > 4.5) continue; }          // a pitch or a pool lies flat: not on a slope, where half of it would be buried
+    { const k = pkey(px, pz); (placed.get(k) || placed.set(k, []).get(k)).push([px, pz, Math.min(r, 110)]); }
     SITE.list.push({ kind, x: px, z: pz, h: s[3], L, W, rot: s[6] * DEG, r });
     if (kind === 'plant') for (const k of [-1, 1]) SITE.list.push({ kind: 'chimney', x: x + Math.cos(s[6] * DEG) * L * 0.3 * k, z: z - Math.sin(s[6] * DEG) * L * 0.3 * k, h: 110, L: 0, W: 0, rot: 0, r: 6 });
   }
