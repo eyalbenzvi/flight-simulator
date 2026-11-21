@@ -23,6 +23,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * V, 0.35, 1.2)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
+  if (def.plane && PL.key !== def.plane && WORLD.ready) selectPlane(def.plane);          // a start that brings its own aircraft
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
@@ -39,7 +40,7 @@ function spawn(def) {
     else { x = def.x !== undefined ? def.x : lon2x(def.lon); z = def.z !== undefined ? def.z : lat2z(def.lat); alt = def.agl ? groundAt(x, z).h + def.agl : def.alt; }
     const d = dirOf(hdg), tr = trimFor(V, alt, gamma, FLAPS[f], gear);
     alt += def.high || 0; S.pos.set(x, alt, z); S.vel.set(d.x * V * Math.cos(gamma), V * Math.sin(gamma), d.z * V * Math.cos(gamma));
-    S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
+    S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = def.thr !== undefined ? def.thr : tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0; if (WORLD.ready) updatePlace();          /* the place name follows a new start at once */
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
@@ -154,7 +155,9 @@ function updateControls(dt) {
     const overField = AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50);
     let gT, terrAhead = false;
     if (Math.abs(climb) > 0.1 || Math.abs(lr) > 0.1) S.apprHold = false;
-    if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false; }
+    if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false;
+      if (climb > 0) { const eas = S.V * Math.sqrt(isa(S.pos.y).rho / 1.225), v0 = PL.vs * 1.2, vc = Math.max(PL.climbV || 0, PL.vs * 1.5); gT *= clamp((eas - v0) / (vc - v0), -0.2, 1);
+        if (PL.sonic && S.pos.y > 8500 && (S.mach || 0) < 1.2 && S.thr > 0.8) { gT = Math.min(gT, 0.004); S.sonicLvl = true; } else S.sonicLvl = false; } else S.sonicLvl = false; }          /* a supersonic type levels off at 8.5 km until it is through the sound barrier, as the real ones do, and then climbs on */          /* a held climb eases off as the indicated speed falls to the type's climb speed (and noses over a little below it), so it keeps climbing fast instead of hanging near the stall */
     else if (S.apprHold) { gT = -3 * DEG; S.holdAlt = null; }          /* a practice approach keeps coming down the glide path until the stick is touched; the flare over the field then lands it */
     else if (S.toClimb) { gT = 5 * DEG; if (S.ra > 450) S.toClimb = false; }
     else { if (S.holdAlt === null) S.holdAlt = S.pos.y + S.vel.y * 1.5; gT = gammaForAlt(S.holdAlt); }

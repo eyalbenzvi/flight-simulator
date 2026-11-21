@@ -39,7 +39,7 @@ function tiltStart() {
 }
 function tiltStop() { TILT.on = false; TILT.x = TILT.y = 0; }
 function buildExtras() {
-  buildOldCity();
+  buildOldCity(); buildBridges(); buildSkyLife();
   // --- the aircraft shadows itself (wing on fuselage, tail on wing): one small shadow map that follows it; larger screens only ---
   if (HIRES && new URLSearchParams(location.search).get('shadow') !== '0') { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; sun.castShadow = true; const c = sun.shadow.camera; c.left = c.bottom = -42; c.right = c.top = 42; c.near = 850; c.far = 1150; c.updateProjectionMatrix();
     sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
@@ -144,6 +144,57 @@ function updateCourse() {
     else { const t = TNOW - COURSE.t0, best = SAVE.best || (SAVE.best = {}), rec = !best[COURSE.id] || t < best[COURSE.id]; if (rec) { best[COURSE.id] = Math.round(t * 10) / 10; persist(); } fanfare(3); COURSE.on = false; r.m.visible = false;
       toast('★ ' + L('Course done in ', 'המסלול הושלם ב-') + courseTime(t) + (rec ? L('. A new best!', '. שיא חדש!') : L('. Best: ', '. השיא: ') + courseTime(best[COURSE.id])), 6); } }
 }
+/** The two bridges of `BRIDGES`. The viaduct: a deck on tall piers, solid (deck and piers are obstacles), with clear air under it: flying under the deck
+    between two piers is answered with a message. The Chords Bridge: a low curved deck, a leaning white mast and its cables. */
+function buildBridges() {
+  const conc = new THREE.MeshLambertMaterial({ color: 0xd2cfc6 }), dark = new THREE.MeshLambertMaterial({ color: 0x3c3f44 }), white = new THREE.MeshLambertMaterial({ color: 0xf2f2ee });
+  const box = (w, h, d, mat, x, y, z, ry) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.y = ry || 0; scene.add(m); return m; };
+  XT.under = [];
+  for (const [kind, lon, lat, rot, len, h] of BRIDGES) { const cx = lon2x(lon), cz = lat2z(lat), sx = Math.sin(rot), sz = Math.cos(rot), at = u => [cx + sx * u, cz + sz * u];
+    if (kind === 'viaduct') { let lo = 1e9; for (let u = -len / 2; u <= len / 2; u += 30) lo = Math.min(lo, triHeight(...at(u))); const y = lo + h;
+      box(22, 3, len, conc, cx, y, cz, rot); box(22.6, 0.5, len, dark, cx, y + 1.7, cz, rot); for (const s of [-1, 1]) box(0.5, 1.6, len, conc, cx + sz * s * 11, y + 2.3, cz - sx * s * 11, rot);
+      addObst(cx, cz, 22, len, rot, y - 2.5, y + 4);
+      for (let u = -len / 2 + 45; u <= len / 2 - 45; u += 90) { const [px, pz] = at(u), g = triHeight(px, pz), ph = y - 1.5 - g + 4; if (ph < 6) continue; box(13, ph, 4.5, conc, px, g - 4 + ph / 2, pz, rot); box(16, 2.4, 6, conc, px, y - 2.6, pz, rot); addObst(px, pz, 13, 4.5, rot, g - 4, y); }
+      XT.under.push({ cx, cz, sx, sz, half: len / 2 - 8, wid: 15, y }); }
+    else { const y0 = triHeight(cx, cz), dy = 11;          // the deck curves: three straight pieces, each turned a little more
+      for (const [u, tw] of [[-len / 3, -0.22], [0, 0], [len / 3, 0.22]]) { const [px, pz] = at(u); box(14, 1.6, len / 3 + 6, conc, px + sz * Math.abs(tw) * 60, y0 + dy, pz - sx * Math.abs(tw) * 60, rot + tw); box(4, dy + 3, 4, conc, px + sz * Math.abs(tw) * 60, y0 + dy / 2 - 2, pz - sx * Math.abs(tw) * 60, rot + tw); }
+      const mx = cx - sz * 16, mz = cz + sx * 16, top = new THREE.Vector3(mx - sz * 26, y0 + h, mz + sx * 26), base = new THREE.Vector3(mx, y0, mz), mid = base.clone().lerp(top, 0.5), mast = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 3.4, base.distanceTo(top), 8), white);
+      mast.position.copy(mid); mast.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize()); scene.add(mast); addObst(mid.x, mid.z, 30, 30, 0, y0, y0 + h);
+      const W = []; for (let k = 0; k < 22; k++) { const u = -len / 2 + 14 + k * (len - 28) / 21, [px, pz] = at(u), tw = Math.abs(u) / (len / 2) * 0.22 * 60 * (Math.abs(u) > len / 6 ? 1 : 0.4), a = base.clone().lerp(top, 0.55 + 0.42 * (k % 11) / 10); W.push(a.x, a.y, a.z, px + sz * tw, y0 + dy + 1, pz - sx * tw); }
+      const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(W, 3)); const ln = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xf4f4f0 })); ln.frustumCulled = false; scene.add(ln); } }
+}
+/** Company in the sky: the other aircraft are real models now (the airliner and the business jet, wheels up), hot-air balloons hang over the Jezreel
+    valley, and a flock of birds wheels over the coast north of Tel Aviv. Balloons are solid; birds are not. */
+function skinTraffic() {          // called once the other aircraft exist (they are made after this file's builders)
+  AIT.forEach((a, i) => { const M = AC.models[i % 3 === 1 ? 'bizjet' : 'airliner'], c = M.g.clone(true); c.visible = true; const gi = M.g.children.indexOf(M.gear); if (gi >= 0) c.children[gi].visible = false;
+    for (const l of M.land || []) { const li = M.g.children.indexOf(l); if (li >= 0) c.children[li].visible = false; } while (a.g.children.length) a.g.remove(a.g.children[0]); a.g.add(c); });
+}
+function buildSkyLife() {
+  // balloons: a striped envelope and a basket
+  { const prof = [[0.2, -9], [3.2, -7.4], [7.4, -3], [9, 1.5], [8.2, 5.6], [5.4, 8.4], [0.1, 9.6]].map(p => new THREE.Vector2(p[0], p[1])), env = new THREE.LatheGeometry(prof, 16), n = env.attributes.position.count, col = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) { const stripe = Math.floor(env.attributes.uv.getX(k) * 16 - 0.001) % 2; col[k * 3] = 1; col[k * 3 + 1] = stripe ? 1 : 0.42; col[k * 3 + 2] = stripe ? 1 : 0.42; } env.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const g = mergeGeo([[env.toNonIndexed(), 1, 1, 1]]); { const src = env.toNonIndexed().attributes.color.array, dst = g.attributes.color.array; for (let k = 0; k < dst.length; k++) dst[k] = src[k]; }
+    const bk = mergeGeo([[new THREE.BoxGeometry(1.6, 1.3, 1.6).translate(0, -12.6, 0), 0.45, 0.3, 0.16], [new THREE.CylinderGeometry(0.05, 0.05, 3.4, 4).translate(0.7, -10.6, 0.7), 0.2, 0.2, 0.2], [new THREE.CylinderGeometry(0.05, 0.05, 3.4, 4).translate(-0.7, -10.6, -0.7), 0.2, 0.2, 0.2]]);
+    const N = 9, mat = new THREE.MeshLambertMaterial({ vertexColors: true }), a = new THREE.InstancedMesh(g, mat, N), b = new THREE.InstancedMesh(bk, mat, N), c = new THREE.Color(), pal = [0xe33b2e, 0x2f7fd0, 0xf0b020, 0x3fa85a, 0xb04ac0, 0xff7a1a, 0x18a6a6, 0xd02a6a, 0x5a6ad8]; XT.bal = { a, b, list: [] };
+    for (let k = 0; k < N; k++) { const x = lon2x(35.14 + hash2(k, 3) * 0.24), z = lat2z(32.57 + hash2(k, 7) * 0.12); XT.bal.list.push({ x, z, y: groundAt(x, z).h + 240 + hash2(k, 11) * 380, ph: k * 1.7 }); a.setColorAt(k, c.setHex(pal[k])); b.setColorAt(k, c.setHex(0xffffff)); }
+    for (const m of [a, b]) { m.frustumCulled = false; scene.add(m); } }
+  // birds: forty small wings that beat, on a slow circle
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([-1.1, 0, 0.1, 0, 0, -0.35, 0, 0, 0.3, 1.1, 0, 0.1, 0, 0, 0.3, 0, 0, -0.35], 3)); g.computeVertexNormals();
+    const m = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ color: 0x2a2c30, side: THREE.DoubleSide }), 40); m.frustumCulled = false; scene.add(m); XT.birds = { m, cx: lon2x(34.775), cz: lat2z(32.15), off: [] }; for (let k = 0; k < 40; k++) XT.birds.off.push([(hash2(k, 1) - 0.5) * 90, (hash2(k, 2) - 0.5) * 26, (hash2(k, 5) - 0.5) * 70, hash2(k, 9) * 6]); }
+}
+function updateSkyLife(dt) {
+  const o = updateSkyLife.o || (updateSkyLife.o = new THREE.Object3D());
+  if (!XT.skinned && AIT.length) { XT.skinned = true; skinTraffic(); }
+  if (XT.bal) { XT.bal.list.forEach((b, k) => { const y = b.y + Math.sin(TNOW * 0.25 + b.ph) * 12; o.position.set(b.x, y, b.z); o.rotation.set(0, TNOW * 0.05 + b.ph, 0); o.scale.setScalar(1.6); o.updateMatrix(); XT.bal.a.setMatrixAt(k, o.matrix); XT.bal.b.setMatrixAt(k, o.matrix);
+      if (!S.crashed && S.started && Math.hypot(S.pos.x - b.x, S.pos.y - y, S.pos.z - b.z) < 17) crash(L('Flew into a balloon.', 'התנגשות בכדור פורח')); }); XT.bal.a.instanceMatrix.needsUpdate = true; XT.bal.b.instanceMatrix.needsUpdate = true; }
+  if (XT.birds) { const B = XT.birds, a = TNOW * 0.05, bx = B.cx + Math.cos(a) * 520, bz = B.cz + Math.sin(a) * 520, by = 120 + Math.sin(TNOW * 0.11) * 40, hd = Math.atan2(-Math.sin(a), -Math.cos(a)) + Math.PI / 2;
+    B.off.forEach((f, k) => { o.position.set(bx + f[0], by + f[1] + Math.sin(TNOW * 0.9 + f[3]) * 3, bz + f[2]); o.rotation.set(0, -a, 0); o.scale.set(1, 1, 1); o.updateMatrix(); const e = o.matrix.elements, fl = Math.sin(TNOW * 9 + f[3]) * 0.5; e[1] = fl * 0.6; B.m.setMatrixAt(k, o.matrix); }); B.m.instanceMatrix.needsUpdate = true; }
+  // flying close beside another aircraft for a few seconds
+  if (!S.onGround && !S.crashed) { let near = false; for (const t of AIT) { const d = t.g.position.distanceTo(S.pos); if (d < 190 && d > 32) near = true; } XT.formT = near ? (XT.formT || 0) + dt : 0;
+    if (XT.formT > 3.5 && TNOW - (XT.dareT || -99) > 20) { XT.dareT = TNOW; XT.formT = 0; toast(L('Formation flight!', 'טיסת מבנה!'), 2.4); Snd.chime(880, 0.2); buzz(25); } }
+  // under the viaduct
+  if (XT.under && !S.onGround && !S.crashed) for (const u of XT.under) { const dx = S.pos.x - u.cx, dz = S.pos.z - u.cz, al = dx * u.sx + dz * u.sz, ac = dx * u.sz - dz * u.sx; if (Math.abs(al) < u.half && Math.abs(ac) < u.wid && S.pos.y < u.y - 3 && S.pos.y > u.y - 70 && TNOW - (XT.underT || -99) > 8) { XT.underT = TNOW; XT.dareT = TNOW; toast(L('Under the bridge!', 'מתחת לגשר!'), 2.6); fanfare(2); } }
+}
 /** One puff of smoke or vapour into the trail buffer. */
 function puff(x, y, z, size, alpha) { if (!TR) return; const i = TR.i; TR.i = (i + 1) % TR.n; TR.pos[i * 3] = x; TR.pos[i * 3 + 1] = y; TR.pos[i * 3 + 2] = z; TR.dat[i * 3] = TNOW; TR.dat[i * 3 + 1] = size; TR.dat[i * 3 + 2] = alpha; TR.pts.geometry.attributes.position.needsUpdate = true; TR.pts.geometry.attributes.aDat.needsUpdate = true; }
 
@@ -162,7 +213,7 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
-  updateCourse();
+  updateCourse(); updateSkyLife(dt);
   // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
   if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
     if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');

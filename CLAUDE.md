@@ -148,6 +148,22 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - Look: the cockpit panel stands in view with the live flight displays and map in it (top edge 13° below the horizon, no centre post, a thin canopy bow);
   at night the aircraft keeps a faint moonlit sheen.
 
+## Round six: the next ten from the reviews
+
+- Concorde: the start "Concorde at Mach 2" (17 km, `plane` and `thr` on a start are applied by `spawn`); in Medium a held climb follows the type's climb
+  speed (`climbV`, an indicated speed; default 1.5 × stall) and a supersonic type levels off at 8.5 km until past Mach 1.2 (`S.sonicLvl`, with a hint).
+  Holding the stick up all the way gives about Mach 1.2 at 15 km after 15 minutes; Mach 2 needs levelling off high up, or the start.
+- Changing aircraft in the pause menu while airborne carries on from the same place, height and heading (`pickPlane`).
+- Two real bridges (`BRIDGES` in `src/03b-landmarks.js`, built by `buildBridges` in `src/07c-extras.js`): the Motza viaduct on road 1, solid deck and piers with
+  clear air between the piers ("Under the bridge!"), and Jerusalem's Chords Bridge (mast and cables; its deck is low).
+- Photo mode has Save (`savePhoto`: the share sheet with the file on a phone, a download elsewhere). The autopilot is in the folded "more" row on touch (`cAp`).
+- The land-cover lookup wobbles at three scales, so its 60 m cells have no straight edges.
+- Sky life (`buildSkyLife`, `updateSkyLife`): the other aircraft are clones of the airliner and business-jet models (`skinTraffic`, wheels up), nine hot-air
+  balloons hang over the Jezreel valley (solid), a flock of birds circles over the coast north of Tel Aviv (not solid); flying beside another aircraft
+  for a few seconds says "Formation flight!".
+- By day a landing light is a small point (`AC.landSet` in `applyTODv`); the explosion is orange and red turning to black smoke, only a third of it additive.
+- Easy has the same speed limits as the physics (`arcadeAccel` includes the airspeed-limit and wave-drag terms). The map is larger on a phone held sideways.
+
 ## Start-up
 
 `init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then

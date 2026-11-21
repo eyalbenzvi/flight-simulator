@@ -89,7 +89,11 @@ function inOldCity(x, z, pad) { const P = OLDCITY.poly, px = x - OLDCITY.x, pz =
   for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > pz) !== (zj > pz) && px < (xj - xi) * (pz - zi) / (zj - zi) + xi) ins = !ins; }
   if (!ins || !pad) return ins; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j], dx = xj - xi, dz = zj - zi, t = clamp(((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz), 0, 1); if (Math.hypot(px - xi - dx * t, pz - zi - dz * t) < pad) return false; }
   return true; }
+/** Two real bridges (built in src/07c-extras.js): the Motza viaduct that carries road 1 up to Jerusalem, high enough to fly under between its piers, and
+    Jerusalem's Chords Bridge with its leaning mast and fan of cables. [kind, lon, lat, direction of the deck (radians, 0 = north-south), length, height] */
+const BRIDGES = [['viaduct', 35.1655, 31.7965, 1.25, 540, 50], ['chords', 35.2005, 31.7890, 0.5, 300, 118]];
 function planLandmarks() {
+  for (const [, lon, lat, rot, len] of BRIDGES) for (let u = -len / 2; u <= len / 2; u += 70) reserveGround(lon2x(lon) + Math.sin(rot) * u, lat2z(lat) + Math.cos(rot) * u, 42);
   for (let a = -440; a <= 150; a += 55) for (let b = -340; b <= 330; b += 55) if (inOldCity(OLDCITY.x + a, OLDCITY.z + b)) reserveGround(OLDCITY.x + a, OLDCITY.z + b, 42);
   const R = { tower: 30, twin: 60, stadium: 130, arena: 60, campus: 140, hospital: 90, park: 0, mall: 80, hangars: 120, marina: 0, lighthouse: 12, observatory: 25, yeshiva: 60, factory: 120, ribbons: 40,
     hotels: 0, ferris: 30, watertower: 12, synagogue: 25, port: 0, fortress: 60, desal: 90, koffler: 20, squareTower: 15, mosque: 40, church: 40, basilica: 50, sepulchre: 50, citadel: 50, prism: 60,

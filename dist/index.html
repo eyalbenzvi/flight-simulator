@@ -263,6 +263,8 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   .grid.planes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 8px; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .grid.planes button.pl { flex: 0 0 min(46%, 190px); scroll-snap-align: center; } .grid button.pl small { display: block; font-size: 12px; } .grid button.pl:not(.on) small { opacity: .7; }
   #strip span { font-size: 12px; }
+  /* a map large enough to read on a phone held sideways */
+  @media (orientation: landscape) { body.touch #map:not(.big) { height: min(46vh, 200px); } }
 </style>
 </head>
 <body>
@@ -290,7 +292,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   <div id="alert"></div>
   <div id="toast" class="panel" dir="auto"></div>
   <div id="rain"></div>
-  <div id="photoBar" class="panel"><span>Photo mode: drag to look around</span><button id="phIn">＋</button><button id="phOut">－</button><button id="phDone">Done</button></div>
+  <div id="photoBar" class="panel"><span>Photo mode: drag to look around</span><button id="phIn">＋</button><button id="phOut">－</button><button id="phSave">Save</button><button id="phDone">Done</button></div>
   <div id="legend" class="panel"></div>
   <div id="touch">
     <div id="stZone"></div>
@@ -300,6 +302,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
         <button id="cLand" hidden data-k="KeyL" class="hot">Land</button>
         <button id="cRoll" hidden data-k="KeyX">Roll</button>
         <button id="cLoop" hidden data-k="KeyZ">Loop</button>
+        <button id="cAp" hidden data-k="KeyP">Autopilot</button>
         <button id="cRate" data-k="Rate" dir="ltr">×1</button>
       </div>
       <button id="cMore" aria-expanded="false">⋯</button>
@@ -825,7 +828,8 @@ const TERRAIN_FS = `
     col*=1.0-arid*0.08*smoothstep(0.45,0.8,nC);
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
     float lcG=0.0;
-    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r; lcG=lc;
+    /* three scales of wobble: the 60 m cells of the land cover lose their straight edges and square corners */
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0+(vec2(nz(P/41.0+0.13),nz(P/41.0+0.59))-0.5)*uLCr.zw*46.0+(vec2(nz(P/13.0+0.71),nz(P/13.0+0.27))-0.5)*uLCr.zw*14.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r; lcG=lc;
       float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
         if(lc<1.5){ float h1=nz(P/16.0+0.21), can=smoothstep(0.40,0.66,h1*0.55+nD*0.45), h2=nz((P+sunDir.xz*9.0)/16.0+0.21);          /* forest: a canopy of crowns, each lit on its sun side with a shadowed gap behind */
@@ -1880,7 +1884,11 @@ function inOldCity(x, z, pad) { const P = OLDCITY.poly, px = x - OLDCITY.x, pz =
   for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > pz) !== (zj > pz) && px < (xj - xi) * (pz - zi) / (zj - zi) + xi) ins = !ins; }
   if (!ins || !pad) return ins; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j], dx = xj - xi, dz = zj - zi, t = clamp(((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz), 0, 1); if (Math.hypot(px - xi - dx * t, pz - zi - dz * t) < pad) return false; }
   return true; }
+/** Two real bridges (built in src/07c-extras.js): the Motza viaduct that carries road 1 up to Jerusalem, high enough to fly under between its piers, and
+    Jerusalem's Chords Bridge with its leaning mast and fan of cables. [kind, lon, lat, direction of the deck (radians, 0 = north-south), length, height] */
+const BRIDGES = [['viaduct', 35.1655, 31.7965, 1.25, 540, 50], ['chords', 35.2005, 31.7890, 0.5, 300, 118]];
 function planLandmarks() {
+  for (const [, lon, lat, rot, len] of BRIDGES) for (let u = -len / 2; u <= len / 2; u += 70) reserveGround(lon2x(lon) + Math.sin(rot) * u, lat2z(lat) + Math.cos(rot) * u, 42);
   for (let a = -440; a <= 150; a += 55) for (let b = -340; b <= 330; b += 55) if (inOldCity(OLDCITY.x + a, OLDCITY.z + b)) reserveGround(OLDCITY.x + a, OLDCITY.z + b, 42);
   const R = { tower: 30, twin: 60, stadium: 130, arena: 60, campus: 140, hospital: 90, park: 0, mall: 80, hangars: 120, marina: 0, lighthouse: 12, observatory: 25, yeshiva: 60, factory: 120, ribbons: 40,
     hotels: 0, ferris: 30, watertower: 12, synagogue: 25, port: 0, fortress: 60, desal: 90, koffler: 20, squareTower: 15, mosque: 40, church: 40, basilica: 50, sepulchre: 50, citadel: 50, prism: 60,
@@ -2336,7 +2344,8 @@ function applyTODv(t, key, bakeAs) {
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
   for (const m of AC.envMats) if (m.emissive && !m.emissiveMap) m.emissive.setRGB(0.045 * t.lights, 0.06 * t.lights, 0.095 * t.lights);          // at night the aircraft keeps a faint moonlit sheen, so it is not a black cut-out against the city
   for (const m of AC.livery) m.emissiveIntensity = t.lights > 0.3 ? 0.95 : 0;                       // cabin windows light up
-  for (const g of AC.glow) g.scale.setScalar(g.userData.r * (1 + 1.5 * t.lights));                  // the aircraft's lights bloom at night
+  if (!AC.landSet) AC.landSet = new Set(Object.values(AC.models).flatMap(m => m.land || []));
+  for (const g of AC.glow) g.scale.setScalar(g.userData.r * (AC.landSet.has(g) ? 0.4 + 2.1 * t.lights : 1 + 1.5 * t.lights));          /* by day a landing light is a small bright point, not a white hole in the wing */                  // the aircraft's lights bloom at night
   if (key !== null) bakeSkyReflection();
 }
 
@@ -2351,7 +2360,7 @@ const PLANES = {
   stunt: { name: 'Aerobatic plane', tag: 'Light propeller plane with show smoke. Slow, nimble, lands anywhere', mass: 950, S: 10.7, T: 4800, cl0: 0.2, cla: 5, cd0: 0.03, k: 0.07, ast: 0.28, roll: 5.8, pitch: 1.2, gearH: 1.05, flaps: [0], lapse: 0.0062, vmo: 113, mcr: 0.6, nmax: 10, spool: 0.9, rhoExp: 1.7, bank: 78, up: 25, dn: 20, rot: 11, vc: 65, pace: 82, tricks: true, bubble: true, fixedGear: true, prop: true, chase: [14, 4.2, 2.6], eye: [0, 0.78, -0.25], wingEye: [1.7, 0.95, 2.7], wingTgt: [-0.3, 0.1, -4] },
   // Concorde (155 t in flight, 358 m2, four engines with reheat): no flaps, lands nose-high at about 165 kt, Mach 2 at 18 km. wave: its supersonic drag is low; mmo: Mach limit;
   // lapse below zero and rhoExp 0.55: intakes that recover more thrust the faster and higher it flies
-  concorde: { name: 'Concorde', tag: 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high', mass: 155000, S: 358, T: 676000, cl0: 0.05, cla: 3.3, cd0: 0.0083, k: 0.3, ast: 0.42, roll: 0.55, pitch: 0.22, gearH: 4.45, flaps: [0], lapse: -0.0002, rhoExp: 0.55, vmo: 240, mcr: 0.93, sonic: true, wave: 0.012, mmo: 2.04, nmax: 2.5, spool: 0.3, bank: 45, up: 16, dn: 10, rot: 13, vc: 150, pace: 300, chase: [96, 24, 16], eye: [0, 0.75, -26.2], wingEye: [1.5, 0.6, -6], wingTgt: [11, -2.4, 14], sound: 1.5 },
+  concorde: { name: 'Concorde', tag: 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high', mass: 155000, S: 358, T: 676000, cl0: 0.05, cla: 3.3, cd0: 0.0083, k: 0.3, ast: 0.42, roll: 0.55, pitch: 0.22, gearH: 4.45, flaps: [0], lapse: -0.0002, rhoExp: 0.55, vmo: 240, mcr: 0.93, sonic: true, wave: 0.012, mmo: 2.04, nmax: 2.5, spool: 0.3, bank: 45, up: 16, dn: 10, rot: 13, vc: 150, climbV: 205, pace: 300, chase: [96, 24, 16], eye: [0, 0.75, -26.2], wingEye: [1.5, 0.6, -6], wingTgt: [11, -2.4, 14], sound: 1.5 },
   // the stealth attack jet (F-117: 20 t, 73 m2, two engines without afterburner): subsonic, Mach 0.9, no flaps, 67 degrees of sweep, lands at about 150 kt
   stealth: { name: 'Stealth jet', tag: 'Black, faceted, invisible to radar. Fast and low, no afterburner', mass: 20000, S: 73, T: 96000, cl0: 0.05, cla: 3.3, cd0: 0.018, k: 0.17, ast: 0.37, roll: 2.2, pitch: 0.6, gearH: 2.15, flaps: [0], lapse: 0.0012, vmo: 290, mcr: 0.86, nmax: 6, spool: 0.4, bank: 70, up: 30, dn: 22, rot: 11, vc: 180, pace: 290, tricks: true, bubble: true, chase: [36, 9, 6], eye: [0, 1.12, -4.2], wingEye: [3.6, 1.9, 9.5], wingTgt: [-0.6, -0.2, -6], sound: 1.2 },
   // the heavy bomber (B-52H: 180 t in flight, 370 m2, eight engines): slow to roll, takes off and lands almost level, 2 g
@@ -2754,6 +2763,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * V, 0.35, 1.2)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
+  if (def.plane && PL.key !== def.plane && WORLD.ready) selectPlane(def.plane);          // a start that brings its own aircraft
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
@@ -2770,7 +2780,7 @@ function spawn(def) {
     else { x = def.x !== undefined ? def.x : lon2x(def.lon); z = def.z !== undefined ? def.z : lat2z(def.lat); alt = def.agl ? groundAt(x, z).h + def.agl : def.alt; }
     const d = dirOf(hdg), tr = trimFor(V, alt, gamma, FLAPS[f], gear);
     alt += def.high || 0; S.pos.set(x, alt, z); S.vel.set(d.x * V * Math.cos(gamma), V * Math.sin(gamma), d.z * V * Math.cos(gamma));
-    S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
+    S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = def.thr !== undefined ? def.thr : tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0; if (WORLD.ready) updatePlace();          /* the place name follows a new start at once */
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
@@ -2885,7 +2895,9 @@ function updateControls(dt) {
     const overField = AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50);
     let gT, terrAhead = false;
     if (Math.abs(climb) > 0.1 || Math.abs(lr) > 0.1) S.apprHold = false;
-    if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false; }
+    if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false;
+      if (climb > 0) { const eas = S.V * Math.sqrt(isa(S.pos.y).rho / 1.225), v0 = PL.vs * 1.2, vc = Math.max(PL.climbV || 0, PL.vs * 1.5); gT *= clamp((eas - v0) / (vc - v0), -0.2, 1);
+        if (PL.sonic && S.pos.y > 8500 && (S.mach || 0) < 1.2 && S.thr > 0.8) { gT = Math.min(gT, 0.004); S.sonicLvl = true; } else S.sonicLvl = false; } else S.sonicLvl = false; }          /* a supersonic type levels off at 8.5 km until it is through the sound barrier, as the real ones do, and then climbs on */          /* a held climb eases off as the indicated speed falls to the type's climb speed (and noses over a little below it), so it keeps climbing fast instead of hanging near the stall */
     else if (S.apprHold) { gT = -3 * DEG; S.holdAlt = null; }          /* a practice approach keeps coming down the glide path until the stick is touched; the flare over the field then lands it */
     else if (S.toClimb) { gT = 5 * DEG; if (S.ra > 450) S.toClimb = false; }
     else { if (S.holdAlt === null) S.holdAlt = S.pos.y + S.vel.y * 1.5; gT = gammaForAlt(S.holdAlt); }
@@ -3442,6 +3454,7 @@ function hintText() {
   }
   if (S.assist) {
     if (S.prot) return S.prot;
+    if (S.sonicLvl) return L('Levelling off to break the sound barrier, then climbing on', 'מתיישרים כדי לעבור את מהירות הקול, ואז ממשיכים לטפס');
     if (AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50) && S.gear) return T ? L('Over the airport: hold the stick down to land', 'מעל שדה התעופה: מחזיקים את הג׳ויסטיק למטה כדי לנחות') : L('Over the airport: hold ' + dn + ' to land', 'מעל שדה התעופה: מחזיקים ' + dn + ' כדי לנחות');
     // otherwise say what the aircraft is doing
     return '';                 // otherwise nothing: the instruments already show height and climb
@@ -3493,6 +3506,7 @@ function drawSys() {
   else al.style.display = 'none';
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
+    { const ap = $('cAp'); ap.hidden = !air || !!S.land || S.ra < 60; ap.classList.toggle('on', S.ap.on); }
     { const m = $('cMore'), any = !S.crashed, t = RATE.v > 1 ? '\u200E×' + RATE.v : '⋯'; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); if (m.textContent !== t) m.textContent = t; }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
@@ -3576,7 +3590,7 @@ function buildFun() {
   window.addEventListener('pointermove', e => { if (PH.on && PH.drag) { PH.az -= (e.clientX - PH.drag[0]) * 0.006; PH.el = clamp(PH.el + (e.clientY - PH.drag[1]) * 0.005, -0.3, 1.4); PH.drag = [e.clientX, e.clientY]; } });
   window.addEventListener('pointerup', () => PH.drag = null);
   canvas.addEventListener('wheel', e => { if (PH.on) PH.d = clamp(PH.d * (e.deltaY > 0 ? 1.12 : 0.89), 0.5, 12); }, { passive: true });
-  $('phDone').addEventListener('click', () => action('KeyO')); $('phIn').addEventListener('click', () => PH.d = clamp(PH.d * 0.75, 0.5, 12)); $('phOut').addEventListener('click', () => PH.d = clamp(PH.d * 1.33, 0.5, 12));
+  $('phDone').addEventListener('click', () => action('KeyO')); $('phSave').addEventListener('click', () => savePhoto()); $('phIn').addEventListener('click', () => PH.d = clamp(PH.d * 0.75, 0.5, 12)); $('phOut').addEventListener('click', () => PH.d = clamp(PH.d * 1.33, 0.5, 12));
 }
 function updateAIT(dt) { for (const a of AIT) { a.a += a.dir * 105 * HSCALE / a.r * dt; const c = Math.cos(a.a), s = Math.sin(a.a); a.g.position.set(a.cx + c * a.r, a.alt, a.cz + s * a.r); a.g.rotation.set(0, Math.atan2(s * a.dir, -c * a.dir), -a.dir * 0.3, 'YXZ'); } }
 // weather is layered on top of the time of day
@@ -3618,7 +3632,8 @@ Object.assign(PLANES.bomber, { aTurn: 0.24, aPitch: 0.25, aG: 16, aBank: 30, aVm
 /** Easy mode speed changes follow the type's real thrust and drag, and gravity on a climb or a descent: no fixed rates. */
 function arcadeAccel(v, gam, ground) {
   const at = isa(S.pos.y), q = 0.5 * at.rho * v * v, W = PL.mass * G, cl = ground ? 0.3 : Math.min(W * Math.cos(gam) / Math.max(q * PL.S, 1), 2);
-  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * v, 0.35, 1.2);
+  /* the same speed limits as the full physics: the airspeed limit and the drag rise near the speed of sound */
+  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg + Math.max(0, v * Math.sqrt(at.rho / 1.225) - PL.vmo) * 0.0008 + waveDrag(v / at.a)) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * v, 0.35, 1.2);
   // up may be negative (a climb the engines cannot sustain loses speed); gmax is the steepest climb the thrust can hold at this speed
   return { up: (T - D) / PL.mass - G * Math.sin(gam), dn: Math.max(0.3, D / PL.mass + G * Math.sin(gam)), gmax: Math.asin(clamp((T * S.thr - D) / W, -0.1, 1)) };       // gmax follows the lever: at idle it cannot climb
 }
@@ -3627,7 +3642,7 @@ const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down far too fast.': 'נגיעה בקרקע במהירות גבוהה מדי', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים', 'Concorde': 'קונקורד', 'Stealth jet': 'חמקן', 'Heavy bomber': 'מפציץ כבד', 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high': 'מטוס נוסעים על-קולי. פעמיים מהירות הקול בקצה החלל, נוחת מהר עם האף למעלה', 'Black, faceted, invisible to radar. Fast and low, no afterburner': 'שחור, זוויתי ובלתי נראה למכ״ם. מהיר ונמוך, בלי מבער', 'Eight engines and enormous wings. Slow to turn, flies for ever': 'שמונה מנועים וכנפיים ענקיות. פונה לאט, טס בלי סוף',
   'Twin-jet for 150 passengers. Steady and forgiving, slow to turn': 'סילון גדול ל-150 נוסעים. יציב וסלחני, פונה לאט', 'Sleek T-tail jet. Quick, agile, lands short': 'סילון קטן ומהיר. זריז ונוחת בקלות',
   'Afterburner, Mach 1.5, rolls and loops. Hold on': 'מבער, מהירות על-קולית, גלגולים ולולאות. תחזיקו חזק', 'Light propeller plane with show smoke. Slow, nimble, lands anywhere': 'מטוס מדחף קל עם עשן. איטי, זריז ונוחת בכל מקום',
-  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת', 'Tel Aviv at night': 'תל אביב בלילה', 'Storm over Haifa': 'סערה מעל חיפה', 'A surprise flight': 'טיסת הפתעה', 'Rings: the Tel Aviv coast': 'טבעות: חוף תל אביב', 'Rings: the Ramon crater': 'טבעות: מכתש רמון', 'Rings: down the Jordan': 'טבעות: לאורך הירדן',
+  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת', 'Tel Aviv at night': 'תל אביב בלילה', 'Storm over Haifa': 'סערה מעל חיפה', 'A surprise flight': 'טיסת הפתעה', 'Concorde at Mach 2': 'קונקורד במאך 2', 'Rings: the Tel Aviv coast': 'טבעות: חוף תל אביב', 'Rings: the Ramon crater': 'טבעות: מכתש רמון', 'Rings: down the Jordan': 'טבעות: לאורך הירדן',
   'Ben Gurion runway 12': 'נתב״ג, מסלול 12', 'Haifa over the bay': 'חיפה, מעל המפרץ', 'Eilat Ramon': 'רמון (אילת)', 'Rosh Pina airstrip': 'מנחת ראש פינה', 'Masada (Bar Yehuda) airstrip': 'מנחת בר יהודה (מצדה)', 'Beer Sheva airstrip': 'מנחת באר שבע',
   'Cockpit': 'תא הטייס', 'Chase': 'מאחור', 'Wing': 'מהכנף', 'Fly-by': 'מהצד (מעבר)', 'Above': 'מלמעלה', 'Front': 'מלפנים', 'Below': 'מבט למטה', 'Tail': 'מהזנב', 'Continue the last flight': 'המשך הטיסה האחרונה', 'Clear': 'בהיר', 'Dust haze': 'אובך', 'Storm': 'סופה', 'day': 'יום', 'sunset': 'שקיעה', 'night': 'לילה' };
 const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
@@ -3721,7 +3736,7 @@ function applyLang() {
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
   $('cMore').setAttribute('aria-label', L('More actions: land, roll, loop, speed of time', 'עוד פעולות: נחיתה, גלגול, לולאה, מהירות הזמן')); $('cRate').setAttribute('aria-label', L('Speed of time', 'מהירות הזמן'));
-  set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
+  set('#cAp', 'Autopilot', 'טייס אוטומטי'); set('#phSave', 'Save', 'שמירה'); set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
   { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }
   S.legSig = ''; if (FREE.length) { renderPanel('start'); if (S.paused) renderPanel('pause'); }
@@ -3752,10 +3767,10 @@ function hitObstacle(x, y, z, pad) {
   return false;
 }
 function buildBoom() {
-  for (let i = 0; i < 30; i++) { const fire = i < 18, s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: fire ? (i % 3 ? 0xff8a2a : 0xffe08a) : 0x2a2622, transparent: true, depthWrite: false, fog: false, blending: fire ? THREE.AdditiveBlending : THREE.NormalBlending }));
+  for (let i = 0; i < 30; i++) { const fire = i < 18, s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: fire ? (i % 3 === 0 ? 0xffb347 : i % 3 === 1 ? 0xf2601a : 0xc93a10) : 0x1c1a18, opacity: fire ? (i % 3 === 0 ? 0.4 : 0.9) : 0.9, transparent: true, depthWrite: false, fog: false, blending: fire && i % 3 === 0 ? THREE.AdditiveBlending : THREE.NormalBlending }));          /* a fireball of orange and red that turns to black smoke; only a third of it adds light, or the bloom burns it to a white disc */
     s.visible = false; scene.add(s); EXP.parts.push({ s, fire, v: new THREE.Vector3(), r: 1 }); }
   // a white flash, tumbling debris that falls and bounces, and a scorch mark left on the ground
-  EXP.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: 0xffffff, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, toneMapped: false })); EXP.flash.visible = false; scene.add(EXP.flash);
+  EXP.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: 0xffb060, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, toneMapped: false })); EXP.flash.visible = false; scene.add(EXP.flash);
   EXP.deb = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.25, 0.7), new THREE.MeshLambertMaterial({ color: 0x3a3d42 }), 26); EXP.deb.frustumCulled = false; EXP.deb.visible = false; scene.add(EXP.deb);
   EXP.dp = []; for (let i = 0; i < 26; i++) EXP.dp.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), w: new THREE.Vector3(), s: 1 });
   EXP.scorch = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: lightDot(), color: 0x0d0c0b, transparent: true, depthWrite: false, opacity: 0 })); EXP.scorch.rotation.x = -Math.PI / 2; EXP.scorch.renderOrder = 2; EXP.scorch.visible = false; scene.add(EXP.scorch);
@@ -4017,7 +4032,7 @@ function tiltStart() {
 }
 function tiltStop() { TILT.on = false; TILT.x = TILT.y = 0; }
 function buildExtras() {
-  buildOldCity();
+  buildOldCity(); buildBridges(); buildSkyLife();
   // --- the aircraft shadows itself (wing on fuselage, tail on wing): one small shadow map that follows it; larger screens only ---
   if (HIRES && new URLSearchParams(location.search).get('shadow') !== '0') { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; sun.castShadow = true; const c = sun.shadow.camera; c.left = c.bottom = -42; c.right = c.top = 42; c.near = 850; c.far = 1150; c.updateProjectionMatrix();
     sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
@@ -4122,6 +4137,57 @@ function updateCourse() {
     else { const t = TNOW - COURSE.t0, best = SAVE.best || (SAVE.best = {}), rec = !best[COURSE.id] || t < best[COURSE.id]; if (rec) { best[COURSE.id] = Math.round(t * 10) / 10; persist(); } fanfare(3); COURSE.on = false; r.m.visible = false;
       toast('★ ' + L('Course done in ', 'המסלול הושלם ב-') + courseTime(t) + (rec ? L('. A new best!', '. שיא חדש!') : L('. Best: ', '. השיא: ') + courseTime(best[COURSE.id])), 6); } }
 }
+/** The two bridges of `BRIDGES`. The viaduct: a deck on tall piers, solid (deck and piers are obstacles), with clear air under it: flying under the deck
+    between two piers is answered with a message. The Chords Bridge: a low curved deck, a leaning white mast and its cables. */
+function buildBridges() {
+  const conc = new THREE.MeshLambertMaterial({ color: 0xd2cfc6 }), dark = new THREE.MeshLambertMaterial({ color: 0x3c3f44 }), white = new THREE.MeshLambertMaterial({ color: 0xf2f2ee });
+  const box = (w, h, d, mat, x, y, z, ry) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.y = ry || 0; scene.add(m); return m; };
+  XT.under = [];
+  for (const [kind, lon, lat, rot, len, h] of BRIDGES) { const cx = lon2x(lon), cz = lat2z(lat), sx = Math.sin(rot), sz = Math.cos(rot), at = u => [cx + sx * u, cz + sz * u];
+    if (kind === 'viaduct') { let lo = 1e9; for (let u = -len / 2; u <= len / 2; u += 30) lo = Math.min(lo, triHeight(...at(u))); const y = lo + h;
+      box(22, 3, len, conc, cx, y, cz, rot); box(22.6, 0.5, len, dark, cx, y + 1.7, cz, rot); for (const s of [-1, 1]) box(0.5, 1.6, len, conc, cx + sz * s * 11, y + 2.3, cz - sx * s * 11, rot);
+      addObst(cx, cz, 22, len, rot, y - 2.5, y + 4);
+      for (let u = -len / 2 + 45; u <= len / 2 - 45; u += 90) { const [px, pz] = at(u), g = triHeight(px, pz), ph = y - 1.5 - g + 4; if (ph < 6) continue; box(13, ph, 4.5, conc, px, g - 4 + ph / 2, pz, rot); box(16, 2.4, 6, conc, px, y - 2.6, pz, rot); addObst(px, pz, 13, 4.5, rot, g - 4, y); }
+      XT.under.push({ cx, cz, sx, sz, half: len / 2 - 8, wid: 15, y }); }
+    else { const y0 = triHeight(cx, cz), dy = 11;          // the deck curves: three straight pieces, each turned a little more
+      for (const [u, tw] of [[-len / 3, -0.22], [0, 0], [len / 3, 0.22]]) { const [px, pz] = at(u); box(14, 1.6, len / 3 + 6, conc, px + sz * Math.abs(tw) * 60, y0 + dy, pz - sx * Math.abs(tw) * 60, rot + tw); box(4, dy + 3, 4, conc, px + sz * Math.abs(tw) * 60, y0 + dy / 2 - 2, pz - sx * Math.abs(tw) * 60, rot + tw); }
+      const mx = cx - sz * 16, mz = cz + sx * 16, top = new THREE.Vector3(mx - sz * 26, y0 + h, mz + sx * 26), base = new THREE.Vector3(mx, y0, mz), mid = base.clone().lerp(top, 0.5), mast = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 3.4, base.distanceTo(top), 8), white);
+      mast.position.copy(mid); mast.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(base).normalize()); scene.add(mast); addObst(mid.x, mid.z, 30, 30, 0, y0, y0 + h);
+      const W = []; for (let k = 0; k < 22; k++) { const u = -len / 2 + 14 + k * (len - 28) / 21, [px, pz] = at(u), tw = Math.abs(u) / (len / 2) * 0.22 * 60 * (Math.abs(u) > len / 6 ? 1 : 0.4), a = base.clone().lerp(top, 0.55 + 0.42 * (k % 11) / 10); W.push(a.x, a.y, a.z, px + sz * tw, y0 + dy + 1, pz - sx * tw); }
+      const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(W, 3)); const ln = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0xf4f4f0 })); ln.frustumCulled = false; scene.add(ln); } }
+}
+/** Company in the sky: the other aircraft are real models now (the airliner and the business jet, wheels up), hot-air balloons hang over the Jezreel
+    valley, and a flock of birds wheels over the coast north of Tel Aviv. Balloons are solid; birds are not. */
+function skinTraffic() {          // called once the other aircraft exist (they are made after this file's builders)
+  AIT.forEach((a, i) => { const M = AC.models[i % 3 === 1 ? 'bizjet' : 'airliner'], c = M.g.clone(true); c.visible = true; const gi = M.g.children.indexOf(M.gear); if (gi >= 0) c.children[gi].visible = false;
+    for (const l of M.land || []) { const li = M.g.children.indexOf(l); if (li >= 0) c.children[li].visible = false; } while (a.g.children.length) a.g.remove(a.g.children[0]); a.g.add(c); });
+}
+function buildSkyLife() {
+  // balloons: a striped envelope and a basket
+  { const prof = [[0.2, -9], [3.2, -7.4], [7.4, -3], [9, 1.5], [8.2, 5.6], [5.4, 8.4], [0.1, 9.6]].map(p => new THREE.Vector2(p[0], p[1])), env = new THREE.LatheGeometry(prof, 16), n = env.attributes.position.count, col = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) { const stripe = Math.floor(env.attributes.uv.getX(k) * 16 - 0.001) % 2; col[k * 3] = 1; col[k * 3 + 1] = stripe ? 1 : 0.42; col[k * 3 + 2] = stripe ? 1 : 0.42; } env.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const g = mergeGeo([[env.toNonIndexed(), 1, 1, 1]]); { const src = env.toNonIndexed().attributes.color.array, dst = g.attributes.color.array; for (let k = 0; k < dst.length; k++) dst[k] = src[k]; }
+    const bk = mergeGeo([[new THREE.BoxGeometry(1.6, 1.3, 1.6).translate(0, -12.6, 0), 0.45, 0.3, 0.16], [new THREE.CylinderGeometry(0.05, 0.05, 3.4, 4).translate(0.7, -10.6, 0.7), 0.2, 0.2, 0.2], [new THREE.CylinderGeometry(0.05, 0.05, 3.4, 4).translate(-0.7, -10.6, -0.7), 0.2, 0.2, 0.2]]);
+    const N = 9, mat = new THREE.MeshLambertMaterial({ vertexColors: true }), a = new THREE.InstancedMesh(g, mat, N), b = new THREE.InstancedMesh(bk, mat, N), c = new THREE.Color(), pal = [0xe33b2e, 0x2f7fd0, 0xf0b020, 0x3fa85a, 0xb04ac0, 0xff7a1a, 0x18a6a6, 0xd02a6a, 0x5a6ad8]; XT.bal = { a, b, list: [] };
+    for (let k = 0; k < N; k++) { const x = lon2x(35.14 + hash2(k, 3) * 0.24), z = lat2z(32.57 + hash2(k, 7) * 0.12); XT.bal.list.push({ x, z, y: groundAt(x, z).h + 240 + hash2(k, 11) * 380, ph: k * 1.7 }); a.setColorAt(k, c.setHex(pal[k])); b.setColorAt(k, c.setHex(0xffffff)); }
+    for (const m of [a, b]) { m.frustumCulled = false; scene.add(m); } }
+  // birds: forty small wings that beat, on a slow circle
+  { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([-1.1, 0, 0.1, 0, 0, -0.35, 0, 0, 0.3, 1.1, 0, 0.1, 0, 0, 0.3, 0, 0, -0.35], 3)); g.computeVertexNormals();
+    const m = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ color: 0x2a2c30, side: THREE.DoubleSide }), 40); m.frustumCulled = false; scene.add(m); XT.birds = { m, cx: lon2x(34.775), cz: lat2z(32.15), off: [] }; for (let k = 0; k < 40; k++) XT.birds.off.push([(hash2(k, 1) - 0.5) * 90, (hash2(k, 2) - 0.5) * 26, (hash2(k, 5) - 0.5) * 70, hash2(k, 9) * 6]); }
+}
+function updateSkyLife(dt) {
+  const o = updateSkyLife.o || (updateSkyLife.o = new THREE.Object3D());
+  if (!XT.skinned && AIT.length) { XT.skinned = true; skinTraffic(); }
+  if (XT.bal) { XT.bal.list.forEach((b, k) => { const y = b.y + Math.sin(TNOW * 0.25 + b.ph) * 12; o.position.set(b.x, y, b.z); o.rotation.set(0, TNOW * 0.05 + b.ph, 0); o.scale.setScalar(1.6); o.updateMatrix(); XT.bal.a.setMatrixAt(k, o.matrix); XT.bal.b.setMatrixAt(k, o.matrix);
+      if (!S.crashed && S.started && Math.hypot(S.pos.x - b.x, S.pos.y - y, S.pos.z - b.z) < 17) crash(L('Flew into a balloon.', 'התנגשות בכדור פורח')); }); XT.bal.a.instanceMatrix.needsUpdate = true; XT.bal.b.instanceMatrix.needsUpdate = true; }
+  if (XT.birds) { const B = XT.birds, a = TNOW * 0.05, bx = B.cx + Math.cos(a) * 520, bz = B.cz + Math.sin(a) * 520, by = 120 + Math.sin(TNOW * 0.11) * 40, hd = Math.atan2(-Math.sin(a), -Math.cos(a)) + Math.PI / 2;
+    B.off.forEach((f, k) => { o.position.set(bx + f[0], by + f[1] + Math.sin(TNOW * 0.9 + f[3]) * 3, bz + f[2]); o.rotation.set(0, -a, 0); o.scale.set(1, 1, 1); o.updateMatrix(); const e = o.matrix.elements, fl = Math.sin(TNOW * 9 + f[3]) * 0.5; e[1] = fl * 0.6; B.m.setMatrixAt(k, o.matrix); }); B.m.instanceMatrix.needsUpdate = true; }
+  // flying close beside another aircraft for a few seconds
+  if (!S.onGround && !S.crashed) { let near = false; for (const t of AIT) { const d = t.g.position.distanceTo(S.pos); if (d < 190 && d > 32) near = true; } XT.formT = near ? (XT.formT || 0) + dt : 0;
+    if (XT.formT > 3.5 && TNOW - (XT.dareT || -99) > 20) { XT.dareT = TNOW; XT.formT = 0; toast(L('Formation flight!', 'טיסת מבנה!'), 2.4); Snd.chime(880, 0.2); buzz(25); } }
+  // under the viaduct
+  if (XT.under && !S.onGround && !S.crashed) for (const u of XT.under) { const dx = S.pos.x - u.cx, dz = S.pos.z - u.cz, al = dx * u.sx + dz * u.sz, ac = dx * u.sz - dz * u.sx; if (Math.abs(al) < u.half && Math.abs(ac) < u.wid && S.pos.y < u.y - 3 && S.pos.y > u.y - 70 && TNOW - (XT.underT || -99) > 8) { XT.underT = TNOW; XT.dareT = TNOW; toast(L('Under the bridge!', 'מתחת לגשר!'), 2.6); fanfare(2); } }
+}
 /** One puff of smoke or vapour into the trail buffer. */
 function puff(x, y, z, size, alpha) { if (!TR) return; const i = TR.i; TR.i = (i + 1) % TR.n; TR.pos[i * 3] = x; TR.pos[i * 3 + 1] = y; TR.pos[i * 3 + 2] = z; TR.dat[i * 3] = TNOW; TR.dat[i * 3 + 1] = size; TR.dat[i * 3 + 2] = alpha; TR.pts.geometry.attributes.position.needsUpdate = true; TR.pts.geometry.attributes.aDat.needsUpdate = true; }
 
@@ -4140,7 +4206,7 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
-  updateCourse();
+  updateCourse(); updateSkyLife(dt);
   // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
   if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
     if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');
@@ -4343,7 +4409,7 @@ const startName = (d, short) => d.pick ? L(d.name[0], d.name[1]) : d.type === 'g
 function renderPanel(where) {
   const body = $(where === 'start' ? 'sBody' : 'mBody'), touchUI = document.body.classList.contains('touch'), cur = where === 'start' ? (START || FREE[0]) : S.lastSpawn, rer = () => renderPanel(where);
   const go = d => where === 'start' ? () => { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } : () => { closeMenu(); spawn(d); };
-  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); spawn(S.lastSpawn || FREE[0]); } };
+  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); if (S.onGround || S.crashed) spawn(S.lastSpawn || FREE[0]); else spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: Math.max(S.ra, 120), hdg: S.hdg, spd: 120, label: L('New aircraft, same place', 'מטוס חדש, אותו מקום'), keep: true }); } };          /* in the air the new aircraft carries on from where the old one was */
   const starts = (list, short) => el => gridButtons(el, list.map(d => [startName(d, short), '', go(d), d === cur]));
   const secs = [
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
@@ -4360,6 +4426,13 @@ function renderPanel(where) {
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
     const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = where === 'pause' ? [L('Nearest airport: ', 'שדה התעופה הקרוב: ') + nearestAirportTxt(), tr(PL.name), L(LV[S.mode][0], LV[S.mode][1])].join(' · ') : [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
+}
+/** Photo mode: keep the picture. The frame is drawn again and taken from the canvas at once; a phone offers its share sheet (with the file), anything
+    else downloads it. */
+function savePhoto() {
+  try { renderFrame(); renderer.domElement.toBlob(b => { if (!b) return; const f = new File([b], 'flight-over-israel.jpg', { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(() => {});
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); } }, 'image/jpeg', 0.92); } catch (e) {}
 }
 /** "Surprise me": a famous place, an aircraft and a time of day drawn at random (never the same twice running). */
 const SURPRISE = [[34.76, 32.06, 350, 20], [35.20, 31.775, 500, 80], [35.0, 32.84, 450, 200], [35.45, 31.45, 300, 180], [34.80, 30.60, 600, 60], [35.78, 33.28, 900, 30], [34.95, 29.60, 400, 190], [35.55, 32.78, 350, 0], [35.36, 31.33, 500, 20], [34.90, 32.50, 250, 180], [35.30, 32.70, 500, 250], [34.65, 31.80, 300, 30]];
@@ -4452,6 +4525,7 @@ function buildMenu() {
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
   // two more invitations: the city by night and a storm (they set the time of day and the weather too)
+  AIRSTARTS.push({ label: 'Concorde at Mach 2', type: 'air', lon: 34.95, lat: 29.75, alt: 17000, hdg: 4, spd: 478, plane: 'concorde', thr: 1 });          // already up where it flies twice as fast as sound, heading up the length of the country
   AIRSTARTS.push({ label: 'Tel Aviv at night', type: 'air', lon: 34.74, lat: 32.03, alt: 420, hdg: 30, spd: 115, tod: 2, wx: 0 }, { label: 'Storm over Haifa', type: 'air', lon: 34.93, lat: 32.74, alt: 700, hdg: 40, spd: 115, tod: 0, wx: 2 });
   LANDTESTS = [
     { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },

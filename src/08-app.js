@@ -183,7 +183,7 @@ const startName = (d, short) => d.pick ? L(d.name[0], d.name[1]) : d.type === 'g
 function renderPanel(where) {
   const body = $(where === 'start' ? 'sBody' : 'mBody'), touchUI = document.body.classList.contains('touch'), cur = where === 'start' ? (START || FREE[0]) : S.lastSpawn, rer = () => renderPanel(where);
   const go = d => where === 'start' ? () => { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } : () => { closeMenu(); spawn(d); };
-  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); spawn(S.lastSpawn || FREE[0]); } };
+  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); if (S.onGround || S.crashed) spawn(S.lastSpawn || FREE[0]); else spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: Math.max(S.ra, 120), hdg: S.hdg, spd: 120, label: L('New aircraft, same place', 'מטוס חדש, אותו מקום'), keep: true }); } };          /* in the air the new aircraft carries on from where the old one was */
   const starts = (list, short) => el => gridButtons(el, list.map(d => [startName(d, short), '', go(d), d === cur]));
   const secs = [
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
@@ -200,6 +200,13 @@ function renderPanel(where) {
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
     const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = where === 'pause' ? [L('Nearest airport: ', 'שדה התעופה הקרוב: ') + nearestAirportTxt(), tr(PL.name), L(LV[S.mode][0], LV[S.mode][1])].join(' · ') : [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
+}
+/** Photo mode: keep the picture. The frame is drawn again and taken from the canvas at once; a phone offers its share sheet (with the file), anything
+    else downloads it. */
+function savePhoto() {
+  try { renderFrame(); renderer.domElement.toBlob(b => { if (!b) return; const f = new File([b], 'flight-over-israel.jpg', { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(() => {});
+      else { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); } }, 'image/jpeg', 0.92); } catch (e) {}
 }
 /** "Surprise me": a famous place, an aircraft and a time of day drawn at random (never the same twice running). */
 const SURPRISE = [[34.76, 32.06, 350, 20], [35.20, 31.775, 500, 80], [35.0, 32.84, 450, 200], [35.45, 31.45, 300, 180], [34.80, 30.60, 600, 60], [35.78, 33.28, 900, 30], [34.95, 29.60, 400, 190], [35.55, 32.78, 350, 0], [35.36, 31.33, 500, 20], [34.90, 32.50, 250, 180], [35.30, 32.70, 500, 250], [34.65, 31.80, 300, 30]];
@@ -292,6 +299,7 @@ function buildMenu() {
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
   // two more invitations: the city by night and a storm (they set the time of day and the weather too)
+  AIRSTARTS.push({ label: 'Concorde at Mach 2', type: 'air', lon: 34.95, lat: 29.75, alt: 17000, hdg: 4, spd: 478, plane: 'concorde', thr: 1 });          // already up where it flies twice as fast as sound, heading up the length of the country
   AIRSTARTS.push({ label: 'Tel Aviv at night', type: 'air', lon: 34.74, lat: 32.03, alt: 420, hdg: 30, spd: 115, tod: 2, wx: 0 }, { label: 'Storm over Haifa', type: 'air', lon: 34.93, lat: 32.74, alt: 700, hdg: 40, spd: 115, tod: 0, wx: 2 });
   LANDTESTS = [
     { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
