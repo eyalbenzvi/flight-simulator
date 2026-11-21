@@ -267,10 +267,15 @@ What was done with that (round eight, softening):
   lighter toward the top. The shadow is its own instanced mesh (`scatter.tsh`, `scatter.bsh`) sharing the trees' instance matrices, drawn with
   `MultiplyBlending` from vertex colours (grey centre, white rim): soft on any ground. In the pictures the hard black polygons are gone; the new
   shadow is faint, hardly seen.
+- Neighbourhoods have a character (`buildCities`, the `NB` block): every 5 x 5 cells (300 m) is one neighbourhood. Its apartment and stone blocks
+  stand to one height (72% of the way to the square's average, in whole 3 m floors; tagged heights and towers are left alone), 70% of them wear one
+  colour of the regional palette, rows of blocks and the houses of a house neighbourhood run one way, and blocks sit on the lattice with 3 m of
+  scatter instead of 9. On `BIGGRID` devices residential cells hold two or three blocks in a row far more often (from 14% and 30% cover, or by the
+  raster's footprint class), since one block to a 60 m cell read as a block in a field. In the pictures: rows of like blocks, house quarters in
+  regular rows, colour by quarter.
 - Looked at and left as they are: the horizon (already soft), city lights at night, road edges (the texture already has a pale shoulder), the
   list of hand-made landmarks (dozens per city already).
-- Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); districts
-  by character; real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).
+- Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).
 
 ## Start-up
 

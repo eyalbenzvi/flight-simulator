@@ -1324,7 +1324,13 @@ function buildCities() {
   const fit = (x, z, bw, bd) => { const r0 = Math.max(bw, bd) * 0.6; if (!nearRoad(x, z, r0)) return [x, z, 1];
     for (const k of [0.75, 0.55]) for (const [ox, oz] of FIT_OFFS) if (!nearRoad(x + ox, z + oz, r0 * k)) return [x + ox, z + oz, k]; return null; };
   const styleNear = (i, j) => { for (let r = 1; r <= 3; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue; const oo = (jj * w + ii) * 4; if (d[oo + 3]) return d[oo + 1] & 7; } return 0; };
+  // Neighbourhoods have a character (the owner's wish): every 300 m square of the lattice is one. Its apartment blocks stand to one height, the
+  // average of the square, in whole floors; most of them wear one colour of the regional palette; rows of blocks, and the houses of a house
+  // neighbourhood, all run the same way; blocks stand on the lattice with almost no scatter. Towers and tagged heights stay as they are.
+  const NB = 5, nbw = Math.ceil(w / NB), nbH = new Float32Array(nbw * Math.ceil(h / NB)), nbN = new Uint16Array(nbH.length);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const o = (j * w + i) * 4, t = d[o + 1] & 7; if (d[o + 3] > 0 && d[o] > 0 && t !== 3 && t !== 4) { const q = ((j / NB) | 0) * nbw + ((i / NB) | 0); nbH[q] += d[o]; nbN[q]++; } }
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const nbI = (i / NB) | 0, nbJ = (j / NB) | 0, nbQ = nbJ * nbw + nbI, nh1 = hash2(nbI * 1.31 + 7.7, nbJ * 2.17 + 3.3), nh2 = hash2(nbI * 3.7 + 1.1, nbJ * 1.9 + 8.8);
     const o = (j * w + i) * 4, inRaster = d[o + 3] > 0, cov = bo[o] / 255, bc = bo[o + 1] & 15, nlog = bo[o + 1] >> 4, bh = bo[o + 2], lc = LCR.d[o];
     // the ground and what stands on it agree: a cell the satellite alone calls built (no mapped building) is not built where the land cover says forest,
     // orchard, field, scrub, sand, rock, solar field or cemetery; and a cell mapped as residential or industrial with nothing in it or beside it gets a
@@ -1342,27 +1348,28 @@ function buildCities() {
     else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
     if (fill) st = lc === 12 ? 5 : 3;
     if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
+    if ((st === 1 || st === 2) && nbN[nbQ] >= 3) ht = Math.max(6, Math.round(lerp(ht, nbH[nbQ] / nbN[nbQ], 0.72) / 3) * 3);
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || wetAt(x, z, 34) || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;          /* not in the sea, and not on a mapped lake or reservoir either */
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 3, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 3, g = groundAt(x, z); if (g.water || wetAt(x, z, 34) || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;          /* not in the sea, and not on a mapped lake or reservoir either */
     const y = heightAt(x, z);
-    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
+    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = nh2 * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, (nh1 < 0.5 ? 0 : 0.785) + (s3 < 0.5 ? 0 : 1.5708), 0.93 + s2 * 0.07]); } }
     else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
       for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f || obstBox(f[0], f[1], bw * f[2] / 2, bd * f[2] / 2)) continue;
         const by = heightAt(f[0], f[1]); push(flat, f[0], f[1], [f[0], by - 4, f[1], bw * f[2], ht + 4, bd * f[2], 0, IND[((s3 + k * 0.37) * IND.length | 0) % IND.length]]); addObst(f[0], f[1], bw * f[2], bd * f[2], 0, by - 4, by + ht); } }
     else if (st === 6) {                                                                                      // greenhouse tunnels in rows
       const rot = s3 < 0.5 ? 0 : 1.5708; for (let k = -1; k <= 1; k++) { const gx = x + (rot ? k * 17 : 0), gz = z + (rot ? 0 : k * 17); if (nearRoad(gx, gz, 26)) continue;
         push(flat, gx, gz, [gx, heightAt(gx, gz) - 1, gz, 52, 5, 12, rot, 0xe4e9e6]); } }
-    else { const n = st === 1 ? (cov > 0.42 ? 3 : cov > 0.28 ? 2 : 1) : 1, kk = n === 1 ? 1 : n === 2 ? 0.74 : 0.62, pr = palAt(x, z), pal = pr[st] || pr[1];
+    else { const n = st === 1 ? (BIGGRID ? (cov > 0.30 || (inRaster && ht >= 15 && szc >= 2) ? 3 : cov > 0.14 || (inRaster && szc >= 1) ? 2 : 1) : cov > 0.42 ? 3 : cov > 0.28 ? 2 : 1) : st === 2 && BIGGRID && (cov > 0.2 || (inRaster && szc >= 2)) ? 2 : 1,          /* a neighbourhood is rows of blocks, not one block to a field (small phones keep the thinner town) */ kk = n === 1 ? 1 : n === 2 ? 0.74 : 0.62, pr = palAt(x, z), pal = pr[st] || pr[1];
       for (let k = 0; k < n; k++) {                                                                           // dense cells: two or three blocks
         let bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
         // two or three blocks stand side by side along one axis, each within its own slot of the 60 m cell (they used to be staggered on a diagonal and ran through each other)
-        const alongX = s3 < 0.5, slot = 54 / n; if (n > 1) { if (alongX) bw = Math.min(bw, slot - 4); else bd = Math.min(bd, slot - 4); }
+        const alongX = nh1 < 0.5, slot = 54 / n; if (n === 1 && st === 1) { if (alongX) { bw *= 1.14; bd *= 0.86; } else { bw *= 0.86; bd *= 1.14; } } if (n > 1) { if (alongX) bw = Math.min(bw, slot - 4); else bd = Math.min(bd, slot - 4); }
         const ox = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
         let w2 = bw * f[2], d2 = bd * f[2]; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) { w2 *= 0.7; d2 *= 0.7; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) continue; }       // something stands there already: a smaller block, or none
-        const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
+        const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.9 + ((s2 + k * 0.3) % 1) * 0.2 : 1);
         // a block that stands alone in its cell turns to face the nearest street (when its turned corners stay clear of the road and of its neighbours)
         let rot = n === 1 && st !== 4 ? roadDirAt(f[0], f[1], 130) : 0; if (rot) { const rr = Math.hypot(w2, d2) / 2; if (nearRoad(f[0], f[1], rr - 3) || obstBox(f[0], f[1], rr, rr) || landmarkAt(f[0], f[1], rr)) rot = 0; }
-        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, rot, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, rot, by - 8, by + h2); } }
+        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, rot, pal[(((s2 < 0.7 ? nh2 : s3 + k * 0.29) * pal.length) | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, rot, by - 8, by + h2); } }
     if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
   // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
