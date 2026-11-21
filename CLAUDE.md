@@ -63,6 +63,25 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - Terrain shader: rows a few metres apart (orchards, vineyards, greenhouses, solar) fade out within about 1 km, or they shimmer; two extra
   grain layers sharpen the ground within 650 m. Building windows blend to an even tone beyond about 2 km. Road textures are 4× (128/256 px wide).
 - In GLSL strings as in the JS around them: never put a `//` comment before code on the same line. It has swallowed code five times here.
+- Atmosphere and tone (one look for every material): `HAZE_GLSL` (`hazeK`, `hazeCol`, `toneC` in `src/02-scene-terrain.js`) gives the terrain, water and sky
+  shaders haze that thins with height, shifts blue with distance and warms toward a low sun, plus a soft highlight shoulder. Built-in materials get the
+  same haze and shoulder through replaced `THREE.ShaderChunk` fog and tone-mapping chunks (set before any material compiles; `renderer.toneMapping` is
+  `CustomToneMapping`). HUD-like sprites use `toneMapped: false`.
+- Baked terrain light (`bakeTerrainLight`, attribute `aLit`): per vertex, in-sun (a shadow marched across `HGT` toward the sun, cached per time of day)
+  and valley occlusion. The day sun is an afternoon sun, 32° up in the south-west, so relief and facades have a lit and a shaded side.
+- Water: three fading swell trains on top of the noise, a sun path that widens toward the horizon, lines of surf by depth. Each wave train must fade
+  before its wavelength reaches a pixel, or the horizon fills with rings.
+- The airliner and business jet: one lathe `fuselage()` with a canvas livery (`liveryMat`: belly, cheatline, tail colour, a window per row, cockpit panes;
+  a second canvas lights the windows at night). Lights are additive sprites (`AC.glow`), landing lights come on with the gear and throw a pool of light at
+  night (`LPOOL`), wings flex with the load, paint reflects a 64 px cube picture of the sky taken once per time of day (`bakeSkyReflection`), and each
+  type has its own ground-shadow silhouette, narrowed by bank.
+- Camera (`CAMX` in `updateCamera`): the chase camera leans into turns (half as much in Easy) and looks into them; a new start swings in from the side;
+  a change of view blends over 0.38 s; shake is summed sines; `setViewOffset` keeps the aircraft clear of the instruments, and of the menu sheet
+  (`menuOffset`).
+- Interface polish layer (the last block of CSS in `index.html`): tokens (`--r1`, `--r2`, `--glass`, `--glass-solid`, `--elev`, `--ease`), a Hebrew font
+  stack with no letter-spacing, menus as a side sheet (a bottom sheet on an upright phone) so the world shows, aircraft cards with pictures rendered at
+  start-up (`shootPlanes`), a one-line title with the aircraft glyph, a dawn loading screen (`body:not(.ready)`), entry animations, one message slot
+  (`body.toasting` hides the hint), the readout strip in cells, a redesigned stick and power lever, `body.paused` / `body.crashed` hiding the HUD.
 
 ## Canvas textures survive a GPU reset
 

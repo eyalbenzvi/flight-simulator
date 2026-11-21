@@ -11,8 +11,8 @@ const eul = new THREE.Euler(0, 0, 0, 'YXZ'), dq = new THREE.Quaternion(), XA = n
 let TNOW = 0, camSnap = true;
 
 function crash(why) { if (S.crashed) return;
-  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
-let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
+  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); document.body.classList.add('crashed'); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
+let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); if (!msg) { t.style.display = 'none'; toastT = 0; return; } t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
 function trimFor(V, alt, gamma, flapDeg, gear) {
@@ -23,7 +23,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
-  S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; S.crashed = false; $('crash').style.display = 'none';
+  S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
@@ -317,30 +317,54 @@ function setupLook() {
     LOOK.yaw = clamp(LOOK.yaw + (e.clientX - LOOK.x) * k, -2.7, 2.7); LOOK.pitch = clamp(LOOK.pitch - (e.clientY - LOOK.y) * k, -1.1, 0.9); LOOK.x = e.clientX; LOOK.y = e.clientY; LOOK.t = TNOW; });
   const up = e => { if (e.pointerId === LOOK.id) LOOK.id = null; }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 }
-let SHADOW = null;
+let SHADOW = null, SHADOW_TEX = null, LPOOL = null, ENVRT = null;
 /** A soft silhouette of an aircraft, drawn once: the ground shadow (a texture made during init, so the canvas guard covers it). */
 function buildShadow() {
-  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); x.translate(128, 128); x.filter = 'blur(7px)'; x.fillStyle = '#000';
-  x.beginPath(); x.ellipse(0, 0, 11, 96, 0, 0, 7); x.fill();                                         // fuselage, nose up the canvas
-  x.beginPath(); x.moveTo(0, -30); x.lineTo(108, 14); x.lineTo(108, 30); x.lineTo(0, 12); x.lineTo(-108, 30); x.lineTo(-108, 14); x.closePath(); x.fill();   // wings
-  x.beginPath(); x.moveTo(0, 62); x.lineTo(40, 88); x.lineTo(40, 98); x.lineTo(0, 88); x.lineTo(-40, 98); x.lineTo(-40, 88); x.closePath(); x.fill();        // tailplane
-  const t = new THREE.CanvasTexture(c); SHADOW = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.4, fog: false }));
+  // one silhouette per aircraft type (nose up the canvas): [fuselage half-width, half-length, wing outline, tailplane outline]
+  const SH = { airliner: [11, 96, [[0, -30], [108, 14], [108, 30], [0, 12]], [[0, 62], [40, 88], [40, 98], [0, 88]]], bizjet: [12, 92, [[0, -18], [106, 30], [106, 44], [0, 34]], [[0, 70], [44, 88], [44, 98], [0, 92]]],
+    fighter: [13, 100, [[0, -40], [16, -8], [74, 44], [74, 58], [0, 52]], [[0, 62], [44, 86], [44, 96], [0, 90]]], stunt: [13, 78, [[0, -30], [112, -22], [112, 6], [0, 10]], [[0, 56], [42, 60], [42, 76], [0, 76]]] };
+  SHADOW_TEX = {}; let t = null;
+  for (const k in SH) { const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'), [fw, fl, wing, tail] = SH[k]; x.translate(128, 128); x.filter = 'blur(6px)'; x.fillStyle = '#000';
+    x.beginPath(); x.ellipse(0, 0, fw, fl, 0, 0, 7); x.fill();
+    for (const poly of [wing, tail]) for (const sg of [-1, 1]) { x.beginPath(); poly.forEach((p, i) => i ? x.lineTo(sg * p[0], p[1]) : x.moveTo(sg * p[0], p[1])); x.closePath(); x.fill(); }
+    t = SHADOW_TEX[k] = new THREE.CanvasTexture(c); }
+  SHADOW = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0.4, fog: false }));
   SHADOW.renderOrder = 2; SHADOW.frustumCulled = false; scene.add(SHADOW);
+  // the pool of light the landing lights throw on the ground at night
+  LPOOL = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: lightDot(), color: 0xfff0d0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, toneMapped: false }));
+  LPOOL.renderOrder = 3; LPOOL.frustumCulled = false; LPOOL.visible = false; scene.add(LPOOL);
 }
+/** A small picture of the sky and the land all round, taken once per time of day, for the aircraft's paint and glass to reflect. Nothing per frame. */
+function bakeSkyReflection() {
+  if (!AC.envMats.length || !S.pos) return;
+  if (!ENVRT) { ENVRT = new THREE.WebGLCubeRenderTarget(64, { format: THREE.RGBFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter }); ENVRT.cam = new THREE.CubeCamera(5, 400000, ENVRT); }
+  const key = S.tod + '-' + WX; if (ENVRT.key === key) return; ENVRT.key = key;          // only when the light changes, not on every lightning flash
+  const g = groundAt(S.pos.x, S.pos.z), vis = AC.root.visible; ENVRT.cam.position.set(S.pos.x, Math.max(S.pos.y, g.h + 400), S.pos.z); AC.root.visible = false; const sp0 = sky.position.clone(); sky.position.copy(ENVRT.cam.position);
+  if (clouds) clouds.visible = false; ENVRT.cam.update(renderer, scene); if (clouds) clouds.visible = true; AC.root.visible = vis; sky.position.copy(sp0);
+  for (const m of AC.envMats) { if (m.envMap !== ENVRT.texture) { m.envMap = ENVRT.texture; m.combine = THREE.MixOperation; m.reflectivity = m.transparent ? 0.5 : 0.14; m.needsUpdate = true; } }
+}
+/** Camera feel: the chase camera leans into turns and trails the aircraft a little; a new start swings in from the side instead of cutting; a change
+    of view blends; shake is a smooth buffet, not pixel noise; and the picture is shifted so the aircraft sits clear of the instruments. */
+const CAMX = { last: -1, blend: 0, fromP: new THREE.Vector3(), fromQ: new THREE.Quaternion(), bank: 0, vo: 0 };
 function updateCamera(dt) {
   if (LOOK.id === null && (LOOK.yaw || LOOK.pitch)) { const k = Math.exp(-5 * dt); LOOK.yaw *= k; LOOK.pitch *= k; if (Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch) < 0.002) LOOK.yaw = LOOK.pitch = 0; }
   const looking = LOOK.yaw !== 0 || LOOK.pitch !== 0;
+  if (CAMX.last !== S.cam) { if (CAMX.last >= 0 && !camSnap) { CAMX.blend = 0.38; CAMX.fromP.copy(camera.position); CAMX.fromQ.copy(camera.quaternion); } CAMX.last = S.cam; }      // a change of view glides, it does not cut
   const M = AC.m; AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q);
-  M.g.visible = S.cam !== 0 && !S.crashed; AC.deck.visible = S.cam === 0;
+  M.g.visible = (S.cam !== 0 || CAMX.blend > 0.19) && !S.crashed; AC.deck.visible = S.cam === 0 && CAMX.blend < 0.19;
   fwd.set(0, 0, -1).applyQuaternion(S.q);
   if (S.cam === 1) {
     const c = PL.chase; tmpV.copy(S.pos).addScaledVector(fwd, -c[0]); tmpV.y += c[1];
-    if (camSnap) { camPos.copy(tmpV); camSnap = false; } else camPos.lerp(tmpV, 1 - Math.exp(-(4.5 + S.V * 0.03) * dt));
+    // a new start: the camera begins out to one side, wide and low, and swings in behind (the follow below does the move)
+    if (camSnap) { camPos.copy(S.pos).addScaledVector(fwd, -c[0] * 1.5); camPos.x += -fwd.z * c[0] * 1.3; camPos.z += fwd.x * c[0] * 1.3; camPos.y += c[1] * 0.35; camSnap = false; CAMX.bank = 0; }
+    else camPos.lerp(tmpV, 1 - Math.exp(-(3.2 + S.V * 0.022) * dt));
+    { const want = S.trick || S.onGround ? 0 : clamp(S.bank, -1, 1) * (S.arc ? 0.12 : 0.22); CAMX.bank += (want - CAMX.bank) * (1 - Math.exp(-2.5 * dt)); }       // lean into the turn, gently (half as much in Easy)
     camPos.y = Math.max(camPos.y, groundAt(camPos.x, camPos.z).h + 1.5);
     camera.position.copy(camPos); camera.up.set(0, 1, 0); tmpV2.copy(S.pos).addScaledVector(fwd, c[0] * 0.47); tmpV2.y -= c[2];
     if (looking) { tmpV.copy(camPos).sub(S.pos).applyAxisAngle(YA, -LOOK.yaw); const hd = Math.hypot(tmpV.x, tmpV.z), el = clamp(Math.atan2(tmpV.y, hd) - LOOK.pitch, -0.35, 1.45), r = tmpV.length(); tmpV.multiplyScalar(r * Math.cos(el) / Math.max(hd, 0.01)); tmpV.y = r * Math.sin(el);
       camera.position.copy(S.pos).add(tmpV); camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 1.5); tmpV2.lerp(S.pos, clamp((Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch)) * 2, 0, 1)); }
-    camera.lookAt(tmpV2);
+    else { const sl = c[0] * 0.30 * Math.sin(CAMX.bank * 4); tmpV2.x += -fwd.z * sl; tmpV2.z += fwd.x * sl; }          // look into the turn: the aircraft slides toward the outside of the frame
+    camera.lookAt(tmpV2); if (!looking) camera.rotateZ(-CAMX.bank);
   } else {
     const e = S.cam === 0 ? PL.eye : PL.wingEye, eye = tmpV.set(e[0], e[1], e[2]);
     const tgt = S.cam === 0 ? tmpV2.set(e[0], e[1] - 0.12, e[2] - 2) : tmpV2.set(PL.wingTgt[0], PL.wingTgt[1], PL.wingTgt[2]);
@@ -350,15 +374,26 @@ function updateCamera(dt) {
   // game feel: the view widens with speed and shakes on afterburner, stall buffet and touchdown
   const base = window.innerWidth < window.innerHeight ? 74 : 60, want = base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) : 0);
   camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : 1; camera.updateProjectionMatrix();
+  if (CAMX.blend > 0) { CAMX.blend = Math.max(0, CAMX.blend - Math.max(dt, 0.001)); const k = 1 - CAMX.blend / 0.38, e = k * k * (3 - 2 * k); tmpV.copy(camera.position); camera.position.lerpVectors(CAMX.fromP, tmpV, e); tmpQ.copy(camera.quaternion); camera.quaternion.copy(CAMX.fromQ).slerp(tmpQ, e); }
+  { // keep the aircraft clear of what covers the lower part of the screen: the instrument panel on desktop, the stick and buttons on a phone held upright
+    const w = window.innerWidth, h = window.innerHeight, tch = document.body.classList.contains('touch'), want = S.cam !== 1 ? 0 : tch ? (h > w ? 0.10 * h : 0) : document.body.classList.contains('nopfd') ? 0 : 0.07 * h;
+    CAMX.vo += (want - CAMX.vo) * Math.min(1, 3 * Math.max(dt, 0.016)); if (Math.abs(CAMX.vo) > 0.5) camera.setViewOffset(w, h, 0, CAMX.vo, w, h); else if (camera.view) camera.clearViewOffset(); }
   S.shake *= Math.exp(-4 * dt);
   const amp = (S.stallWarn ? 0.35 : 0) + (M.burner && S.n1 > 0.9 ? 0.06 : 0) + S.shake;
-  if (amp > 0.005 && !S.paused) camera.position.set(camera.position.x + (Math.random() - 0.5) * amp, camera.position.y + (Math.random() - 0.5) * amp, camera.position.z + (Math.random() - 0.5) * amp);
+  if (amp > 0.005 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
+    camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(amp * 0.012 * Math.sin(t * 43)); }
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
   sun.position.copy(S.pos).addScaledVector(sunDir, 1000); sun.target.position.copy(S.pos); sun.target.updateMatrixWorld();
   // the aircraft's shadow on the ground: where the sun puts it, softer and fainter with height, gone at night
   if (SHADOW) { const sy = Math.max(sunDir.y, 0.12), k = Math.max(S.ra, 0) / sy, sx = S.pos.x - sunDir.x * k, sz = S.pos.z - sunDir.z * k, gs = groundAt(sx, sz);
     const a = sunDir.y > 0.05 && !S.crashed ? 0.5 * clamp(1 - S.ra / 900, 0, 1) * clamp(sunDir.y * 4, 0, 1) : 0; SHADOW.visible = a > 0.01 && !gs.water;
-    if (SHADOW.visible) { const sp = PL.chase[0] * 0.66 * (1 + Math.min(S.ra, 900) / 500); SHADOW.position.set(sx, Math.max(gs.h, triHeight(sx, sz)) + (gs.field ? 0.35 : 3.6), sz);          /* on the rendered mesh, above the roads; on an airfield just above the flat surface */ SHADOW.scale.set(sp, sp, 1); SHADOW.rotation.set(-Math.PI / 2, 0, -S.hdg * DEG); SHADOW.material.opacity = a; } }
+    if (SHADOW.visible) { const sp = PL.chase[0] * 0.66 * (1 + Math.min(S.ra, 900) / 500); if (SHADOW.material.map !== SHADOW_TEX[PL.key]) { SHADOW.material.map = SHADOW_TEX[PL.key]; SHADOW.material.needsUpdate = true; } SHADOW.position.set(sx, Math.max(gs.h, triHeight(sx, sz)) + (gs.field ? 0.35 : 3.6), sz);          /* on the rendered mesh, above the roads; on an airfield just above the flat surface */ SHADOW.scale.set(sp * Math.max(0.3, Math.abs(Math.cos(S.bank))), sp, 1); SHADOW.rotation.set(-Math.PI / 2, 0, -S.hdg * DEG); SHADOW.material.opacity = a; } }
+  // landing lights: on with the gear down; at night they throw a pool of light ahead on the ground
+  if (M.land) { const on = S.gear && S.gearPos > 0.9; for (const l of M.land) l.visible = on;
+    const nt = ENV.uLights.value; LPOOL.visible = on && nt > 0.3 && S.ra < 160 && !S.crashed;
+    if (LPOOL.visible) { const d = 30 + S.ra * 1.6, lx = S.pos.x + fwd.x * d, lz = S.pos.z + fwd.z * d, gl = groundAt(lx, lz), r = 34 + S.ra * 0.9; LPOOL.position.set(lx, Math.max(gl.h, triHeight(lx, lz)) + (gl.field ? 0.4 : 3.7), lz); LPOOL.scale.set(r, r * 2.2, 1); LPOOL.rotation.set(-Math.PI / 2, 0, -S.hdg * DEG); LPOOL.material.opacity = 0.5 * nt * clamp(1 - S.ra / 160, 0, 1); } }
+  else if (LPOOL) LPOOL.visible = false;
+  if (M.wings) for (const [wg, sg, dih] of M.wings) wg.rotation.z = sg * (dih + 0.022 * clamp(S.nLoad - 1, -1.5, 2.5) * (S.onGround ? -0.6 : 1));      // the wings bend with the load
   // animated parts
   M.elev.forEach(e => e.rotation.x = -ctl.pitch * 0.4); if (M.rud) M.rud.rotation.y = ctl.yaw * 0.45;
   if (M.ail.length) { M.ail[0].rotation.x = ctl.roll * 0.4; M.ail[1].rotation.x = -ctl.roll * 0.4; }

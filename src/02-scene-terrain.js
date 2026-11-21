@@ -13,6 +13,21 @@ function autoRes(ms) {
 }
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xb8d3ee, 0.000028);
+/* Built-in materials (buildings, roads, aircraft, sprites) get the same height-aware, blue-shifting haze and the same soft highlight shoulder as the
+   terrain and water shaders, by replacing three.js's fog and tone-mapping chunks once, before any material is compiled. */
+THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n varying float fogDepth; varying float vFogY;\n#endif';
+THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n fogDepth = length(mvPosition.xyz); vFogY = cameraPosition.y + dot(mvPosition.xyz, vec3(viewMatrix[0].y, viewMatrix[1].y, viewMatrix[2].y));\n#endif';
+THREE.ShaderChunk.fog_pars_fragment = '#ifdef USE_FOG\n uniform vec3 fogColor; varying float fogDepth; varying float vFogY;\n #ifdef FOG_EXP2\n uniform float fogDensity;\n #else\n uniform float fogNear; uniform float fogFar;\n #endif\n#endif';
+THREE.ShaderChunk.fog_fragment = '#ifdef USE_FOG\n #ifdef FOG_EXP2\n { float a=(cameraPosition.y+450.0)/1800.0, b=(vFogY+450.0)/1800.0, dd=b-a; float f=abs(dd)<0.02?exp(-a):(exp(-a)-exp(-b))/dd; float k=fogDensity*fogDepth*f*1.45; vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); gl_FragColor.rgb=gl_FragColor.rgb*T+fogColor*(1.0-T); }\n #else\n gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, smoothstep(fogNear, fogFar, fogDepth));\n #endif\n#endif';
+THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace('vec3 CustomToneMapping( vec3 color ) { return color; }', 'vec3 CustomToneMapping( vec3 color ) { vec3 t=max(color-0.55,0.0); return min(color,vec3(0.55))+t/(1.0+1.6*t); }');
+renderer.toneMapping = THREE.CustomToneMapping;
+const HAZE_GLSL = `
+  // shared look: haze that thins with height and shifts blue with distance, warm toward a low sun; and a soft shoulder so bright ground does not clip
+  float hazeK(float d, float y0, float y1, float den){ float a=(y0+450.0)/1800.0, b=(y1+450.0)/1800.0, dd=b-a; float f=abs(dd)<0.02?exp(-a):(exp(-a)-exp(-b))/dd; return den*d*f*1.45; }
+  vec3 hazeCol(vec3 base, vec3 vd, vec3 sdir, vec3 scol){ float low=clamp(1.0-sdir.y*1.6,0.0,1.0); float s=max(dot(normalize(vd.xz+vec2(1e-5)),normalize(sdir.xz+vec2(1e-5))),0.0);
+    return base*mix(vec3(1.0),vec3(0.84,0.92,1.10),low*(1.0-s)*0.7)+scol*0.22*low*s*s*s; }
+  vec3 toneC(vec3 c){ vec3 t=max(c-0.55,0.0); return min(c,vec3(0.55))+t/(1.0+1.6*t); }
+`;
 const camera = new THREE.PerspectiveCamera(60, 1, 1, 260000);
 const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a7a5a, 0.75); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 1); scene.add(sun);
@@ -70,23 +85,43 @@ function landCoverTexture() {
   const n = LCR.w * LCR.h, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = LCR.d[i * 4];
   const t = new THREE.DataTexture(a, LCR.w, LCR.h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
 }
+/** Where the land-cover map has any class, blurred over a cell and filtered: the shader feathers class edges with it. */
+function landCoverMask() {
+  const w = LCR.w, h = LCR.h, a = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { let n = 0, m = 0; for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) { const x = i + c, y = j + b; if (x < 0 || y < 0 || x >= w || y >= h) continue; n++; if (LCR.d[(y * w + x) * 4]) m++; } a[j * w + i] = 255 * m / n; }
+  const t = new THREE.DataTexture(a, w, h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+}
+/** Per-vertex baked light for the terrain: x = in the sun (0 in a mountain's shadow), y = valley occlusion. The shadow is marched across the height
+    grid toward the sun, once per time of day (cached); it costs nothing per frame. */
+const TLIT = { attr: null, ao: null, cache: {} };
+function bakeTerrainLight(key, sd) {
+  if (!TLIT.attr || TLIT.cur === key) return; TLIT.cur = key; const W = NX + 1, H = NZ + 1, arr = TLIT.attr.array;
+  if (!TLIT.ao) { const ao = TLIT.ao = new Float32Array(W * H); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let m = 0, n = 0; for (const [a, b] of [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, 2], [2, -2], [-2, -2]]) { const x = i + a, y = j + b; if (x < 0 || y < 0 || x >= W || y >= H) continue; m += HGT[y * W + x]; n++; } ao[j * W + i] = clamp(1 - (m / n - HGT[j * W + i]) / 260, 0.6, 1); } }
+  let sh = TLIT.cache[key];
+  if (!sh) { sh = TLIT.cache[key] = new Float32Array(W * H); const cx = (X1 - X0) / NX, cz = (Z1 - Z0) / NZ, hl = Math.hypot(sd.x, sd.z) || 1e-6, ux = sd.x / hl, uz = sd.z / hl, step = Math.min(cx, cz), rise = sd.y / hl * step, sx = ux * step / cx, sz = uz * step / cz;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let x = i, z = j, h = HGT[j * W + i] + 4, occ = 0;
+      for (let n = 0; n < 220; n++) { x += sx; z += sz; h += rise; if (x < 0 || z < 0 || x > NX || z > NZ || h > 2950) break; const t = HGT[(z + 0.5 | 0) * W + (x + 0.5 | 0)] - h; if (t > occ) { occ = t; if (occ > 60) break; } }
+      sh[j * W + i] = 1 - clamp(occ / 60, 0, 1); } }
+  for (let k = 0; k < W * H; k++) { arr[k * 2] = sh[k]; arr[k * 2 + 1] = TLIT.ao[k]; } TLIT.attr.needsUpdate = true;
+}
 const SHADER_VS = `
-  attribute vec3 aCol; attribute vec4 aZone;
-  varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist;
+  attribute vec3 aCol; attribute vec4 aZone; attribute vec2 aLit;
+  varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_vertex>
-  void main(){ vW=position; vN=normal; vCol=aCol; vZone=aZone;
+  void main(){ vW=position; vN=normal; vCol=aCol; vZone=aZone; vLit=aLit;
     vec4 mv=modelViewMatrix*vec4(position,1.0); vDist=length(mv.xyz); gl_Position=projectionMatrix*mv;
     #include <logdepthbuf_vertex>
   }`;
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime; uniform vec2 uOrg; uniform vec4 uLCr;
-  varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist;
+  uniform sampler2D tNoise, tFields, tLC, tLCa; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
   float nz(vec2 p){ return texture2D(tNoise,p).r; }
+  ${HAZE_GLSL}
   void main(){
     #include <logdepthbuf_fragment>
     vec2 P=vW.xz; float farm=vZone.x, arid=vZone.y, urban=vZone.z, rough=vZone.w;
@@ -97,12 +132,12 @@ const TERRAIN_FS = `
     vec2 gB=vec2(nz(pB+vec2(60.0/5300.0,0.0))-nB, nz(pB+vec2(0.0,60.0/5300.0))-nB)/60.0;
     vec2 gC=vec2(nz(pC+vec2(8.0/700.0,0.0))-nC, nz(pC+vec2(0.0,8.0/700.0))-nC)/8.0;
     // close-up grain: a third, metre-scale layer that only shows near the ground
-    vec2 pE=P/13.0+0.53; float nE=nz(pE), close=1.0-smoothstep(250.0,2200.0,vDist); vec2 gE=vec2(nz(pE+vec2(1.0/13.0,0.0))-nE, nz(pE+vec2(0.0,1.0/13.0))-nE);
+    vec2 pE=mat2(0.8,-0.6,0.6,0.8)*P/43.0+0.53; float nE=nz(pE), close=1.0-smoothstep(250.0,2200.0,vDist); vec2 gE=vec2(nz(pE+vec2(1.0/43.0,0.0))-nE, nz(pE+vec2(0.0,1.0/43.0))-nE)*2.2;       /* one noise tile now spans 43 m, turned 37 degrees, so no 13 m lattice shows on bare ground */
     vec2 g=(gB*__UB__+gC*__UC__*near+gE*3.0*close)*rough;
     vec3 N=normalize(vec3(vN.x-g.x, vN.y, vN.z-g.y));
     float slope=1.0-N.y;
     vec3 col=vCol*(0.80+0.40*nA)*(1.0+(nE-0.5)*0.26*close);
-    { float c2=1.0-smoothstep(30.0,650.0,vDist); if(c2>0.01){ float nF=nz(P/3.1+0.19), nG=nz(P/0.9+0.61); col*=1.0+((nF-0.5)*0.30+(nG-0.5)*0.16*(1.0-smoothstep(10.0,160.0,vDist)))*c2*(0.5+0.5*rough); } }      // low and close: stones, tufts and furrows, so the ground stays sharp right under the aircraft
+    { float c2=1.0-smoothstep(30.0,650.0,vDist); if(c2>0.01){ float nF=nz(mat2(0.6,0.8,-0.8,0.6)*P/29.0+0.19), nG=nz(P/8.3+0.61); col*=1.0+((nF-0.5)*0.30+(nG-0.5)*0.16*(1.0-smoothstep(10.0,160.0,vDist)))*c2*(0.5+0.5*rough); } }      // low and close: stones, tufts and furrows, so the ground stays sharp right under the aircraft
     // farmland
     col=mix(col, mix(texture2D(tFields,P/3000.0).rgb,col,0.22)*(0.80+0.30*nC), farm*0.85);
     // woodland and scrub clumps on green hills
@@ -113,7 +148,7 @@ const TERRAIN_FS = `
     col=mix(col, col*1.2+0.04, arid*wadi*0.8);
     col*=1.0-arid*0.2*smoothstep(0.45,0.8,nC);
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
-    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*55.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5);
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*55.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r;
       float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
         if(lc<1.5){ float can=smoothstep(0.40,0.66,nz(P/16.0+0.21)*0.55+nD*0.45); col=mix(vec3(0.17,0.24,0.11),vec3(0.06,0.13,0.05),mix(0.55,can,fine))*(0.85+0.3*nC); urban=0.0; }
@@ -123,7 +158,7 @@ const TERRAIN_FS = `
         else if(lc<5.5){ col=vec3(0.28,0.44,0.19)*(0.85+0.3*nD); }
         else if(lc<6.5){ col=mix(vec3(0.54,0.51,0.37),vec3(0.29,0.35,0.19),smoothstep(0.48,0.74,nD))*(0.9+0.2*nC); }
         else if(lc<7.5){ col=vec3(0.88,0.81,0.62)*(0.93+0.12*nD); urban=0.0; }
-        else if(lc<8.5){ col=vec3(0.80,0.78,0.72)*(0.84+0.22*nC); urban=0.0; }
+        else if(lc<8.5){ col=vec3(0.63,0.61,0.56)*(0.84+0.22*nC)*(0.9+0.2*sin(vW.y*0.09+nB*7.0)); urban=0.0; }
         else if(lc<9.5){ col=vec3(0.15,0.31,0.39)+0.05*nD; urban=0.0; }
         else if(lc<10.5){ col=mix(vec3(0.20,0.33,0.23),vec3(0.18,0.30,0.36),smoothstep(0.5,0.7,nD)); }
         else if(lc<11.5){ urban=max(urban,0.7); }
@@ -133,7 +168,10 @@ const TERRAIN_FS = `
         else if(lc<15.5){ }
         else if(lc<16.5){ col=mix(vec3(0.64,0.63,0.59),vec3(0.24,0.33,0.19),smoothstep(0.52,0.70,nD)); }
         else { col=vec3(0.67,0.58,0.45)*(0.9+0.2*nC); }
+        col=mix(col0,col,smoothstep(0.18,0.62,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
       } }
+    float outside=max(max(uB.x-P.x,P.x-uB.z),max(uB.y-P.y,P.y-uB.w));
+    if(outside>0.0){ col=vCol*(0.80+0.40*nA)*(0.88+0.24*nB); urban=0.0; }          // beyond the map: plain regional ground, fading into the haze
     // layered rock on steep ground
     float steep=smoothstep(0.13,0.40,slope)*(0.3+0.7*rough);
     float strata=0.5+0.5*sin(vW.y*0.085+nC*5.0+nB*9.0);
@@ -154,9 +192,10 @@ const TERRAIN_FS = `
       emis+=warm*uLights*(1.0-arid*0.92)*step(0.80,hv)*smoothstep(0.07,0.0,length(fract(cq)-0.5))*0.8*step(-405.0,vW.y); }
     // light: sun (dimmed under drifting cloud shadows) + sky/ground hemisphere
     float cs=smoothstep(0.50,0.70,nz((P+vec2(uTime*6.0,uTime*2.0))/16000.0+0.2));
-    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs);
-    vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5))+emis;
-    c=mix(c,fogCol,1.0-exp(-fogDen*fogDen*vDist*vDist));
+    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*vLit.x;                        // vLit: baked mountain shadow and valley occlusion
+    vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5)*mix(0.80,1.0,vLit.x)*vLit.y)+emis;
+    { float k=hazeK(vDist,cameraPosition.y,vW.y,fogDen)*(1.0+max(outside,0.0)/9000.0); vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); c=c*T+hazeCol(fogCol,vW-cameraPosition,sunDir,sunCol)*(1.0-T); }
+    c=toneC(c);
     gl_FragColor=vec4(c,1.0);
   }`;
 /* Water: animated wave normals, Fresnel sky reflection, sun glitter, depth-tinted shallows and surf at the shoreline. */
@@ -166,6 +205,7 @@ const WATER_FS = `
   #include <common>
   #include <logdepthbuf_pars_fragment>
   float nz(vec2 p){ return texture2D(tNoise,p).r; }
+  ${HAZE_GLSL}
   void main(){
     #include <logdepthbuf_fragment>
     vec2 P=vW.xz; vec3 V=normalize(cameraPosition-vW);
@@ -173,17 +213,22 @@ const WATER_FS = `
     vec2 p1=P/110.0+vec2(uTime*0.030,uTime*0.018), p2=P/27.0+vec2(-uTime*0.045,uTime*0.036); float e=0.012;
     float a=nz(p1), b=nz(p2);
     vec2 g=vec2(nz(p1+vec2(e,0.0))-a, nz(p1+vec2(0.0,e))-a)+0.7*vec2(nz(p2+vec2(e,0.0))-b, nz(p2+vec2(0.0,e))-b);
+    { float w1=1.0-smoothstep(900.0,3800.0,vDist), w2=1.0-smoothstep(350.0,1400.0,vDist), w3=1.0-smoothstep(120.0,520.0,vDist);                // swell: three wave trains from the west, fading with distance (the noise alone looked like camouflage close up)
+      vec2 d1=vec2(0.94,0.34), d2=vec2(0.80,-0.60), d3=vec2(0.55,0.83);
+      g+=d1*0.016*w1*cos(dot(d1,P)*0.105+uTime*0.9+a*5.0)+d2*0.012*w2*cos(dot(d2,P)*0.27-uTime*1.3+b*4.0)+d3*0.009*w3*cos(dot(d3,P)*0.70+uTime*1.9+a*3.0); }       /* each train fades before its wavelength shrinks to a pixel, or the horizon fills with rings */
     vec3 N=normalize(vec3(-g.x*WK, 1.0+vDist/900.0, -g.y*WK));
     float fres=0.02+0.98*pow(1.0-max(dot(V,N),0.0),5.0);
     vec3 R=reflect(-V,N); R.y=abs(R.y);
     vec3 skyR=mix(skyHor,skyTop,pow(R.y,0.5));
-    float sd=max(dot(R,sunDir),0.0); float glint=(pow(sd,180.0)*1.1+pow(sd,20.0)*0.10)/(1.0+vDist/9000.0);
+    float sd=max(dot(R,sunDir),0.0), rgh=clamp(vDist/14000.0,0.0,1.0); float glint=pow(sd,mix(420.0,38.0,rgh))*mix(1.25,0.42,rgh)+pow(sd,20.0)*0.08;       // the sun's path widens toward the horizon instead of dying out
     vec3 light=skyCol+sunCol*max(dot(N,sunDir),0.0);
     vec3 body=mix(deepCol,shalCol,exp(-max(depth,0.0)/14.0))*light;
     vec3 c=mix(body,skyR,fres)+sunCol*glint;
     float surf=smoothstep(4.0,0.6,depth+sin(uTime*0.9+a*9.0)*1.3)*smoothstep(0.30,0.55,b+a*0.4);
+    surf=max(surf, smoothstep(5.5,0.3,depth)*smoothstep(0.55,0.95,sin(depth*1.5-uTime*1.1+a*6.0))*0.75*(1.0-smoothstep(1500.0,7000.0,vDist)));          // lines of surf running in parallel to the beach
     c=mix(c,foamCol*light,surf*0.85);
-    c=mix(c,fogCol,1.0-exp(-fogDen*fogDen*vDist*vDist));
+    { float k=hazeK(vDist,cameraPosition.y,vW.y,fogDen); vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); c=c*T+hazeCol(fogCol,vW-cameraPosition,sunDir,sunCol)*(1.0-T); }
+    c=toneC(c);
     gl_FragColor=vec4(c,1.0);
   }`;
 const SIMPLE_VS = `
@@ -231,10 +276,10 @@ function buildTerrain() {
   // stretch the outer ring to the horizon so the world never ends
   for (let j = 0; j <= NZ; j++) { pos[(j * (NX + 1)) * 3] = -FAR; pos[(j * (NX + 1) + NX) * 3] = FAR; }
   for (let i = 0; i <= NX; i++) { pos[i * 3 + 2] = -FAR; pos[(NZ * (NX + 1) + i) * 3 + 2] = FAR; }
-  const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4);
+  const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false };
@@ -248,7 +293,7 @@ function buildTerrain() {
     }
     if (ci === 0 || cj === 0 || ci + CX >= NX || cj + CZ >= NZ) edge = true;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', pAttr); g.setAttribute('normal', nAttr); g.setAttribute('aCol', cAttr); g.setAttribute('aZone', zAttr);
+    g.setAttribute('position', pAttr); g.setAttribute('normal', nAttr); g.setAttribute('aCol', cAttr); g.setAttribute('aZone', zAttr); g.setAttribute('aLit', lAttr);
     g.setIndex(new THREE.BufferAttribute(ix, 1));
     const xa = X0 + (X1 - X0) * ci / NX, xb = X0 + (X1 - X0) * (ci + CX) / NX, za = Z0 + (Z1 - Z0) * cj / NZ, zb = Z0 + (Z1 - Z0) * (cj + CZ) / NZ;
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3((xa + xb) / 2, (lo + hi) / 2, (za + zb) / 2), Math.hypot(xb - xa, zb - za, hi - lo) / 2 + 300);

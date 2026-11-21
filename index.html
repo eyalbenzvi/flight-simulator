@@ -164,6 +164,71 @@ details.sec[open] summary{margin-bottom:7px}
 #crash{display:none;background:rgba(60,4,4,.72);align-items:center}
 #crash .card{padding:22px 26px;text-align:center;max-width:420px} #crash h2{margin:0 0 6px;font-size:30px;color:var(--red);letter-spacing:.1em} #crash p{color:var(--ink);margin:0 auto 14px}
 #crash div div{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+/* ============ Polish layer: one surface, type and motion system; menus that let the world show ============ */
+:root{ --r1:8px; --r2:14px; --glass:rgba(10,16,24,.72); --glass-solid:rgba(8,13,19,.94); --elev:0 6px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06);
+  --face-he:"Heebo","Rubik","Assistant","Noto Sans Hebrew","Arial Hebrew","Segoe UI",system-ui,sans-serif; --t-fast:.12s; --t:.2s; --ease:cubic-bezier(.2,.8,.2,1) }
+html:lang(he) body, html:lang(he) button, html:lang(he) input{font-family:var(--face-he)} html:lang(he) *{letter-spacing:0!important}
+#strip, #strip b, #pfd, #thrPct, #sys span:last-child{font-family:var(--face)}
+.panel{background:var(--glass);border-radius:var(--r1);box-shadow:var(--elev)}
+button{border-radius:var(--r1);transition:transform .08s ease-out, background var(--t-fast) ease-out, border-color var(--t-fast) ease-out} button:active{transform:scale(.96);background:rgba(255,255,255,.2)}
+#map{border-radius:10px;box-shadow:var(--elev), inset 0 0 18px rgba(0,0,0,.45)} #pfd{border-radius:10px;box-shadow:var(--elev)}
+/* --- motion: nothing pops --- */
+@keyframes ovIn{from{opacity:0}to{opacity:1}} @keyframes sheetIn{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}} @keyframes sheetUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes popIn{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}} @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}} @keyframes cardIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+.ov{animation:ovIn var(--t) ease-out} #toast{animation:popIn .18s var(--ease)} #landP:not([hidden]), #hint:not(:empty){animation:fadeIn .2s var(--ease)} #crash .card{animation:cardIn .24s var(--ease)}
+#hud > *{transition:opacity .25s ease-out}
+/* --- one message at a time, under the readouts --- */
+#toast{top:calc(96px + var(--st));border-radius:var(--r2);background:var(--glass-solid);box-shadow:var(--elev)} body.toasting #hint{visibility:hidden}
+#hint{border-radius:var(--r2);padding:4px 12px;background:var(--glass)}
+/* --- the simple readout strip: cells with a hierarchy --- */
+#strip{padding:5px 4px;border-radius:var(--r2)} #strip i{display:inline-flex;align-items:baseline;gap:3px;padding:0 10px;font-style:normal} #strip i + i{border-inline-start:1px solid var(--line)}
+#strip b{font-size:18px;font-weight:700;min-width:2.2ch;text-align:end;display:inline-block} #strip i.s b{font-size:15px;font-weight:600} #strip span{margin:0;font-size:10.5px} #strip svg{width:13px;height:13px;align-self:center;opacity:.9}
+body.touch #strip i{padding:0 6px} body.touch #strip b{font-size:15.5px} body.touch #strip i.s b{font-size:13.5px}
+@media (max-width:340px){ body.touch #strip i{padding:0 4px} body.touch #strip b{font-size:13.5px} body.touch #strip i.s b{font-size:12.5px} }
+/* --- menus: a sheet at the side (or the bottom on an upright phone); the aircraft and the world stay in view --- */
+#start, #menu{padding:0;overflow:hidden;align-items:stretch;justify-content:flex-start;background:linear-gradient(to right, rgba(6,10,16,.90) 0, rgba(6,10,16,.55) 440px, rgba(6,10,16,0) 62%)}
+#start .card, #menu .card{max-width:440px;margin:0;height:100%;overflow-y:auto;overscroll-behavior:contain;border-radius:0;border:none;border-inline-end:1px solid var(--line);background:var(--glass-solid);padding:calc(18px + var(--st)) 20px 0;animation:sheetIn .26s var(--ease);touch-action:pan-y;display:flex;flex-direction:column}
+#start .card > .foot, #menu .card > .foot{margin:auto -20px 0;border-radius:0;padding:12px 20px calc(12px + var(--sb))} #sBody, #mBody{padding-bottom:14px}
+@media (orientation:portrait) and (max-width:759px){
+  #start, #menu{align-items:flex-end;background:linear-gradient(to top, rgba(6,10,16,.88) 0, rgba(6,10,16,.5) 66vh, rgba(6,10,16,0) 80vh)}
+  #start .card, #menu .card{max-width:none;width:100%;height:auto;max-height:66vh;border-radius:18px 18px 0 0;border-inline-end:none;border-top:1px solid var(--line);padding-top:16px;animation:sheetUp .28s var(--ease)}
+}
+body.paused #hud{visibility:hidden}
+/* --- title lockup, loading --- */
+h1{font-size:clamp(20px,4.4vw,30px);line-height:1.15;font-weight:800;margin:0;text-wrap:balance;display:flex;align-items:center;gap:10px}
+h1::before{content:"";flex:none;width:30px;height:30px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 6l5 21 21 10v6l-21-6-2 13 7 6v4l-10-3-10 3v-4l7-6-2-13-21 6v-6l21-10z' fill='%23e9c877'/%3E%3C/svg%3E") center/contain no-repeat}
+.mh{margin-bottom:10px} .mh h2{font-size:22px;font-weight:800} #rule{height:3px;margin:0 0 12px;border-radius:2px} #intro{font-size:14px;margin:0 0 6px}
+#langB{min-width:48px;padding:6px 12px;font-weight:600}
+@keyframes ruleRun{to{background-position:44px 0}}
+body:not(.ready) #start{background:linear-gradient(#0b1622 0,#1d3a5f 55%,#e9a35b 88%,#f3d08a 100%)} body:not(.ready) #start .card{background:rgba(8,13,19,.55);border:none;justify-content:center;max-width:none;width:100%;align-items:center;text-align:center}
+body:not(.ready) #rule{width:min(320px,70vw);animation:ruleRun .6s linear infinite} body:not(.ready) .foot, body:not(.ready) .ldSpin{display:none} body:not(.ready) #intro{color:var(--ink)}
+@media (max-height:520px){ h1{font-size:18px} h1::before{width:22px;height:22px} #start #intro{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)} #start .card, #menu .card{padding-top:calc(8px + var(--st))} .mh{margin-bottom:4px} .foot .go{min-height:44px;padding:8px 24px} }
+/* --- sections and cards --- */
+details.sec{border-top:none;margin-top:8px;padding:2px 12px 4px;background:rgba(255,255,255,.035);border-radius:var(--r2)} details.sec[open]{padding-bottom:12px}
+details.sec summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;padding:0} details.sec summary::-webkit-details-marker{display:none}
+details.sec summary::before{content:"";width:8px;height:8px;border-inline-end:2px solid var(--sand);border-bottom:2px solid var(--sand);transform:rotate(-45deg);transition:transform .18s var(--ease);flex:none;margin-inline:3px 4px} html:lang(he) details.sec summary::before{transform:rotate(45deg)}
+details.sec[open] summary::before, html:lang(he) details.sec[open] summary::before{transform:rotate(45deg) translate(-2px,-2px)} html:lang(he) details.sec:not([open]) summary::before{transform:rotate(135deg)}
+details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radius:999px;background:rgba(255,255,255,.07);color:var(--ink);font-size:12.5px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grid{grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px} .grid button{border-radius:var(--r2);padding:10px 12px;background:rgba(255,255,255,.055)}
+.grid button.on{border:2px solid var(--sand);background:rgba(233,200,119,.18);padding:9px 11px}
+.grid button.pl{padding:0;overflow:hidden;display:flex;flex-direction:column;text-align:center} .grid button.pl.on{padding:0}
+.grid button.pl img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#1d3a5f} .grid button.pl b{display:block;padding:7px 8px 2px} .grid button.pl small{padding:0 8px 8px;display:none} .grid button.pl.on small{display:block}
+.grid button.pl:not(.on) b{padding-bottom:8px}
+.seg button{border-radius:999px} .go{border-radius:var(--r2)} html:lang(he) .go{font-size:19px}
+/* --- touch controls --- */
+#stick{width:132px;height:132px;border:2px solid var(--line);background:radial-gradient(circle, rgba(9,15,22,.55) 0, rgba(9,15,22,.25) 100%);box-shadow:var(--elev)}
+#knob{width:54px;height:54px;margin:-27px;border:none;background:radial-gradient(circle at 35% 30%, #9fe6ff, #2aa7d6 60%, #0f6a8f);box-shadow:0 4px 10px rgba(0,0,0,.45)}
+#stick span{font-size:13px;opacity:.75} #stU{top:6px} #stD{bottom:6px}
+#thrT{width:52px;height:150px;border-radius:12px;background:linear-gradient(rgba(9,15,22,.5),rgba(9,15,22,.5)), repeating-linear-gradient(to top, transparent 0 28px, rgba(150,205,255,.28) 28px 30px);box-shadow:var(--elev);overflow:visible}
+#thrTf{background:rgba(85,214,255,.25);border-radius:0 0 11px 11px} #thrTf::after{content:"";position:absolute;left:3px;right:3px;top:-11px;height:22px;border-radius:7px;background:linear-gradient(#bfefff,#2aa7d6);box-shadow:0 3px 8px rgba(0,0,0,.5)}
+#thrT span{top:auto;bottom:-18px;font-size:12px;text-shadow:0 1px 2px #000} #thrT em{display:none}
+#ctx button{border-radius:12px;background:var(--glass-solid);box-shadow:var(--elev)}
+/* --- phone: full instruments stay clear of the controls --- */
+@media (orientation:portrait){ body.touch:not(.nopfd) #pfd{left:calc(10px + var(--sl));transform:none;width:min(calc(100vw - 100px),300px);bottom:calc(176px + var(--sb))} }
+@media (orientation:landscape){ body.touch:not(.nopfd) #ctx{flex-direction:column;flex-wrap:wrap-reverse;max-height:calc(100vh - 190px);right:calc(14px + var(--sr));bottom:calc(178px + var(--sb))} body.touch:not(.nopfd) #pfd{width:min(30vw,270px)} }
+#crash{background:radial-gradient(rgba(4,7,11,.25) 30%, rgba(4,7,11,.82))} #crash h2{color:var(--amber)} body.crashed #hud > *{opacity:0}
+@media (prefers-reduced-motion: reduce){ *, *::before, *::after{animation:none!important;transition:none!important} }
 </style>
 </head>
 <body>

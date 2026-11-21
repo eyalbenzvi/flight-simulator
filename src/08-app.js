@@ -129,9 +129,21 @@ function setupTouch() {
 
 // ---------- 15. Menus ----------
 let FREE = [], LANDTESTS = [];
+/** A picture of each aircraft for its card, rendered once at start-up from the real model against the real sky. */
+const PLANE_IMG = {};
+function shootPlanes() {
+  const w = 320, h = 180, keep = { p: camera.position.clone(), q: camera.quaternion.clone(), a: camera.aspect, f: camera.fov, pr: renderer.getPixelRatio() };
+  try { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = 30; if (camera.view) camera.clearViewOffset(); camera.updateProjectionMatrix();
+    const at = new THREE.Vector3(lon2x(34.72), 520, lat2z(32.0)); AC.root.position.copy(at); AC.root.quaternion.setFromEuler(new THREE.Euler(0.03, -0.35, 0.05, 'YXZ')); AC.deck.visible = false; if (SHADOW) SHADOW.visible = false;
+    for (const k of PLANE_ORDER) { for (const j of PLANE_ORDER) AC.models[j].g.visible = j === k; const d = PLANES[k].chase[0] * 1.05; camera.position.set(at.x - d * 0.62, at.y + d * 0.2, at.z - d * 0.78); camera.up.set(0, 1, 0); camera.lookAt(at);
+      sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000); sun.position.copy(at).addScaledVector(sunDir, 1000); sun.target.position.copy(at); sun.target.updateMatrixWorld();
+      const m = AC.models[k]; if (m.burner) m.burner.visible = false; if (m.land) for (const l of m.land) l.visible = false; renderer.render(scene, camera); PLANE_IMG[k] = renderer.domElement.toDataURL('image/jpeg', 0.82); }
+  } catch (e) { /* no pictures: the cards fall back to text */ }
+  renderer.setPixelRatio(keep.pr); camera.position.copy(keep.p); camera.quaternion.copy(keep.q); camera.fov = keep.f; for (const j of PLANE_ORDER) AC.models[j].g.visible = false; resize();
+}
 function planeCards(el, onPick) {
   el.textContent = '';
-  for (const k of PLANE_ORDER) { const p = PLANES[k], b = document.createElement('button'); b.className = k === PL.key ? 'on' : ''; b.innerHTML = '<b></b><small></small>'; b.firstChild.textContent = tr(p.name); b.lastChild.textContent = tr(p.tag);
+  for (const k of PLANE_ORDER) { const p = PLANES[k], b = document.createElement('button'); b.className = 'pl' + (k === PL.key ? ' on' : ''); b.innerHTML = (PLANE_IMG[k] ? '<img alt="" src="' + PLANE_IMG[k] + '">' : '') + '<b></b><small></small>'; b.querySelector('b').textContent = tr(p.name); b.lastChild.textContent = tr(p.tag);
     b.addEventListener('click', () => onPick(k)); el.appendChild(b); }
 }
 function gridButtons(el, items) {
@@ -199,8 +211,8 @@ const KEYS = [['Climb / descend', 'טיפוס / ירידה', '↑ / ↓ · W / S
   ['Key guide on screen', 'מדריך מקשים על המסך', 'K'], ['Autopilot', 'טייס אוטומטי', 'P'], ['Roll / loop', 'גלגול / לולאה', 'X / Z'], ['Smoke trail', 'שובל עשן', 'V'], ['Sound on / off', 'קול', 'M'], ['Next difficulty level', 'רמת הקושי הבאה', 'H'],
   ['Expert: gear, flaps, rudder', 'מקצועי: גלגלים, מדפים, הגה כיוון', 'G · F · Q / E']];
 function keyList(el) { el.className = 'keysL'; for (const [en, he, k] of KEYS) { const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('b'); a.textContent = L(en, he); b.textContent = k; b.dir = 'ltr'; d.append(a, b); el.appendChild(d); } }
-function openMenu() { if (!S.started) return; S.paused = true; for (const k in keys) keys[k] = false; renderPanel('pause'); $('menu').style.display = 'flex'; $('menu').scrollTop = 0; }
-function closeMenu() { S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
+function openMenu() { if (!S.started) return; document.body.classList.add('paused'); S.paused = true; for (const k in keys) keys[k] = false; renderPanel('pause'); $('menu').style.display = 'flex'; $('menu').scrollTop = 0; }
+function closeMenu() { document.body.classList.remove('paused'); S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
 /** Android browsers can wipe 2D canvases after a GPU reset (memory pressure, a heavy settings change) or while the tab sleeps.
     Every canvas the scene keeps as a texture, and the baked map image, would come back blank: a black minimap and invisible
     place names. Each one is saved once as a PNG and repainted when its canvas, or the WebGL context, is restored, and a
@@ -248,6 +260,8 @@ function buildMenu() {
   ];
 }
 
+/** With a menu sheet open, shift the picture so the aircraft sits in the clear part of the screen: beside the sheet, or above it on an upright phone. */
+function menuOffset() { const w = window.innerWidth, h = window.innerHeight; if (h > w && w < 760) camera.setViewOffset(w, h, 0, h * 0.26, w, h); else camera.setViewOffset(w, h, -Math.min(220, w * 0.2), 0, w, h); }
 // ---------- 16. Main loop ----------
 let last = 0, frame = 0;
 function loop(now) {
@@ -270,9 +284,9 @@ function loop(now) {
     const full = !document.body.classList.contains('nopfd');
     if (full || S.cam === 0) drawPFD(); if (frame % 4 === 0) drawMap(); if (frame % 5 === 0) drawSys();
     if (S.cam === 0) { AC.pfdTex.needsUpdate = true; if (frame % 4 === 0) AC.mapTex.needsUpdate = true; }
-    Snd.update(); if (PH.on) photoCamera(); else updateCamera(run ? dt : 0); if (frame % 10 === 0) updateLabels();
+    Snd.update(); if (PH.on) photoCamera(); else { updateCamera(run ? dt : 0); if (S.paused) menuOffset(); } if (frame % 10 === 0) updateLabels();
   } else {                                           // slow orbit behind the start screen
-    const a = TNOW * 0.12, d = PL.chase[0] * 1.5; camera.position.set(S.pos.x + Math.cos(a) * d, S.pos.y + PL.chase[1] * 0.6, S.pos.z + Math.sin(a) * d); camPos.copy(camera.position);
+    menuOffset(); const a = TNOW * 0.12, d = PL.chase[0] * 1.5; camera.position.set(S.pos.x + Math.cos(a) * d, S.pos.y + PL.chase[1] * 0.6, S.pos.z + Math.sin(a) * d); camPos.copy(camera.position);
     AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q); AC.m.g.visible = true; AC.deck.visible = false; camera.lookAt(S.pos); sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
     sun.position.copy(S.pos).addScaledVector(sunDir, 1000); sun.target.position.copy(S.pos); sun.target.updateMatrixWorld(); if (AC.m.burner) AC.m.burner.visible = false;
   }
@@ -309,9 +323,9 @@ function init() {
   // settings from the last visit
   if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
   if (SAVE.first) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
-  spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; setInterval(() => { if (S.started) persist(); }, 5000);
+  shootPlanes(); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; document.body.classList.add('ready'); setInterval(() => { if (S.started) persist(); }, 5000);
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
-  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
+  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = S.cam !== 1;          /* in the chase view the camera glides in from where the start screen's orbit left it */ $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
   tapButton($('menuB'), () => { openMenu(); $('menuB').blur(); });
   tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself

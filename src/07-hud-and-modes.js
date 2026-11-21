@@ -303,8 +303,11 @@ function drawSys() {
     const cfg = !S.assist || !!S.land || (!S.onGround && S.ra < 500) || Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 || (gp > 0.02 && gp < 0.98);          // gear and flaps rows: in Expert, low, or while they move
     $('rFlap').hidden = !cfg || FLAPS.length < 2; $('rGear').hidden = !cfg || !!PL.fixedGear; $('rAp').hidden = !(S.ap.on || S.land);
   }
-  if (document.body.classList.contains('nopfd')) $('strip').innerHTML = '<b>' + spdNum(S.V) + '</b><span>' + uSpd()[1] + '</span><b>' + altNum(S.pos.y).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span>' +
-    '<b class="agl">' + altNum(Math.max(S.ra, 0)).toLocaleString('en') + '</b><span>' + uAlt()[1] + ' ' + L('above ground', 'מעל הקרקע') + '</span><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b>';
+  if (document.body.classList.contains('nopfd')) { const AGL = '<svg viewBox="0 0 14 14" role="img" aria-label="' + L('above ground', 'מעל הקרקע') + '"><path d="M7 1v8M3.5 6L7 9.5 10.5 6M1.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const h = '<i><b>' + spdNum(S.V) + '</b><span>' + uSpd()[1] + '</span></i><i><b>' + altNum(S.pos.y).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span></i>' +
+      '<i class="s" style="color:var(--sand)" title="' + L('above ground', 'מעל הקרקע') + '">' + AGL + '<b class="agl">' + altNum(Math.max(S.ra, 0)).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span></i><i class="s"><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b></i>';
+    const st = $('strip'); if (st._h !== h) { st._h = h; st.innerHTML = h; } }
+  document.body.classList.toggle('toasting', $('toast').style.display === 'block');
   $('hint').textContent = hintText(); $('place').textContent = S.place ? L('Over ' + S.place, 'מעל ' + S.placeHe) : '';
   if (!touchUI) { const sig = '' + S.mode + SAVE.lang + (SAVE.inv ? 'i' : 'n') + (legendOn() ? 1 : 0); if (sig !== S.legSig) { S.legSig = sig; drawLegend(); } }
   const al = $('alert'), blink = (TNOW * 3 % 1) < 0.6;
@@ -317,7 +320,7 @@ function drawSys() {
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
-    const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = SAVE.inv ? dT : uT; $('stD').textContent = SAVE.inv ? uT : dT; $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
+    const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
   }
 }
 
@@ -415,7 +418,7 @@ function updateWeather(dt) {
 function photoCamera() {
   const d = PL.chase[0] * PH.d, ce = Math.cos(PH.el); AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q); AC.m.g.visible = !S.crashed; AC.deck.visible = false;
   camera.position.set(S.pos.x + Math.sin(PH.az) * ce * d, S.pos.y + Math.sin(PH.el) * d, S.pos.z + Math.cos(PH.az) * ce * d); camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 2);
-  camera.up.set(0, 1, 0); camera.lookAt(S.pos); if (keys.ArrowLeft) PH.az += 0.02; if (keys.ArrowRight) PH.az -= 0.02; if (keys.ArrowUp) PH.el = Math.min(PH.el + 0.015, 1.4); if (keys.ArrowDown) PH.el = Math.max(PH.el - 0.015, -0.3);
+  if (camera.view) camera.clearViewOffset(); camera.up.set(0, 1, 0); camera.lookAt(S.pos); if (keys.ArrowLeft) PH.az += 0.02; if (keys.ArrowRight) PH.az -= 0.02; if (keys.ArrowUp) PH.el = Math.min(PH.el + 0.015, 1.4); if (keys.ArrowDown) PH.el = Math.max(PH.el - 0.015, -0.3);
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
 }
 
@@ -524,7 +527,7 @@ function applyLang() {
   document.querySelectorAll('.ov .card, #legend, #photoBar, #sys').forEach(e => e.dir = he ? 'rtl' : 'ltr');
   set('#start h1', 'ISRAEL FLIGHT SIMULATOR', 'סימולטור טיסה מעל ישראל');
   set('#intro', 'Pick an aircraft and a difficulty, then press FLY. Everything else can also be changed during the flight, in the ☰ menu.', 'בוחרים מטוס ורמת קושי ולוחצים "לטוס!". את כל השאר אפשר לשנות גם במהלך הטיסה, בתפריט ☰.');
-  $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[S.mode][0], LV[S.mode][1]); set('#langB', 'עברית', 'English'); $('langB').lang = he ? 'en' : 'he';
+  $('modeB').textContent = L(LV[S.mode][0], LV[S.mode][1]); set('#langB', 'עברית', 'English'); $('langB').lang = he ? 'en' : 'he';
   document.documentElement.lang = he ? 'he' : 'en'; document.title = L('Israel Flight Simulator', 'סימולטור טיסה מעל ישראל');
   const aria = (id, en, h) => { const e = $(id); e.setAttribute('aria-label', he ? h : en); e.title = he ? h : en; };
   aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');

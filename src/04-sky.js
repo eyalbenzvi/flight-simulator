@@ -7,11 +7,13 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 20), new THREE.Sha
   fragmentShader: `uniform vec3 top,hor,sunDir,sunCol; uniform float stars; varying vec3 vDir;
     float hash(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
     void main(){ vec3 d=normalize(vDir); float h=max(d.y,0.0);
-      vec3 col=mix(hor,top,pow(h,0.5));                       // Rayleigh-style horizon whitening
+      vec3 col=mix(hor,top,pow(h,0.5));
+      { float low=clamp(1.0-sunDir.y*1.6,0.0,1.0), sh=max(dot(normalize(d.xz+vec2(1e-5)),normalize(sunDir.xz+vec2(1e-5))),0.0), band=1.0-smoothstep(0.0,0.35,h); col=col*mix(vec3(1.0),vec3(0.84,0.92,1.10),low*(1.0-sh)*0.7*band)+sunCol*0.22*low*sh*sh*sh*band; }
       if(d.y<0.0) col=mix(hor,hor*0.78,min(1.0,-d.y*4.0));
       float s=max(dot(d,sunDir),0.0);
       col+=sunCol*(pow(s,900.0)*3.0+pow(s,60.0)*0.35+pow(s,5.0)*0.2*(1.0-h));   // disc, glare, Mie haze
       if(stars>0.0&&d.y>0.0){ col+=vec3(step(0.9975,hash(floor(d*220.0))))*stars*smoothstep(0.0,0.2,d.y); }
+      { vec3 t=max(col-0.55,0.0); col=min(col,vec3(0.55))+t/(1.0+1.6*t); }
       gl_FragColor=vec4(col,1.0); }`
 }));
 // lighting/fog uniforms shared by the terrain, water and building shaders
@@ -40,7 +42,7 @@ function buildSkyObjects() {
   glare.scale.set(26000, 26000, 1); scene.add(glare);
 }
 const TOD = [
-  { name: 'DAY', sun: [0.5, 0.62, 0.42], sunCol: 0xfff1d8, sunI: 1.05, hs: 0xbfd9ff, hg: 0x8a7a5a, hI: 0.52, top: [0.17, 0.41, 0.80], hor: [0.72, 0.83, 0.93], fog: [0.72, 0.83, 0.93], stars: 0, lights: 0, cloud: [1, 1, 1], glare: 0.9 },
+  { name: 'DAY', sun: [-0.55, 0.53, 0.64], sunCol: 0xfff0d2, sunI: 1.08, hs: 0xa9c8ff, hg: 0x8a7a5a, hI: 0.52,       /* an afternoon sun, 32 degrees up in the south-west: relief and facades get a lit and a shaded side, and the shade is blue */ top: [0.17, 0.41, 0.80], hor: [0.72, 0.83, 0.93], fog: [0.72, 0.83, 0.93], stars: 0, lights: 0, cloud: [1, 1, 1], glare: 0.9 },
   { name: 'SUNSET', sun: [-0.92, 0.11, 0.2], sunCol: 0xff9648, sunI: 0.9, hs: 0x8f80b4, hg: 0x5a4030, hI: 0.52, top: [0.15, 0.19, 0.42], hor: [0.93, 0.58, 0.36], fog: [0.78, 0.55, 0.44], stars: 0.15, lights: 0.55, cloud: [1, 0.74, 0.58], glare: 1 },
   { name: 'NIGHT', sun: [0.3, 0.6, -0.4], sunCol: 0x8fa8ff, sunI: 0.2, hs: 0x24365c, hg: 0x0a0a12, hI: 0.3, top: [0.01, 0.02, 0.06], hor: [0.05, 0.07, 0.14], fog: [0.04, 0.055, 0.11], stars: 1, lights: 1, cloud: [0.16, 0.18, 0.26], glare: 0.12 }
 ];
@@ -58,9 +60,12 @@ function applyTOD(i) {
   if (glare) { glare.material.opacity = t.glare; glare.material.color.setHex(t.sunCol); }
   if (cityLights) { cityLights.visible = t.lights > 0; cityLights.material.opacity = t.lights; }
   if (siteLights) { siteLights.visible = t.lights > 0; siteLights.material.opacity = Math.min(1, t.lights * 1.4); }
-  applyWeather();
+  applyWeather(); bakeTerrainLight(i, sunDir);
   if (traffic) { traffic.pts.material.size = 9 + 17 * t.lights; traffic.pts.material.color.setHex(t.lights > 0.3 ? 0xffe2a8 : 0xf4f1e6); }
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
   if (bldMat) bldMat.emissive.setRGB(0.035 * t.lights, 0.03 * t.lights, 0.02 * t.lights);
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
+  for (const m of AC.livery) m.emissiveIntensity = t.lights > 0.3 ? 0.95 : 0;                       // cabin windows light up
+  for (const g of AC.glow) g.scale.setScalar(g.userData.r * (1 + 1.5 * t.lights));                  // the aircraft's lights bloom at night
+  bakeSkyReflection();
 }

@@ -4,14 +4,19 @@ let rwyLights = null, dotTex = null;
 function lightDot() { if (dotTex) return dotTex; const c = document.createElement('canvas'); c.width = c.height = 32; const x = c.getContext('2d'), g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
   g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 32, 32); return dotTex = new THREE.CanvasTexture(c); }
 function runwayTexture(nameNear, nameFar) {
-  const c = document.createElement('canvas'); c.width = 128; c.height = 2048; const x = c.getContext('2d');
-  x.fillStyle = '#2b2d30'; x.fillRect(0, 0, 128, 2048);
-  for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(${Math.random() < .5 ? 255 : 0},${Math.random() < .5 ? 255 : 0},${Math.random() < .5 ? 255 : 0},.035)`; x.fillRect(Math.random() * 128, Math.random() * 2048, 2, 6); }
-  x.fillStyle = '#e9e9e4';
+  // drawn in a 128 x 2048 frame, at twice that on desktop: asphalt with grey grain and repair patches, tar seams, rubber in both touchdown zones, full markings
+  const K = HIRES ? 2 : 1, c = document.createElement('canvas'); c.width = 128 * K; c.height = 2048 * K; const x = c.getContext('2d'), R = rng(77); x.scale(K, K);
+  x.fillStyle = '#2d2f32'; x.fillRect(0, 0, 128, 2048);
+  for (let i = 0; i < 26; i++) { x.fillStyle = `rgba(${R() < 0.5 ? '18,19,21' : '70,72,76'},${0.10 + R() * 0.12})`; x.fillRect(R() * 110, R() * 2048, 10 + R() * 40, 20 + R() * 90); }       // repair patches
+  for (let i = 0; i < 5200; i++) { const v = R() < 0.5 ? 255 : 0; x.fillStyle = `rgba(${v},${v},${v},${0.02 + R() * 0.035})`; x.fillRect(R() * 128, R() * 2048, 0.6 + R() * 1.2, 1 + R() * 5); }      // grain, grey only
+  x.fillStyle = 'rgba(0,0,0,.16)'; for (let y = 0; y < 2048; y += 26) x.fillRect(0, y, 128, 0.6); x.fillRect(42.5, 0, 0.6, 2048); x.fillRect(85, 0, 0.6, 2048);          // slab seams
+  for (const [y0, dir] of [[230, 1], [2048 - 230, -1]]) for (let i = 0; i < 150; i++) { const cx = (R() < 0.5 ? 46 : 82) + (R() - 0.5) * 16, len = 60 + R() * 260, y = y0 + dir * R() * 330; x.fillStyle = `rgba(8,8,9,${0.05 + R() * 0.10})`; x.fillRect(cx, dir > 0 ? y : y - len, 1.2 + R() * 2.2, len); }      // rubber
+  x.fillStyle = '#ecebe5';
   x.fillRect(3, 0, 2, 2048); x.fillRect(123, 0, 2, 2048);                              // edge lines
   for (let y = 190; y < 1860; y += 44) x.fillRect(62.5, y, 3, 24);                     // centreline
-  for (const base of [14, 2048 - 58]) for (let i = 0; i < 8; i++) x.fillRect(12 + i * 13.6 + (i > 3 ? 6 : 0), base, 7, 44);   // threshold bars
-  for (const y of [300, 380, 2048 - 320, 2048 - 400]) { x.fillRect(34, y, 14, 30); x.fillRect(80, y, 14, 30); }               // touchdown zone
+  for (const base of [14, 2048 - 58]) for (let i = 0; i < 12; i++) x.fillRect(10 + i * 9 + (i > 5 ? 6 : 0), base, 5, 44);   // threshold bars
+  for (const y of [300, 2048 - 330]) { x.fillRect(30, y, 16, 46); x.fillRect(82, y, 16, 46); }                               // aiming-point blocks
+  for (const y of [390, 460, 2048 - 410, 2048 - 480]) for (const u of [30, 36, 42, 82, 88, 94]) x.fillRect(u, y, 3.6, 22);  // touchdown-zone bars
   x.font = 'bold 54px Arial, sans-serif'; x.textAlign = 'center';
   x.save(); x.translate(64, 2048 - 100); x.scale(1, 1.7); x.fillText(nameNear, 0, 0); x.restore();
   x.save(); x.translate(64, 100); x.rotate(Math.PI); x.scale(1, 1.7); x.fillText(nameFar, 0, 0); x.restore();
