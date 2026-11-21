@@ -70,7 +70,7 @@ function action(code) {
   if (code === 'KeyR') { if (S.lastSpawn) spawn(S.lastSpawn); return; }
   if (code === 'KeyM') return Snd.toggle();
   if (code === 'KeyC') { S.cam = (S.cam + 1) % CAMS.length; camSnap = S.cam === 0 || S.cam === 3; toast(tr(CAMS[S.cam]), 1.6); return; }
-  if (code === 'KeyT') { S.tod = (S.tod + 1) % 3; applyTOD(S.tod); return; }
+  if (code === 'KeyT') { S.tod = (S.tod + 1) % 4; applyTOD(S.tod); return; }
   if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
   if (code === 'KeyK') { if (legendOn()) S.legend = false; else { S.legend = true; SAVE.legendPin = true; } S.legSig = ''; return; }
   if (code === 'KeyY') { WX = (WX + 1) % 3; applyTOD(S.tod); toast(L('Weather: ', 'מזג אוויר: ') + tr(WXN[WX])); return; }
@@ -194,7 +194,7 @@ function settingsRows(el, where, rer) {
   const onOff = [L('On', 'פועל'), L('Off', 'כבוי')];
   row(L('Language', 'שפה'), ['עברית', 'English'], SAVE.lang === 'he' ? 0 : 1, i => { SAVE.lang = i ? 'en' : 'he'; persist(); applyLang(); });
   row(touchUI ? L('Stick forward', 'ג׳ויסטיק קדימה') : L('Up arrow', 'חץ למעלה'), [L('Climbs', 'מעלה את המטוס'), L('Descends, like a real stick', 'מוריד, כמו מוט אמיתי')], SAVE.inv ? 1 : 0, i => { SAVE.inv = !!i; persist(); S.legSig = ''; });
-  row(L('Time of day', 'שעה ביום'), TOD.map((t, i) => todName(i)), S.tod, i => { S.tod = i; applyTOD(i); });
+  row(L('Time of day', 'שעה ביום'), [0, 1, 2, 3].map(todName), S.tod, i => { S.tod = i; applyTOD(i); });
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
@@ -208,7 +208,7 @@ function settingsRows(el, where, rer) {
   if (where === 'pause') { const b = document.createElement('button'); b.className = 'sec2'; b.style.marginTop = '10px'; b.textContent = L('Photo mode: look at the aircraft from any side', 'מצב צילום: מסתכלים על המטוס מכל צד');
     b.addEventListener('click', () => { closeMenu(); action('KeyO'); }); el.appendChild(b); }
 }
-const todName = i => SAVE.lang === 'he' ? tr(TOD[i].name.toLowerCase()) : TOD[i].name[0] + TOD[i].name.slice(1).toLowerCase();
+const todName = i => i === 3 ? L('Passing', 'מתחלף') : SAVE.lang === 'he' ? tr(TOD[i].name.toLowerCase()) : TOD[i].name[0] + TOD[i].name.slice(1).toLowerCase();
 const KEYS = [['Climb / descend', 'טיפוס / ירידה', '↑ / ↓ · W / S'], ['Turn left / right', 'פנייה שמאלה / ימינה', '← / → · A / D'], ['Power up / down', 'הספק למעלה / למטה', 'Shift / Ctrl · = / −'], ['Set power directly', 'קביעת הספק ישירה', '0 – 9'],
   ['Brakes', 'בלמים', 'B · Space'], ['Land automatically', 'נחיתה אוטומטית', 'L'], ['Menu and pause', 'תפריט והפסקה', 'Esc'], ['Change view', 'החלפת מבט', 'C'], ['Look around', 'מבט מסביב', L('drag the view', 'גוררים את התמונה')], ['Restart from the same point', 'התחלה מחדש מאותה נקודה', 'R'],
   ['Day / sunset / night', 'יום / שקיעה / לילה', 'T'], ['Weather', 'מזג אוויר', 'Y'], ['Place names', 'שמות מקומות', 'N'], ['Photo mode', 'מצב צילום', 'O'], ['Simple / full instruments', 'מכשירים פשוטים / מלאים', 'I'],
@@ -298,7 +298,7 @@ function loop(now) {
   if ((run || !S.started) && cloudMat) cloudMat.uniforms.uDrift.value += 6 * dt;
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
-  updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
+  updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); todTick(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
   renderFrame();
 }
 

@@ -131,6 +131,14 @@ function landCoverMask() {
     grid toward the sun, once per time of day (cached); it costs nothing per frame. */
 let TERRAIN_MAT = null;
 const TLIT = { attr: null, ao: null, cache: {} };
+/** The same shadow march as in `bakeTerrainLight`, a few rows at a time (for time that passes); true when the picture for `j.key` is complete. */
+function bakeTerrainRows(j, rows) {
+  const W = NX + 1, H = NZ + 1, sd = j.sd; if (!j.sh) j.sh = new Float32Array(W * H); const sh = j.sh, cx = (X1 - X0) / NX, cz = (Z1 - Z0) / NZ, hl = Math.hypot(sd.x, sd.z) || 1e-6, ux = sd.x / hl, uz = sd.z / hl, step = Math.min(cx, cz), rise = Math.max(sd.y, 0.02) / hl * step, sx = ux * step / cx, sz = uz * step / cz;
+  for (let r = 0; r < rows && j.row < H; r++, j.row++) for (let i = 0, jj = j.row; i < W; i++) { let x = i, z = jj, h = HGT[jj * W + i] + 4, occ = 0;
+    for (let n = 0; n < 220; n++) { x += sx; z += sz; h += rise; if (x < 0 || z < 0 || x > NX || z > NZ || h > 2950) break; const t = HGT[(z + 0.5 | 0) * W + (x + 0.5 | 0)] - h; if (t > occ) { occ = t; if (occ > 60) break; } }
+    sh[jj * W + i] = 1 - clamp(occ / 60, 0, 1); }
+  if (j.row < H) return false; TLIT.cache[j.key] = sh; return true;
+}
 function bakeTerrainLight(key, sd) {
   if (!TLIT.attr || TLIT.cur === key) return; TLIT.cur = key; const W = NX + 1, H = NZ + 1, arr = TLIT.attr.array;
   if (!TLIT.ao) { const ao = TLIT.ao = new Float32Array(W * H); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { let m = 0, n = 0; for (const [a, b] of [[3, 0], [-3, 0], [0, 3], [0, -3], [2, 2], [-2, 2], [2, -2], [-2, -2]]) { const x = i + a, y = j + b; if (x < 0 || y < 0 || x >= W || y >= H) continue; m += HGT[y * W + x]; n++; } ao[j * W + i] = clamp(1 - (m / n - HGT[j * W + i]) / 260, 0.6, 1); } }

@@ -80,11 +80,41 @@ const TOD = [
   { name: 'NIGHT', sun: [0.45, 0.42, -0.55], sunCol: 0xa8c0ff, sunI: 0.38, hs: 0x2c4680, hg: 0x0b0d18, hI: 0.42, top: [0.012, 0.028, 0.085], hor: [0.075, 0.10, 0.20], fog: [0.05, 0.075, 0.15], stars: 1, lights: 1, cloud: [0.20, 0.24, 0.36], glare: 0.0, cir: 0.28, den: 0.000035 }
 ];
 const sunDir = new THREE.Vector3();
+/** The values in force now (one of `TOD`, or a blend while time passes). */
+let TODC = TOD[0];
+/** Time that passes (the fourth choice of "time of day"): afternoon, a sun that sinks into an orange sunset, dusk, a moonlit night, dawn in the east
+    and day again, about eleven minutes round. `TODX.t` is the clock; the terrain's shadows are re-baked a few rows per frame at each step. */
+const TODX = { on: false, t: 0, key: '', job: null, P: [150, 100, 40, 80, 130, 70, 70] };
+const todHex = (a, b, f) => new THREE.Color(a).lerp(new THREE.Color(b), f).getHex();
+function todMix(a, b, f) {
+  const o = { name: f < 0.5 ? a.name : b.name }; for (const k of ['sunI', 'hI', 'stars', 'lights', 'glare', 'cir']) o[k] = a[k] + (b[k] - a[k]) * f;
+  for (const k of ['sun', 'top', 'hor', 'fog', 'cloud']) o[k] = a[k].map((v, i) => v + (b[k][i] - v) * f); for (const k of ['sunCol', 'hs', 'hg']) o[k] = todHex(a[k], b[k], f);
+  o.den = (a.den || 0.00006) + ((b.den || 0.00006) - (a.den || 0.00006)) * f; o.stars = clamp(o.stars * 2 - 1, 0, 1); return o;
+}
+function todAt(t) {
+  const P = TODX.P, D = TOD[0], N = TOD[2], W = TOD[1], E = Object.assign({}, W, { sun: [0.92, 0.11, 0.22] }), sm = x => x * x * (3 - 2 * x); let k = 0; t %= P.reduce((x, y) => x + y, 0); while (t >= P[k]) t -= P[k++]; const f = t / P[k];
+  const below = (X, f2, up) => { const o = todMix(X, N, f2); const g = up ? f2 : 1 - f2; if (f2 < 0.5) { o.sun = [X.sun[0], X.sun[1] - 0.5 * f2, X.sun[2]]; o.sunI = X.sunI * (1 - sm(f2 * 2)); o.sunCol = X.sunCol; o.glare = X.glare * (1 - f2 * 2); } else { o.sun = [N.sun[0], N.sun[1] - 0.9 * (1 - f2), N.sun[2]]; o.sunI = N.sunI * sm(f2 * 2 - 1); o.sunCol = N.sunCol; o.glare = 0; } return o; };
+  if (k === 0) return [D, 'd']; if (k === 1) return [todMix(D, W, sm(f)), 'a' + Math.round(f * 5)]; if (k === 2) return [W, 's'];
+  if (k === 3) return [below(W, f), f < 0.5 ? 's' : 'n']; if (k === 4) return [N, 'n']; if (k === 5) return [below(E, 1 - f), f < 0.5 ? 'n' : 'e'];
+  return [todMix(E, D, sm(f)), 'b' + Math.round(f * 5)];
+}
+function todTick(dt) {
+  if (TODX.job) { const j = TODX.job; if (bakeTerrainRows(j, 26)) { TODX.job = null; bakeTerrainLight(j.key, j.sd); bakeSkyReflection(); } }
+  if (!TODX.on) return; TODX.t += dt; if ((TODX.n = (TODX.n | 0) + 1) % 6) return;
+  const [t, key] = todAt(TODX.t); applyTODv(t, null);
+  if (key !== TODX.key && !TODX.job) { TODX.key = key; const k2 = 'x' + key; if (TLIT.cache[k2]) { bakeTerrainLight(k2, sunDir); bakeSkyReflection(); } else TODX.job = { key: k2, sd: todDir(key), row: 0 }; }
+}
+/** The light direction a baked step stands for: the fixed sun or moon of its phase, or the sun as it is now for a step of the afternoon or morning. */
+function todDir(key) { const f = { d: TOD[0].sun, s: TOD[1].sun, n: TOD[2].sun, e: [0.92, 0.11, 0.22] }[key]; return f ? new THREE.Vector3(f[0], f[1], f[2]).normalize() : sunDir.clone(); }
 function applyTOD(i) {
-  const t = TOD[i]; sunDir.set(t.sun[0], t.sun[1], t.sun[2]).normalize();
+  TODX.on = i === 3; TODX.job = null; if (i === 3) { const [t, key] = todAt(TODX.t); TODX.key = key; applyTODv(t, 'x' + key, todDir(key)); return; }
+  applyTODv(TOD[i], i);
+}
+function applyTODv(t, key, bakeAs) {
+  TODC = t; const i = t === TOD[2] ? 2 : -1; sunDir.set(t.sun[0], t.sun[1], t.sun[2]).normalize();
   sun.color.setHex(t.sunCol); sun.intensity = t.sunI; hemi.color.setHex(t.hs); hemi.groundColor.setHex(t.hg); hemi.intensity = t.hI;
   skyU.top.value.setRGB(t.top[0], t.top[1], t.top[2]); skyU.hor.value.setRGB(t.hor[0], t.hor[1], t.hor[2]); skyU.sunDir.value.copy(sunDir);
-  skyU.sunCol.value.setHex(t.sunCol).multiplyScalar(i === 2 ? 0.5 : 1); skyU.stars.value = t.stars; skyU.uCir.value = t.cir;
+  skyU.sunCol.value.setHex(t.sunCol).multiplyScalar(1 - 0.5 * t.stars); skyU.stars.value = t.stars; skyU.uCir.value = t.cir;
   scene.fog.color.setRGB(t.fog[0], t.fog[1], t.fog[2]);
   ENV.sunDir.value.copy(sunDir); ENV.sunCol.value.setHex(t.sunCol).multiplyScalar(t.sunI); ENV.skyCol.value.setHex(t.hs).multiplyScalar(t.hI); ENV.gndCol.value.setHex(t.hg).multiplyScalar(t.hI);
   ENV.fogCol.value.copy(scene.fog.color); ENV.uLights.value = t.lights;
@@ -93,12 +123,12 @@ function applyTOD(i) {
   if (glare) { glare.material.opacity = t.glare; glare.material.color.setHex(t.sunCol); }
   if (cityLights) { cityLights.visible = t.lights > 0; cityLights.material.opacity = t.lights; }
   if (siteLights) { siteLights.visible = t.lights > 0; siteLights.material.opacity = Math.min(1, t.lights * 1.4); }
-  applyWeather(); bakeTerrainLight(i, sunDir);
+  applyWeather(); if (key !== null) { bakeTerrainLight(key, bakeAs || sunDir); }
   if (traffic) { traffic.pts.material.size = 9 + 17 * t.lights; }
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
   if (bldMat) bldMat.emissive.setRGB(0.035 * t.lights, 0.03 * t.lights, 0.02 * t.lights);
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
   for (const m of AC.livery) m.emissiveIntensity = t.lights > 0.3 ? 0.95 : 0;                       // cabin windows light up
   for (const g of AC.glow) g.scale.setScalar(g.userData.r * (1 + 1.5 * t.lights));                  // the aircraft's lights bloom at night
-  bakeSkyReflection();
+  if (key !== null) bakeSkyReflection();
 }

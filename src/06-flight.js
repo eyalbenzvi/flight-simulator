@@ -340,7 +340,7 @@ function buildShadow() {
 function bakeSkyReflection() {
   if (!AC.envMats.length || !S.pos) return;
   if (!ENVRT) { ENVRT = new THREE.WebGLCubeRenderTarget(64, { format: THREE.RGBFormat, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter }); ENVRT.cam = new THREE.CubeCamera(5, 400000, ENVRT); }
-  const key = S.tod + '-' + WX; if (ENVRT.key === key) return; ENVRT.key = key;          // only when the light changes, not on every lightning flash
+  const key = S.tod + '-' + WX + (TODX.on ? TODX.key : ''); if (ENVRT.key === key) return; ENVRT.key = key;          // only when the light changes, not on every lightning flash
   const g = groundAt(S.pos.x, S.pos.z), vis = AC.root.visible; ENVRT.cam.position.set(S.pos.x, Math.max(S.pos.y, g.h + 400), S.pos.z); AC.root.visible = false; const sp0 = sky.position.clone(); sky.position.copy(ENVRT.cam.position);
   if (clouds) clouds.visible = false; ENVRT.cam.update(renderer, scene); if (clouds) clouds.visible = true; AC.root.visible = vis; sky.position.copy(sp0);
   for (const m of AC.envMats) { if (m.envMap !== ENVRT.texture) { m.envMap = ENVRT.texture; m.combine = THREE.MixOperation; m.reflectivity = m.transparent ? 0.5 : 0.14; m.needsUpdate = true; } }

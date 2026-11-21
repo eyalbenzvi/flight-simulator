@@ -331,7 +331,7 @@ function drawSys() {
 const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
   if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
-  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
+  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= (k === 'tod' ? 3 : 2)) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
 function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
   const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
@@ -406,7 +406,7 @@ function updateAIT(dt) { for (const a of AIT) { a.a += a.dir * 105 * HSCALE / a.
 // weather is layered on top of the time of day
 const tmpC = new THREE.Color();
 function applyWeather() {
-  const t = TOD[S.tod], f = scene.fog, dim = 1 - 0.85 * t.lights, den = WX === 0 ? (t.den || 0.00006) : [0, 0.00013, 0.00009][WX];       /* denser than real air, because the map is compressed 4:1: far ridges must recede in steps */ f.density = den; ENV.fogDen.value = den; S.turb = [0, 0.15, 1][WX];
+  const t = TODC, f = scene.fog, dim = 1 - 0.85 * t.lights, den = WX === 0 ? (t.den || 0.00006) : [0, 0.00013, 0.00009][WX];       /* denser than real air, because the map is compressed 4:1: far ridges must recede in steps */ f.density = den; ENV.fogDen.value = den; S.turb = [0, 0.15, 1][WX];
   if (WX === 1) { f.color.lerp(tmpC.setRGB(0.86 * dim, 0.72 * dim, 0.50 * dim), 0.8); skyU.hor.value.lerp(tmpC, 0.9); skyU.top.value.lerp(tmpC.setRGB(0.62 * dim, 0.60 * dim, 0.56 * dim), 0.6); ENV.sunCol.value.multiply(tmpC.setRGB(0.8, 0.69, 0.53)); skyU.uCir.value = 0.1; if (glare) { glare.material.opacity *= 0.35; } }       /* a sharav day: tan air, a pale sun, grey-beige sky */
   if (WX === 2) { f.color.lerp(tmpC.setRGB(0.40 * dim, 0.43 * dim, 0.48 * dim), 0.85); skyU.hor.value.lerp(tmpC, 0.9); skyU.top.value.lerp(tmpC.multiplyScalar(0.6), 0.85); sun.intensity = t.sunI * 0.35; ENV.sunCol.value.multiplyScalar(0.35);
     hemi.intensity = t.hI * 0.8; ENV.skyCol.value.multiplyScalar(0.8); ENV.gndCol.value.multiplyScalar(0.8); skyU.sunCol.value.multiplyScalar(0.15); if (glare) glare.material.opacity *= 0.1; }
@@ -415,7 +415,7 @@ function applyWeather() {
 }
 function updateWeather(dt) {
   updateRain(dt);
-  if (S.flash > 0) { S.flash -= dt; if (S.flash <= 0) applyTOD(S.tod); }
+  if (S.flash > 0) { S.flash -= dt; if (S.flash <= 0) { if (TODX.on) applyTODv(todAt(TODX.t)[0], null); else applyTOD(S.tod); } }
   if (WX !== 2) return; S.lt -= dt;
   if (S.lt <= 0) { S.lt = 4 + Math.random() * 10; S.flash = 0.16; ENV.skyCol.value.setRGB(1.5, 1.5, 1.8); skyU.top.value.setRGB(0.7, 0.72, 0.85); setTimeout(() => Snd.boom(), 300 + Math.random() * 1500); }
 }
