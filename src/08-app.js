@@ -61,8 +61,16 @@ function startTrick(type) {
   if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' || PL.key === 'stealth' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
-let moreT = 0;
-function foldMore(close) { const m = $('cMore'), box = $('ctxMore'); clearTimeout(moreT); box.hidden = !!close; m.setAttribute('aria-expanded', String(!close)); if (!close) moreT = setTimeout(() => foldMore(true), 7000); }
+let moreT = 0, FOLD = null;
+/**
+ * The folds of the side buttons: weapons, landing, and the rest. One is open at a time, in one slot. `foldOpen(name)` opens one for 7 s (a use of a button
+ * inside starts the 7 s again); with none opened by the player the landing fold stands open by itself while its buttons are needed (`foldPin`).
+ */
+const FOLDS = { more: ['fMore', 'cMore'], land: ['fLand', 'cLandF'], arm: ['fArm', 'cArm'] };
+function foldPin() { return S.started && !S.crashed && !$('cLandF').hidden && (S.onGround ? !$('cBrake').hidden : S.mode === 2 && (S.ra < 450 || !!S.land)) ? 'land' : null; }
+function foldOpen(name) { clearTimeout(moreT); FOLD = name && !$(FOLDS[name][1]).hidden ? name : null; foldSync(); if (FOLD) moreT = setTimeout(() => foldOpen(null), 7000); }
+function foldSync() { const show = FOLD || foldPin(); if (foldSync.was === show) return; foldSync.was = show; for (const k in FOLDS) { $(FOLDS[k][0]).hidden = k !== show; $(FOLDS[k][1]).setAttribute('aria-expanded', String(k === show)); } }
+function foldMore(close) { foldOpen(close ? null : FOLD || 'more'); }
 /** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
     It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
 function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
@@ -148,10 +156,11 @@ function setupTouch() {
   th.addEventListener('pointerup', e => { if (e.pointerId !== thId) return; thId = null; if (!moved) { const r = th.getBoundingClientRect(), v = clamp(1 - (e.clientY - r.top - 8) / (r.height - 16), 0, 1); tick(v); S.thr = v; } });
   th.addEventListener('pointercancel', () => thId = null);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
-    if (b.dataset.hold) { b.addEventListener('pointerdown', () => { keys[k] = true; clearTimeout(moreT); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (keys[k] && b.parentNode.id === 'ctxMore') foldMore(false); keys[k] = false; }); }          /* the fire button, folded like the rest, keeps the row open while it is in use */
-    else tapButton(b, () => { action(k); if (b.id === 'cRate' || b.id === 'cWpn') foldMore(false); else if (b.parentNode.id === 'ctxMore') foldMore(true); }); });          /* the rate button stays open, to be tapped again */
+    if (!k) return; const stay = ['cWpn', 'cGear', 'cFlap'].includes(b.id), inFold = b.parentNode.classList.contains('fold');
+    if (b.dataset.hold) { b.addEventListener('pointerdown', () => { keys[k] = true; clearTimeout(moreT); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (keys[k] && FOLD) foldOpen(FOLD); keys[k] = false; }); }          /* a held button (fire, brake) keeps its fold open while it is in use */
+    else tapButton(b, () => { action(k); if (!inFold) return; if (stay) foldOpen(FOLD); else foldOpen(null); }); });          /* a choice folds its group away; gear, flaps and the weapon change are tapped again, so they stay */
   // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
-  tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
+  for (const n in FOLDS) tapButton($(FOLDS[n][1]), () => foldOpen(FOLD === n ? null : n));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
   $('map').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); $('map').classList.toggle('big'); } });
 }

@@ -205,7 +205,7 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   The world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
 - At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
   A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
-- How it shows: nothing outside a range. Inside, for an armed aircraft the "⋯" button turns orange (`#cMore.armed`) and the folded row holds (the
+- How it shows: nothing outside a range. For an armed aircraft the weapons fold button `#cArm` appears and its fold holds (the
   owner asked for the fire buttons folded by default; the row stays open while they are in use and folds 7 s after) `#cFire` (hold for the gun, tap for a missile or bombs; shows the rounds left),
   `#cWpn` when there is more than one weapon, `#aim` (the gun's line, or where a bomb let go now would land: `wpnImpact` runs the bomb's own steps) and
   `#aimLock` on a drone the missile has locked; orange dashed rings on the minimap. Keys: Enter fires, U changes weapon; controller: right shoulder
@@ -255,8 +255,15 @@ the map image changes (checked every 3 s). A canvas texture created after start-
   shows speed, altitude, height above the ground (`b.agl`) and heading; the PFD shows `AGL` at every height.
 - No credits or attribution lines anywhere in the game (the owner's decision); the data sources are credited in `README.md`.
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
-- On touch, Land, Roll and Loop are folded behind one "⋯" button (`cMore`, `ctxMore`, `foldMore`): it opens them, and they fold away after a choice or 7 s.
-  The button is magenta during an automatic landing (cancel is inside). Only View, and in Expert gear, flaps and brake, stay out.
+- The side buttons on touch (the owner's layout; `#ctx`, `FOLDS`, `foldOpen`, `foldPin`, `foldSync` in `src/08-app.js`, the last CSS block in `index.html`):
+  a bar that is always there with View and the speed of time joined as a pair (`#ctxPair`), and three folds, each behind its own button: weapons
+  (`#cArm` → `#fArm`: Fire, weapon), landing (`#cLandF` → `#fLand`: Land, gear, flaps, brake) and the rest (`#cMore` → `#fMore`: roll, loop, autopilot).
+  Only one fold is open at a time, in one fixed slot (`#ctxPan`), so nothing lies over anything else; it folds 7 s after the last use. A fold's button
+  shows only while the fold has something in it. With none opened by the player the landing fold stands open by itself on the ground (brake) and in
+  Expert when low or landing (`foldPin`). Upright the bar is a column above the lever and the fold opens to its left (above the instruments when they
+  show, two by two on a short screen); sideways the bar is a row beside the lever and the fold is a row above it. `ui.js`-style check (every visible
+  HUD rectangle against every other, 11 screen sizes, about 160 configurations each): 9 sizes ran, clean except two small overlaps on the two
+  smallest screens, fixed in CSS afterwards and not re-run (the owner stopped the run).
 - Touch steering (`setupTouch` in `src/08-app.js`; chosen after looking at how the mobile simulators and action flying games do it):
   - The stick floats. The lower left of the screen (`#stZone`: 46% × 68%, on an upright phone 62% × 46%) is the stick's zone; it appears under the thumb
     wherever that lands, its base follows a thumb that runs past the rim, there is a 7% dead zone rescaled so nothing is lost, and the response is curved

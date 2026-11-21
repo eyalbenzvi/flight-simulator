@@ -328,9 +328,9 @@ function drawSys() {
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
     { const ap = $('cAp'); ap.hidden = !air || !!S.land || S.ra < 60; ap.classList.toggle('on', S.ap.on); }
-    { const m = $('cMore'), any = !S.crashed, t = RATE.v > 1 ? '\u200E×' + RATE.v : '⋯'; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); if (m.textContent !== t) m.textContent = t; }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
-    $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
-    $('cBrake').hidden = !(S.onGround || !S.assist);
+    $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2; $('cBrake').hidden = !(S.onGround || !S.assist);
+    // each fold's button is there only while its fold has something in it; the landing one carries the colour of the Land button
+    { const h = id => $(id).hidden, lf = $('cLandF'), cl = $('cLand'); $('cMore').hidden = S.crashed || (h('cRoll') && h('cLoop') && h('cAp')); lf.hidden = S.crashed || (h('cLand') && h('cGear') && h('cFlap') && h('cBrake')); lf.classList.toggle('active', !!S.land); lf.classList.toggle('ready', !S.land && !h('cLand') && cl.classList.contains('ready')); $('cArm').hidden = S.crashed || h('cFire'); if (FOLD && $(FOLDS[FOLD][1]).hidden) foldOpen(null); foldSync(); }
     const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
   }
 }
@@ -556,7 +556,7 @@ function applyLang() {
   aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
-  $('cMore').setAttribute('aria-label', L('More actions: land, roll, loop, speed of time', 'עוד פעולות: נחיתה, גלגול, לולאה, מהירות הזמן')); $('cRate').setAttribute('aria-label', L('Speed of time', 'מהירות הזמן'));
+  $('cMore').setAttribute('aria-label', L('More actions: roll, loop, autopilot', 'עוד פעולות: גלגול, לולאה, טייס אוטומטי')); $('cLandF').setAttribute('aria-label', L('Landing: land, gear, flaps, brake', 'נחיתה: נחיתה, גלגלים, מדפים, בלם')); $('cArm').setAttribute('aria-label', L('Weapons', 'נשק')); $('cRate').setAttribute('aria-label', L('Speed of time', 'מהירות הזמן'));
   set('#cAp', 'Autopilot', 'טייס אוטומטי'); set('#phSave', 'Save', 'שמירה'); set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
   { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }

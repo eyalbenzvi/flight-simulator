@@ -117,7 +117,7 @@ body.touch #pfd{bottom:calc(150px + var(--sb));width:min(70vw,320px)}
 body.touch #toast{top:calc(min(20vh,160px) + 120px + var(--st));font-size:14px;padding:6px 12px}
 body.touch #alert{top:36%}
 body.touch #mission{white-space:normal;line-height:1.25}
-@media (orientation:landscape){ body.touch #pfd{bottom:calc(8px + var(--sb));width:min(32vw,290px)} body.touch #ctx{bottom:calc(16px + var(--sb));right:calc(72px + var(--sr));flex-direction:row;align-items:flex-end} body.touch #map{height:min(34vh,160px)}
+@media (orientation:landscape){ body.touch #pfd{bottom:calc(8px + var(--sb));width:min(32vw,290px)} body.touch #map{height:min(34vh,160px)}
   body.touch #map.big{right:calc(72px + var(--sr))} }
 /* --- small screens: keep the HUD pieces apart (the map canvas is 160:294, so its width is 0.545 × its height) --- */
 @media (orientation:portrait){
@@ -130,7 +130,7 @@ body.touch #mission{white-space:normal;line-height:1.25}
 @media (max-width:340px){ body.touch #strip{font-size:12px;padding:4px 7px} body.touch #strip b{font-size:13.5px} body.touch #strip span{margin:0 4px 0 1px} }
 @media (max-width:900px){ body:not(.touch) #pfd{left:auto;right:calc(10px + var(--sr));transform:none} }
 #hud:has(#map.big) #hint,#hud:has(#map.big) #place,#hud:has(#map.big) #landP{display:none}
-@media (orientation:landscape) and (max-width:700px){ body.touch #ctx{gap:5px} body.touch #ctx button{min-width:50px;padding:9px 6px;font-size:12.5px} }
+
 /* --- overlays --- */
 .ov{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:calc(16px + var(--st)) 14px calc(16px + var(--sb));overflow:auto;touch-action:pan-y;
   background:radial-gradient(ellipse at 50% 30%,rgba(20,44,70,.86),rgba(4,7,11,.95))}
@@ -227,10 +227,10 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
 #thrTf{background:rgba(85,214,255,.25);border-radius:0 0 11px 11px} #thrTf::after{content:"";position:absolute;left:3px;right:3px;top:-11px;height:22px;border-radius:7px;background:linear-gradient(#bfefff,#2aa7d6);box-shadow:0 3px 8px rgba(0,0,0,.5)}
 #thrT span{top:auto;bottom:-18px;font-size:12px;text-shadow:0 1px 2px #000} #thrT em{display:none}
 #ctx button{border-radius:12px;background:var(--glass-solid);box-shadow:var(--elev)}
-#ctxMore{display:flex;flex-direction:inherit;gap:7px;align-items:inherit;animation:fadeIn .16s var(--ease)} #cMore{font-size:22px;line-height:1;font-weight:700;padding:6px 8px} #cMore.active{border-color:var(--mag);color:var(--mag)} #cMore.armed:not(.active){border-color:#ff7a1a;color:#ffb27a} #cMore[aria-expanded="true"]{background:rgba(255,255,255,.18)}
+#cMore{font-size:22px;line-height:1;font-weight:700;padding:6px 8px} #cMore.active{border-color:var(--mag);color:var(--mag)} #cMore[aria-expanded="true"]{background:rgba(255,255,255,.18)}
 /* --- phone: full instruments stay clear of the controls --- */
 @media (orientation:portrait){ body.touch:not(.nopfd) #pfd{left:calc(10px + var(--sl));transform:none;width:min(calc(100vw - 100px),300px);bottom:calc(176px + var(--sb))} }
-@media (orientation:landscape){ body.touch:not(.nopfd) #ctx{flex-direction:column;flex-wrap:wrap-reverse;max-height:calc(100vh - 190px);right:calc(14px + var(--sr));bottom:calc(178px + var(--sb))} body.touch:not(.nopfd) #pfd{width:min(30vw,270px)} }
+@media (orientation:landscape){ body.touch:not(.nopfd) #pfd{width:min(30vw,270px)} }
 #crash{background:radial-gradient(rgba(4,7,11,.25) 30%, rgba(4,7,11,.82))} #crash h2{color:var(--amber)} body.crashed #hud > *{opacity:0}
 @media (prefers-reduced-motion: reduce){ *, *::before, *::after{animation:none!important;transition:none!important} }
   /* at night the instruments dim a little, like a real panel, so the lit world outside stays the brightest thing on screen */
@@ -257,7 +257,6 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   /* Hebrew section arrows: closed points to the side the text runs to, open points down, like the English ones */
   html:lang(he) details.sec:not([open]) summary::before { transform: rotate(45deg); } html:lang(he) details.sec[open] summary::before { transform: rotate(-45deg) translate(2px, -2px); }
   /* the opened "more" row stands above its button, clear of the stick's side of the screen */
-  @media (orientation: landscape) { body.touch #ctx { align-items: flex-end; } body.touch #ctxMore { position: absolute; right: 0; bottom: calc(100% + 7px); flex-direction: column; align-items: flex-end; } }
   #cMore.pulse { animation: morePulse 1s ease-in-out 8; } @keyframes morePulse { 50% { box-shadow: 0 0 0 6px rgba(255, 215, 106, .55); border-color: var(--sand); } }
   /* the aircraft are one row to swipe through, so the levels and the starts are on the first screen too */
   .grid.planes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 8px; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
@@ -276,6 +275,29 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   .tmk::after { content: ""; position: absolute; inset: -12px; } .tmk.pk { border-color: #ff4b3a; border-width: 3px; }
   .tmk.fr { border-radius: 3px; transform-origin: 13px 13px; border-color: #ff4b3a; border-left-color: #ff4b3a; border-right-color: #ff4b3a; border-style: dashed; }
   #aim.hot { border-color: #ff4b3a; color: #ff8a7a; box-shadow: 0 0 0 3px rgba(255, 75, 58, .35); } #aim.auto { border-style: solid; animation: flyWait .6s ease-in-out infinite; }
+
+  /* The side buttons (the owner's layout): one bar that is always there, View and the speed of time joined as a pair, and three folds, each behind its own
+     button: weapons, landing (Land, gear, flaps, brake), and the rest (roll, loop, autopilot). Only one fold is open at a time and it opens in one fixed
+     slot, so nothing can lie over anything else. Upright: the bar is a column above the lever and the open fold stands to its left. Sideways: the bar is
+     a row beside the lever and the open fold is a row (two rows when long) above it. */
+  #ctx { direction: ltr; right: calc(14px + var(--sr)); bottom: calc(176px + var(--sb)); gap: 0; }
+  #ctxBar { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+  #ctxPair { display: flex; } #ctx #ctxPair button { min-width: 50px; padding: 11px 6px; } #ctxPair button:first-child { border-radius: 12px 0 0 12px; border-right-width: 0; } #ctxPair button:last-child { border-radius: 0 12px 12px 0; }
+  #ctx .fb { min-width: 50px; font-size: 20px; line-height: 1; padding: 6px 8px; } #ctx .fb[aria-expanded="true"] { background: rgba(255, 255, 255, .2); }
+  #cArm { border-color: #ff7a1a; } #cLandF.ready { border-color: var(--green); } #cLandF.active { border-color: var(--mag); }
+  #ctxPan { position: absolute; right: 57px; bottom: 51px; } .fold { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; animation: fadeIn .16s var(--ease); } .fold[hidden] { display: none; }
+  .fold button { white-space: nowrap; }
+  body.toasting #landP { visibility: hidden; }
+  @media (orientation: portrait) { body.touch:not(.nopfd) #pfd { width: min(calc(100vw - 140px), 300px); }
+    /* with the instruments shown the open fold stands above them, as two short rows */
+    body.touch:not(.nopfd) #ctxPan { bottom: calc(min(100vw - 140px, 300px) * 0.682 + 8px); width: 230px; } body.touch:not(.nopfd) .fold { flex-direction: row; flex-wrap: wrap-reverse; justify-content: flex-end; } }
+  @media (orientation: landscape) and (max-height: 345px) { body.touch #map:not(.big) { height: 38vh; } }          /* a very short screen: the map ended 3 px inside the lever */
+  @media (orientation: portrait) and (max-height: 660px) { body.touch.nopfd .fold { max-height: 96px; flex-wrap: wrap-reverse; } }          /* a short screen: the open fold is two by two, to stay under the messages */
+  @media (orientation: landscape) {
+    body.touch #ctx { right: calc(72px + var(--sr)); bottom: calc(16px + var(--sb)); } #ctxBar { flex-direction: row; align-items: flex-end; }
+    #ctxPan { right: 0; bottom: 51px; width: 268px; } .fold { flex-direction: row; flex-wrap: wrap-reverse; justify-content: flex-end; }
+    body.touch:not(.nopfd) #pfd { left: auto; right: calc(350px + var(--sr)); transform: none; }
+  }
 </style>
 </head>
 <body>
@@ -310,20 +332,29 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
     <div id="stZone"></div>
     <div id="stick"><div id="knob"></div><span id="stU"></span><span id="stD"></span><span id="stL">◀</span><span id="stR">▶</span></div>
     <div id="ctx">
-      <div id="ctxMore" hidden>
-        <button id="cLand" hidden data-k="KeyL" class="hot">Land</button>
-        <button id="cRoll" hidden data-k="KeyX">Roll</button>
-        <button id="cLoop" hidden data-k="KeyZ">Loop</button>
-        <button id="cAp" hidden data-k="KeyP">Autopilot</button>
-        <button id="cRate" data-k="Rate" dir="ltr">×1</button>
-      <button id="cFire" hidden data-k="Enter" data-hold="1" class="hot">Fire</button>
-      <button id="cWpn" hidden data-k="KeyU">Gun</button>
+      <div id="ctxPan">
+        <div class="fold" id="fArm" hidden>
+          <button id="cWpn" hidden data-k="KeyU">Gun</button>
+          <button id="cFire" hidden data-k="Enter" data-hold="1" class="hot">Fire</button>
+        </div>
+        <div class="fold" id="fLand" hidden>
+          <button id="cBrake" hidden data-k="KeyB" data-hold="1">Brake</button>
+          <button id="cFlap" hidden data-k="KeyF">Flaps</button>
+          <button id="cGear" hidden data-k="KeyG">Gear</button>
+          <button id="cLand" hidden data-k="KeyL" class="hot">Land</button>
+        </div>
+        <div class="fold" id="fMore" hidden>
+          <button id="cAp" hidden data-k="KeyP">Autopilot</button>
+          <button id="cLoop" hidden data-k="KeyZ">Loop</button>
+          <button id="cRoll" hidden data-k="KeyX">Roll</button>
+        </div>
       </div>
-      <button id="cMore" aria-expanded="false">⋯</button>
-      <button id="cGear" hidden data-k="KeyG">Gear</button>
-      <button id="cFlap" hidden data-k="KeyF">Flaps</button>
-      <button id="cBrake" hidden data-k="KeyB" data-hold="1">Brake</button>
-      <button id="cCam" data-k="KeyC">View</button>
+      <div id="ctxBar">
+        <button id="cArm" class="fb" hidden aria-expanded="false">🎯</button>
+        <button id="cLandF" class="fb" hidden aria-expanded="false">🛬</button>
+        <button id="cMore" class="fb" aria-expanded="false">⋯</button>
+        <div id="ctxPair"><button id="cRate" data-k="Rate" dir="ltr">×1</button><button id="cCam" data-k="KeyC">View</button></div>
+      </div>
     </div>
     <div id="thrT"><div id="thrTf"></div><span id="thrPct">0%</span><em id="thrLbl">Power</em></div>
   </div>
@@ -3591,9 +3622,9 @@ function drawSys() {
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
     { const ap = $('cAp'); ap.hidden = !air || !!S.land || S.ra < 60; ap.classList.toggle('on', S.ap.on); }
-    { const m = $('cMore'), any = !S.crashed, t = RATE.v > 1 ? '\u200E×' + RATE.v : '⋯'; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); if (m.textContent !== t) m.textContent = t; }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
-    $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
-    $('cBrake').hidden = !(S.onGround || !S.assist);
+    $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2; $('cBrake').hidden = !(S.onGround || !S.assist);
+    // each fold's button is there only while its fold has something in it; the landing one carries the colour of the Land button
+    { const h = id => $(id).hidden, lf = $('cLandF'), cl = $('cLand'); $('cMore').hidden = S.crashed || (h('cRoll') && h('cLoop') && h('cAp')); lf.hidden = S.crashed || (h('cLand') && h('cGear') && h('cFlap') && h('cBrake')); lf.classList.toggle('active', !!S.land); lf.classList.toggle('ready', !S.land && !h('cLand') && cl.classList.contains('ready')); $('cArm').hidden = S.crashed || h('cFire'); if (FOLD && $(FOLDS[FOLD][1]).hidden) foldOpen(null); foldSync(); }
     const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
   }
 }
@@ -3819,7 +3850,7 @@ function applyLang() {
   aria('menuB', 'Menu', 'תפריט'); aria('mClose', 'Close the menu', 'סגירת התפריט'); aria('map', 'Map: tap to enlarge or shrink', 'מפה: הקשה מגדילה ומקטינה'); aria('phIn', 'Closer', 'קרוב יותר'); aria('phOut', 'Farther', 'רחוק יותר'); aria('modeB', 'Difficulty level', 'רמת קושי');
   if (!$('fly').disabled) set('#fly', 'FLY NOW', 'לטוס!');
   set('#menu h2', 'Paused', 'הפסקה'); set('#resume', 'CONTINUE', 'המשך');
-  $('cMore').setAttribute('aria-label', L('More actions: land, roll, loop, speed of time', 'עוד פעולות: נחיתה, גלגול, לולאה, מהירות הזמן')); $('cRate').setAttribute('aria-label', L('Speed of time', 'מהירות הזמן'));
+  $('cMore').setAttribute('aria-label', L('More actions: roll, loop, autopilot', 'עוד פעולות: גלגול, לולאה, טייס אוטומטי')); $('cLandF').setAttribute('aria-label', L('Landing: land, gear, flaps, brake', 'נחיתה: נחיתה, גלגלים, מדפים, בלם')); $('cArm').setAttribute('aria-label', L('Weapons', 'נשק')); $('cRate').setAttribute('aria-label', L('Speed of time', 'מהירות הזמן'));
   set('#cAp', 'Autopilot', 'טייס אוטומטי'); set('#phSave', 'Save', 'שמירה'); set('#cLand', 'Land', 'נחיתה'); set('#cRoll', 'Roll', 'גלגול'); set('#cLoop', 'Loop', 'לולאה'); set('#cGear', 'Gear', 'גלגלים'); set('#cFlap', 'Flaps', 'מדפים'); set('#cBrake', 'Brake', 'בלם'); set('#cCam', 'View', 'מבט');
   set('#crash h2', 'CRASH', 'התרסקות'); set('#again', 'TRY AGAIN', 'שוב'); set('#airborne', 'Back in the air', 'חזרה לאוויר'); set('#photoBar span', 'Photo mode: drag to look around', 'מצב צילום: גוררים כדי להסתכל'); set('#phDone', 'Done', 'סיום');
   { const ks = document.querySelectorAll('#sys .k'), T = [['Throttle', 'הספק'], ['Flaps', 'מדפים'], ['Gear', 'גלגלים'], ['Autopilot', 'טייס אוטו׳'], ['Level', 'רמה']]; ks.forEach((k, i) => { if (T[i]) k.textContent = he ? T[i][1] : T[i][0]; }); }
@@ -4398,8 +4429,8 @@ function wpnFire(held) {
 function updateWeapons(dt, run) {
   const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && !S.crashed && !S.paused && !PH.on);
   // the buttons and marks exist only for an armed aircraft inside a range
-  if (WPN.on !== live || WPN.uiPl !== PL.key) { WPN.on = live; WPN.uiPl = PL.key; $('cFire').hidden = !live; $('cMore').classList.toggle('armed', live); $('cWpn').hidden = !(live && a && a.length > 1); if (!live) { $('aim').style.display = 'none'; $('aimLock').style.display = 'none'; keys.Enter = false; }
-    if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Tap a target, or any place, to aim at it. Fire is under "⋯"', 'נוגעים במטרה, או בכל מקום, כדי לכוון אליו. "אש" נמצא תחת "⋯"') : L('Click a target, or any place, to aim at it. Enter fires, U changes weapon', 'לוחצים על מטרה, או על כל מקום, כדי לכוון אליו. Enter יורה, U מחליף נשק')), 6); } }
+  if (WPN.on !== live || WPN.uiPl !== PL.key) { WPN.on = live; WPN.uiPl = PL.key; $('cFire').hidden = !live; $('cWpn').hidden = !(live && a && a.length > 1); if (!live) { $('aim').style.display = 'none'; $('aimLock').style.display = 'none'; keys.Enter = false; }
+    if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Tap a target, or any place, to aim at it. Fire is under "🎯"', 'נוגעים במטרה, או בכל מקום, כדי לכוון אליו. "אש" נמצא תחת "🎯"') : L('Click a target, or any place, to aim at it. Enter fires, U changes weapon', 'לוחצים על מטרה, או על כל מקום, כדי לכוון אליו. Enter יורה, U מחליף נשק')), 6); } }
   if (S.landed && S.onGround && a && S.V < 2 && !WPN.rearmed) { WPN.rearmed = true; wpnRearm(); } else if (!S.onGround) WPN.rearmed = false;
   // drones fly their circles everywhere (they are part of the range), targets come back after a while
   for (const d of WPN.drones) { const R = RANGES[d.range]; if (run) d.a += d.dir * 38 / d.r * dt;          /* slow enough to hit with the gun without leading far */ d.p.set(R.x + Math.cos(d.a) * d.r, d.alt, R.z + Math.sin(d.a) * d.r); d.m.position.copy(d.p); d.m.rotation.set(0, Math.atan2(Math.sin(d.a) * d.dir, -Math.cos(d.a) * d.dir), -d.dir * 0.25, 'YXZ'); d.m.scale.setScalar(2.2);
@@ -4509,8 +4540,16 @@ function startTrick(type) {
   if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' || PL.key === 'stealth' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
-let moreT = 0;
-function foldMore(close) { const m = $('cMore'), box = $('ctxMore'); clearTimeout(moreT); box.hidden = !!close; m.setAttribute('aria-expanded', String(!close)); if (!close) moreT = setTimeout(() => foldMore(true), 7000); }
+let moreT = 0, FOLD = null;
+/**
+ * The folds of the side buttons: weapons, landing, and the rest. One is open at a time, in one slot. `foldOpen(name)` opens one for 7 s (a use of a button
+ * inside starts the 7 s again); with none opened by the player the landing fold stands open by itself while its buttons are needed (`foldPin`).
+ */
+const FOLDS = { more: ['fMore', 'cMore'], land: ['fLand', 'cLandF'], arm: ['fArm', 'cArm'] };
+function foldPin() { return S.started && !S.crashed && !$('cLandF').hidden && (S.onGround ? !$('cBrake').hidden : S.mode === 2 && (S.ra < 450 || !!S.land)) ? 'land' : null; }
+function foldOpen(name) { clearTimeout(moreT); FOLD = name && !$(FOLDS[name][1]).hidden ? name : null; foldSync(); if (FOLD) moreT = setTimeout(() => foldOpen(null), 7000); }
+function foldSync() { const show = FOLD || foldPin(); if (foldSync.was === show) return; foldSync.was = show; for (const k in FOLDS) { $(FOLDS[k][0]).hidden = k !== show; $(FOLDS[k][1]).setAttribute('aria-expanded', String(k === show)); } }
+function foldMore(close) { foldOpen(close ? null : FOLD || 'more'); }
 /** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
     It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
 function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
@@ -4596,10 +4635,11 @@ function setupTouch() {
   th.addEventListener('pointerup', e => { if (e.pointerId !== thId) return; thId = null; if (!moved) { const r = th.getBoundingClientRect(), v = clamp(1 - (e.clientY - r.top - 8) / (r.height - 16), 0, 1); tick(v); S.thr = v; } });
   th.addEventListener('pointercancel', () => thId = null);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
-    if (b.dataset.hold) { b.addEventListener('pointerdown', () => { keys[k] = true; clearTimeout(moreT); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (keys[k] && b.parentNode.id === 'ctxMore') foldMore(false); keys[k] = false; }); }          /* the fire button, folded like the rest, keeps the row open while it is in use */
-    else tapButton(b, () => { action(k); if (b.id === 'cRate' || b.id === 'cWpn') foldMore(false); else if (b.parentNode.id === 'ctxMore') foldMore(true); }); });          /* the rate button stays open, to be tapped again */
+    if (!k) return; const stay = ['cWpn', 'cGear', 'cFlap'].includes(b.id), inFold = b.parentNode.classList.contains('fold');
+    if (b.dataset.hold) { b.addEventListener('pointerdown', () => { keys[k] = true; clearTimeout(moreT); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (keys[k] && FOLD) foldOpen(FOLD); keys[k] = false; }); }          /* a held button (fire, brake) keeps its fold open while it is in use */
+    else tapButton(b, () => { action(k); if (!inFold) return; if (stay) foldOpen(FOLD); else foldOpen(null); }); });          /* a choice folds its group away; gear, flaps and the weapon change are tapped again, so they stay */
   // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
-  tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
+  for (const n in FOLDS) tapButton($(FOLDS[n][1]), () => foldOpen(FOLD === n ? null : n));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
   $('map').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); $('map').classList.toggle('big'); } });
 }
