@@ -20,8 +20,8 @@
 //   Without a lock everything works as before (the gun along the nose, a bomb at once, a missile straight).
 // - Motion. Everything flies in map space like the aircraft itself (ground speed scaled by `hsAt`), so the aiming mark and the bomb agree.
 
-// - Everywhere (the owner's decision; an earlier child lock was removed at his request): the weapons work over the whole map by default. A settings row
-//   can keep them to the firing ranges (`SAVE.wpnRng`). The world is still
+// - Everywhere, always (the owner's decision; a child lock and then a settings row were removed at his request): the weapons work over the whole map.
+//   The firing ranges are only where the practice targets are. The world is still
 //   not a target: a bomb or a shell bursts where it lands, on the ground or on a roof, and nothing is damaged or destroyed; only the practice targets react.
 const WPN = { on: false, range: null, sel: 0, ammo: {}, cool: 0, bullets: [], shots: [], drones: [], targets: [], blasts: [], lock: null, hitT: -9, safeT: -9, gunT: 0 };
 const RANGES = [{ name: ['the Negev range', 'שטח האש בנגב'], lon: 34.78, lat: 30.40, r: 4200 }          /* open desert south of Mitzpe Ramon: no town within reach, a handful of masts at most */, { name: ['the sea range', 'שטח האש בים'], lon: 34.36, lat: 32.2, r: 5200, sea: true }];
@@ -103,8 +103,6 @@ function wpnSelect() { const a = armsOf(PL); if (!a || a.length < 2) return; WPN
 /** One press of the fire key (the gun also fires while it is held, from `updateWeapons`). */
 function wpnFire(held) {
   const a = armsOf(PL); if (!a || S.crashed || S.paused) return; const [kind, , per] = a[WPN.sel] || a[0], rg = wpnRange();
-  if (!rg.in && SAVE.wpnRng) { if (!held && TNOW - WPN.safeT > 4) { WPN.safeT = TNOW; const brg = (Math.atan2(rg.best.x - S.pos.x, -(rg.best.z - S.pos.z)) / DEG + 360) % 360;
-      toast(L('Weapons are locked outside a firing range. Nearest: ' + rg.best.name[0] + ', ', 'הנשק נעול מחוץ לשטח אש. הקרוב: ' + rg.best.name[1] + ', ') + kmTxt(realDist(rg.best.x - S.pos.x, rg.best.z - S.pos.z)) + ' ' + dirTxt(brg), 5); } return; }
   if (S.onGround) return; if (!WPN.ammo[kind]) { if (!held && TNOW - WPN.safeT > 3) { WPN.safeT = TNOW; toast(L('Out of ammunition: land, or start again, to rearm', 'נגמרה התחמושת: נוחתים או מתחילים מחדש כדי להתחמש'), 4); } return; }
   const hs = hsAt(S.ra); fwd.set(0, 0, -1).applyQuaternion(S.q);
   if (kind === 'gun') { if (WPN.gunT > 0) return; WPN.gunT = 0.06; WPN.ammo.gun--; const dir = tmpV2.copy(fwd);
@@ -117,7 +115,7 @@ function wpnFire(held) {
 }
 
 function updateWeapons(dt, run) {
-  const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && (rg.in || !SAVE.wpnRng) && !S.crashed && !S.paused && !PH.on);
+  const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && !S.crashed && !S.paused && !PH.on);
   // the buttons and marks exist only for an armed aircraft inside a range
   if (WPN.on !== live || WPN.uiPl !== PL.key) { WPN.on = live; WPN.uiPl = PL.key; $('cFire').hidden = !live; $('cMore').classList.toggle('armed', live); $('cWpn').hidden = !(live && a && a.length > 1); if (!live) { $('aim').style.display = 'none'; $('aimLock').style.display = 'none'; keys.Enter = false; }
     if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Tap a target, or any place, to aim at it. Fire is under "⋯"', 'נוגעים במטרה, או בכל מקום, כדי לכוון אליו. "אש" נמצא תחת "⋯"') : L('Click a target, or any place, to aim at it. Enter fires, U changes weapon', 'לוחצים על מטרה, או על כל מקום, כדי לכוון אליו. Enter יורה, U מחליף נשק')), 6); } }

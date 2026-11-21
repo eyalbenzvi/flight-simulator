@@ -200,12 +200,9 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
 
 - Who: the fighter (cannon 500 rounds, four homing missiles, four bombs), the stealth jet (two guided bombs, nothing else), the heavy bomber (48 bombs,
   six to a press). The other four aircraft are unarmed and see none of it.
-- Where: everywhere by default (see below); with "Firing ranges only" chosen, only inside the two firing ranges (`RANGES`: open Negev south of Mitzpe Ramon, and out at sea). Everywhere else the weapons are locked and the
-  fire key only says where the nearest range is. This is a design rule, not a limitation: nothing in the rest of the world (towns, buildings, vehicles,
-  ships, other aircraft, balloons) can be shot at or damaged. Do not widen it without the owner asking.
-- Everywhere by default (the owner's decision; the child lock and its code were removed at his request, do not bring them back): the settings row
-  "Weapons" has "Anywhere" (the default) and "Firing ranges only" (`SAVE.wpnRng`).
-  Even then the world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
+- Where: everywhere, always (the owner's decisions, in order: a child lock, then a settings row, both removed at his request; do not bring either
+  back). The two firing ranges (`RANGES`: open Negev south of Mitzpe Ramon, and out at sea) are only where the practice targets are.
+  The world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
 - At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
   A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
 - How it shows: nothing outside a range. Inside, for an armed aircraft the "⋯" button turns orange (`#cMore.armed`) and the folded row holds (the

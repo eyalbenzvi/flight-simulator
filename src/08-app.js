@@ -245,7 +245,6 @@ function settingsRows(el, where, rer) {
   if (touchUI) row(L('Steering', 'היגוי'), [L('Thumb stick', 'ג׳ויסטיק'), L('Tilt the phone', 'הטיית הטלפון')], SAVE.tilt | 0, i => { SAVE.tilt = i; if (i) tiltStart(); else tiltStop(); });
   if (where === 'pause') row(L('Speed of time', 'מהירות הזמן'), RATES.map(r => '×' + r), RATE.i, i => setRate(i));
   // weapons: on the firing ranges only (the default), or anywhere, which is behind a grown-up's question (the child lock)
-  row(L('Weapons', 'נשק'), [L('Anywhere', 'בכל מקום'), L('Firing ranges only', 'בשטחי אש בלבד')], SAVE.wpnRng ? 1 : 0, i => { SAVE.wpnRng = !!i; });
   row(L('Graphics', 'גרפיקה'), [L('Automatic', 'אוטומטי'), L('Fast', 'מהיר'), L('Best', 'מרבי')], SAVE.gfx | 0, i => { SAVE.gfx = i; applyGfx(i); });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
   row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
