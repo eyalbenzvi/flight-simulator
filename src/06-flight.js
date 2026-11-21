@@ -11,7 +11,7 @@ const eul = new THREE.Euler(0, 0, 0, 'YXZ'), dq = new THREE.Quaternion(), XA = n
 let TNOW = 0, camSnap = true;
 
 function crash(why) { if (S.crashed) return;
-  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); document.body.classList.add('crashed'); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
+  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); document.body.classList.add('crashed'); $('again').textContent = S.arc ? L('Back in the air', 'חזרה לאוויר') : L('TRY AGAIN', 'שוב'); $('airborne').textContent = S.arc ? L('From the start', 'מההתחלה') : L('Back in the air', 'חזרה לאוויר'); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
 let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); if (!msg) { t.style.display = 'none'; toastT = 0; return; } t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
@@ -25,7 +25,8 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
 function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
-  S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
+  if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
+  courseFor(def); S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
     const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
     const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;
@@ -40,7 +41,7 @@ function spawn(def) {
     alt += def.high || 0; S.pos.set(x, alt, z); S.vel.set(d.x * V * Math.cos(gamma), V * Math.sin(gamma), d.z * V * Math.cos(gamma));
     S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
-  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0;
+  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0; if (WORLD.ready) updatePlace();          /* the place name follows a new start at once */
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
   A.sync = true; toast(def.pick ? '📍 ' + L(def.name[0], def.name[1]) : def.type === 'approach' ? L('Approach: ', 'גישה: ') + tr(def.label.replace('Approach: ', '')) : tr(def.label));
 }
@@ -151,12 +152,14 @@ function updateControls(dt) {
     // ---- EASY MODE in the air: stick commands bank and climb angle; hands off = wings level, altitude held ----
     rt = rollFor(lr * Math.min(PL.bank, 42 + Math.max(S.ra - 25, 0) * 0.5) * clamp(1 - Math.max((S.gErr || 0) - 0.04, 0) * 5, 0.45, 1) * DEG);      // the bank eases off by itself when the turn starts losing height
     const overField = AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50);
-    let gT;
+    let gT, terrAhead = false;
+    if (Math.abs(climb) > 0.1 || Math.abs(lr) > 0.1) S.apprHold = false;
     if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false; }
+    else if (S.apprHold) { gT = -3 * DEG; S.holdAlt = null; }          /* a practice approach keeps coming down the glide path until the stick is touched; the flare over the field then lands it */
     else if (S.toClimb) { gT = 5 * DEG; if (S.ra > 450) S.toClimb = false; }
     else { if (S.holdAlt === null) S.holdAlt = S.pos.y + S.vel.y * 1.5; gT = gammaForAlt(S.holdAlt); }
     if (overField && S.gear) {                                                   // over an airfield with the gear down: automatic flare, idle at touchdown
-      if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.2, S.ra * 0.2) / Math.max(S.V, 40)); if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
+      if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.0, S.ra * 0.12) / Math.max(S.V, 40));          /* the flare begins higher and ends at about 200 ft/min */ if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
     } else {                                                                     // open country: stay 40 m above the ground and out-climb rising terrain ahead
       const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
       let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
@@ -166,13 +169,14 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
+        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; terrAhead = true; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
     }
     const vmin = S.vs0 * 1.2, idle = S.thr < 0.08;                               // stall protection: lower the nose, add power
     // the power lever closed means no power: the protection does not open the engines behind the pilot's back. The aircraft keeps its speed by gliding down
     if (idle && S.V < vmin + 6) { S.holdAlt = null; gT = Math.min(gT, -0.035 - Math.max(vmin + 3 - S.V, 0) * 0.014); S.boost = 0; S.prot = L('Power is off: gliding down. Raise the power to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים הספק כדי להמשיך לטוס'); }
-    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
+    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = terrAhead ? 1 : clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: push the power lever up', 'איטי מדי: מעלים את ידית ההספק'); }
+    if (terrAhead && S.V < vmin + 8) { S.boost = 1; if (S.gear && !PL.fixedGear && !overField) S.gear = false; }          /* slow with ground rising ahead (the heavy types): everything the engines have, and the wheels up */
     pt = pitchFor(gT, S.V < vmin && S.ra > 20);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
@@ -186,7 +190,9 @@ function updateControls(dt) {
     //      (so turns and speed changes do not drop the nose), small banks level themselves, and pull fades near the stall ----
     if (Math.abs(ud) > 0.05) { S.gamHold = null; pt = ud * 0.85; if (pt > 0) pt *= clamp((ASTALL - 0.015 - S.alpha) * 9, 0, 1);
       if (!PL.tricks) pt *= pt > 0 ? clamp((30 * DEG - S.pitch) / (8 * DEG), 0, 1) : clamp((S.pitch + 20 * DEG) / (8 * DEG), 0, 1); }       // the airliner and the business jet stay within 30° nose up and 20° nose down
-    else { if (S.gamHold === null) S.gamHold = S.gam; if (!S.stalled) pt = pitchFor(S.gamHold); }
+    else { if (S.gamHold === null) S.gamHold = S.gam;
+      if (S.gamHold < -4 * DEG && !S.gear) S.gamHold = Math.min(S.gamHold + 3 * DEG * dt, -4 * DEG);          /* a dive that is let go eases out to a gentle descent by itself (it used to be held all the way into the ground) */
+      if (!S.stalled) pt = pitchFor(S.gamHold); }
     const free = !!PL.tricks, steep = Math.abs(S.bank) > 1.2;
     if (steep && Math.abs(ud) <= 0.05) pt = 0;                              // path hold only makes sense the right way up
     if (Math.abs(lr) > 0.05) { rt = lr * (free ? 0.85 : 0.5); if (!free && Math.abs(S.bank) > 1.05 && lr * S.bank > 0) rt = 0; }   // airliners stop rolling at 60 degrees
@@ -262,13 +268,13 @@ function physics(dt) {
       // the reason given is the first that applies, most violent first; limits: autoland 9.5 m/s, Medium 7.5, Expert 5.5 (jets) or 6.5
       const sinkMax = S.land ? 9.5 : S.assist ? 7.5 : PL.tricks ? 6.5 : 5.5;
       if (vs < -sinkMax) return crash(L('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.', 'פגיעה בקרקע במהירות ירידה של ' + Math.round(-vs * 196.85) + ' רגל לדקה'));
-      if (V > 2 * S.vs0) return crash(g.field ? 'Touched down far too fast.' : 'Flew into terrain.');
-      if (!g.field && V > Math.max(45, 1.3 * S.vs0)) return crash('Flew into terrain.');
+      if (V > 2 * S.vs0) return crash(L('Touched down far too fast: ' + spdTxt(V) + '. Slow below ' + spdTxt(1.5 * S.vs0) + ' before the wheels touch.', 'נגיעה מהירה מדי: ' + spdTxt(V) + '. מאטים אל מתחת ל-' + spdTxt(1.5 * S.vs0) + ' לפני שהגלגלים נוגעים'));
+      if (!g.field && V > Math.max(45, 1.3 * S.vs0)) return crash(L('Too fast for open ground: ' + spdTxt(V) + '. Away from a runway the limit is ' + spdTxt(Math.max(45, 1.3 * S.vs0)) + '.', 'מהר מדי לשטח פתוח: ' + spdTxt(V) + '. מחוץ למסלול הגבול הוא ' + spdTxt(Math.max(45, 1.3 * S.vs0))));
       if (Math.abs(phi) > 0.26 || theta < -0.1) return crash('Wing or nose struck the ground.');
       if (S.gearPos < 0.9) return crash('Touched down with the landing gear up.');
       S.landed = true; S.shake = clamp(-vs * 0.12, 0.1, 0.8); toast(landingScore(vs), 5);
     }
-    if (!g.field && V > 55) return crash('Left the airfield at speed.');
+    if (!g.field && V > 55) return crash(L('Ran off the end of the runway at ' + spdTxt(V) + '. Pull back to lift off at ' + spdTxt(1.15 * S.vs0) + ', or brake early.', 'המטוס יצא מקצה המסלול במהירות ' + spdTxt(V) + '. מושכים כדי להמריא ב-' + spdTxt(1.15 * S.vs0) + ', או בולמים מוקדם'));
     S.pos.y = floor; if (S.vel.y < 0) S.vel.y = 0; S.onGround = true; S.airTime = 0;
     eul.setFromQuaternion(S.q, 'YXZ'); eul.z *= Math.exp(-8 * dt); eul.x = clamp(eul.x, 0, PL.rot * DEG + 0.07); S.q.setFromEuler(eul);
   } else { if (S.pos.y > floor + 0.15) { if (S.onGround && S.assist && S.thr > 0.5) S.toClimb = true; S.onGround = false; } if (!S.onGround) S.airTime += dt; }
@@ -304,7 +310,8 @@ function updateSystems(dt) {
     if (m >= 0) S.edgeDir = 0;
     if (m < 0 && S.assist && !S.onGround && !S.land) { const hT = Math.atan2((X0 + X1) / 2 - S.pos.x, -((Z0 + Z1) / 2 - S.pos.z)) / DEG, e = wrap180(hT - S.hdg);
       if (Math.abs(e) > 4) { const sg = Math.abs(e) > 120 && S.edgeDir ? S.edgeDir : Math.sign(e) || 1, a = sg * 9 * DEG * dt; S.edgeDir = sg;          /* heading straight out, either way round is as good: keep to one */ if (S.arc && !S.ap.on) A.psi += a; else { S.q.premultiply(dq.setFromAxisAngle(YA, -a)); S.vel.applyAxisAngle(YA, -a); if (S.ap.on) S.ap.hdg = (S.hdg + 360) % 360; } } } }
-  if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
+  if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; S.boomT = TNOW; buzz([40, 30, 90]); toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
+  if ((S.mach || 0) > 2 && !S.mach2) { S.mach2 = true; Snd.boom(); S.boomT = TNOW; buzz([40, 30, 90]); toast(L('Mach 2! Twice the speed of sound', 'מאך 2! פי שניים ממהירות הקול'), 4); } else if ((S.mach || 0) < 1.9) S.mach2 = false;
 }
 
 // ---------- 11. Cameras ----------
@@ -358,7 +365,7 @@ function updateCamera(dt) {
   M.g.visible = (S.cam !== 0 || CAMX.blend > 0.19) && !S.crashed; AC.deck.visible = S.cam === 0 && CAMX.blend < 0.19;
   fwd.set(0, 0, -1).applyQuaternion(S.q);
   if (S.cam === 1) {
-    const c = PL.chase; tmpV.copy(S.pos).addScaledVector(fwd, -c[0]); tmpV.y += c[1];
+    const c = PL.chase, near = document.body.classList.contains('touch') ? 0.76 : 1; tmpV.copy(S.pos).addScaledVector(fwd, -c[0] * near); tmpV.y += c[1] * near;          /* on a phone the chase camera sits closer, so the aircraft is not a speck */
     // a new start: the camera begins out to one side, wide and low, and swings in behind (the follow below does the move)
     if (camSnap) { camPos.copy(S.pos).addScaledVector(fwd, -c[0] * 1.5); camPos.x += -fwd.z * c[0] * 1.3; camPos.z += fwd.x * c[0] * 1.3; camPos.y += c[1] * 0.35; camSnap = false; CAMX.bank = 0; }
     else camPos.lerp(tmpV, 1 - Math.exp(-(3.2 + S.V * 0.022) * dt));
@@ -390,7 +397,7 @@ function updateCamera(dt) {
     camera.quaternion.copy(S.q).multiply(tmpQ); if (looking) camera.quaternion.multiply(dq.setFromEuler(eul.set(LOOK.pitch, -LOOK.yaw, 0, 'YXZ'))); camera.position.copy(eye).applyQuaternion(S.q).add(S.pos);
   }
   // game feel: the view widens with speed and shakes on afterburner, stall buffet and touchdown
-  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) : 0);       /* the fly-by camera uses a long lens */
+  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) + 7 * clamp(S.V / PL.vmo, 0, 1) * clamp(1 - S.ra / 100, 0, 1) : 0) + (TNOW - (S.boomT === undefined ? -9 : S.boomT) < 1.2 ? 14 * (1 - (TNOW - S.boomT) / 1.2) : 0);          /* wider when fast and low, and a kick as the sound barrier breaks */       /* the fly-by camera uses a long lens */
   camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : S.cam >= 6 ? 0.3 : 1; camera.updateProjectionMatrix();
   if (CAMX.blend > 0) { CAMX.blend = Math.max(0, CAMX.blend - Math.max(dt, 0.001)); const k = 1 - CAMX.blend / 0.38, e = k * k * (3 - 2 * k); tmpV.copy(camera.position); camera.position.lerpVectors(CAMX.fromP, tmpV, e); tmpQ.copy(camera.quaternion); camera.quaternion.copy(CAMX.fromQ).slerp(tmpQ, e); }
   { // keep the aircraft clear of what covers the lower part of the screen: the instrument panel on desktop, the stick and buttons on a phone held upright

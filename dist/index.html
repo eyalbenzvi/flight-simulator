@@ -248,6 +248,21 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   #stick { pointer-events: none; opacity: .5; transition: opacity .2s var(--ease); } #stick.on { opacity: 1; } #stick.on span { opacity: 0; }
   body.paused #stZone, body.crashed #stZone { pointer-events: none; }
   #thrT { touch-action: none; } #thrT::before { content: ""; position: absolute; inset: -18px -14px -22px -26px; }
+  /* ---- from the four reviews ---- */
+  /* messages sit in the one slot under the readouts, not over the aircraft in the middle of the view */
+  #toast, body.touch #toast { top: calc(58px + var(--st)); max-width: min(86vw, 560px); z-index: 3; }
+  @media (orientation: portrait) { body.touch #toast { top: calc(96px + var(--st)); } }
+  /* the percentage of the power lever is written inside it (under it, the edge of the screen cut it) */
+  #thrT span { bottom: 6px !important; top: auto; font-size: 11.5px; pointer-events: none; }
+  /* Hebrew section arrows: closed points to the side the text runs to, open points down, like the English ones */
+  html:lang(he) details.sec:not([open]) summary::before { transform: rotate(45deg); } html:lang(he) details.sec[open] summary::before { transform: rotate(-45deg) translate(2px, -2px); }
+  /* the opened "more" row stands above its button, clear of the stick's side of the screen */
+  @media (orientation: landscape) { body.touch #ctx { align-items: flex-end; } body.touch #ctxMore { position: absolute; right: 0; bottom: calc(100% + 7px); flex-direction: column; align-items: flex-end; } }
+  #cMore.pulse { animation: morePulse 1s ease-in-out 8; } @keyframes morePulse { 50% { box-shadow: 0 0 0 6px rgba(255, 215, 106, .55); border-color: var(--sand); } }
+  /* the aircraft are one row to swipe through, so the levels and the starts are on the first screen too */
+  .grid.planes { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 8px; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  .grid.planes button.pl { flex: 0 0 min(46%, 190px); scroll-snap-align: center; } .grid button.pl small { display: block; font-size: 12px; } .grid button.pl:not(.on) small { opacity: .7; }
+  #strip span { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -2319,6 +2334,7 @@ function applyTODv(t, key, bakeAs) {
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
   if (bldMat) bldMat.emissive.setRGB(0.035 * t.lights, 0.03 * t.lights, 0.02 * t.lights);
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
+  for (const m of AC.envMats) if (m.emissive && !m.emissiveMap) m.emissive.setRGB(0.045 * t.lights, 0.06 * t.lights, 0.095 * t.lights);          // at night the aircraft keeps a faint moonlit sheen, so it is not a black cut-out against the city
   for (const m of AC.livery) m.emissiveIntensity = t.lights > 0.3 ? 0.95 : 0;                       // cabin windows light up
   for (const g of AC.glow) g.scale.setScalar(g.userData.r * (1 + 1.5 * t.lights));                  // the aircraft's lights bloom at night
   if (key !== null) bakeSkyReflection();
@@ -2676,11 +2692,13 @@ function buildAircraft() {
   const trim = lam(0x4a5058), dk = lam(0x23272c);           // lighter than black, so the panel reads as a panel; and set low, so the world fills most of the view
   const cab2 = () => lam(0x2b3036);
   const dadd = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || AC.deck).add(m); return m; };
-  dadd(new THREE.BoxGeometry(3.4, 0.08, 0.9), dk, 0, 0.62, -16.3).rotation.x = 0.08;                   // glare shield
-  dadd(new THREE.PlaneGeometry(3.3, 0.72), trim, 0, 0.25, -16.45).rotation.x = -0.2;                  // main panel
+  // the panel stands where the eye finds it: its top edge 13 degrees below the horizon, the two flight displays and the map lit in it (they are the game's own
+  // instruments, live), so the lower quarter of the cockpit view is a working panel and not a dark slab
+  dadd(new THREE.BoxGeometry(3.4, 0.06, 0.7), dk, 0, 0.9, -16.25).rotation.x = 0.08;                   // glare shield
+  dadd(new THREE.PlaneGeometry(3.3, 0.66), trim, 0, 0.57, -16.47).rotation.x = -0.28;                 // main panel
   AC.pfdTex = new THREE.CanvasTexture(document.getElementById('pfd')); AC.mapTex = new THREE.CanvasTexture(document.getElementById('map'));
-  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.25, -16.43).rotation.x = -0.2; };
-  scr(0.7, 0.48, -0.62, AC.pfdTex); scr(0.29, 0.53, 0.02, AC.mapTex); scr(0.7, 0.48, 0.66, AC.pfdTex);
+  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.58, -16.44).rotation.x = -0.28; };
+  scr(0.78, 0.53, -0.72, AC.pfdTex); scr(0.29, 0.53, 0.0, AC.mapTex); scr(0.78, 0.53, 0.72, AC.pfdTex);
   dadd(new THREE.BoxGeometry(1.0, 0.5, 1.2), trim, 0, -0.17, -15.9);                                   // pedestal
   for (const s of [-1, 1]) { dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, s * 1.38, 1.42, -16.6, AC.frame).rotation.z = -s * 0.1; dadd(new THREE.BoxGeometry(0.08, 0.5, 3), trim, s * 1.72, 0.3, -15.4, AC.frame); dadd(new THREE.BoxGeometry(0.07, 2.2, 0.09), trim, s * 1.72, 1.4, -15.3, AC.frame); }       // slim posts, a low sill and open side windows
   dadd(new THREE.BoxGeometry(3.6, 0.16, 1.0), trim, 0, 2.2, -16.2, AC.frame);
@@ -2694,11 +2712,11 @@ function buildAircraft() {
       dadd(new THREE.BoxGeometry(0.52, 1.25, 0.14), seat, sd * 0.62, 0.42, -14.25, AC.frame).rotation.x = -0.12; dadd(new THREE.BoxGeometry(0.52, 0.12, 0.5), seat, sd * 0.62, -0.08, -14.5, AC.frame);   // seats
       dadd(new THREE.BoxGeometry(0.3, 0.2, 0.2), seat, sd * 0.62, 1.12, -14.2, AC.frame); }
     dadd(new THREE.BoxGeometry(1.5, 0.1, 1.3), trim, 0, 2.12, -15.5, AC.frame).rotation.x = 0.1; dadd(new THREE.BoxGeometry(3.6, 0.08, 4.2), cab, 0, 2.3, -14.6, AC.frame);     // overhead panel, ceiling
-    dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, 0, 1.42, -16.62, AC.frame); }                                                                                        // centre post of the windshield
+  }          /* (no centre post: it ran through the middle of the view) */                                                                                        // centre post of the windshield
   // bubble canopies (fighter, aerobatic plane): the canopy bow, the side rails and the nose ahead
   AC.bub = new THREE.Group(); AC.deck.add(AC.bub);
-  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.035, 6, 20, Math.PI), trim); bow.position.set(0, 0.62, -16.25); AC.bub.add(bow);
-    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.06, 0.06, 2.6), trim, sd * 0.78, 0.62, -15.1, AC.bub);
+  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.018, 6, 24, Math.PI), trim); bow.position.set(0, 0.86, -16.25); AC.bub.add(bow);
+    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.05, 0.05, 2.6), trim, sd * 0.82, 0.86, -15.1, AC.bub);
     AC.bubNose = dadd(new THREE.CylinderGeometry(0.1, 0.62, 4.2, 14).rotateX(-Math.PI / 2), lam(0x7d8894), 0, 0.2, -18.9, AC.bub); dadd(new THREE.BoxGeometry(1.5, 0.5, 1.6), cab2(), 0, -0.05, -15.2, AC.bub); }
   AC.deck.add(AC.frame); AC.root.add(AC.deck); AC.deck.visible = false; scene.add(AC.root);
 }
@@ -2724,7 +2742,7 @@ const eul = new THREE.Euler(0, 0, 0, 'YXZ'), dq = new THREE.Quaternion(), XA = n
 let TNOW = 0, camSnap = true;
 
 function crash(why) { if (S.crashed) return;
-  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); document.body.classList.add('crashed'); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
+  if (navigator.vibrate) navigator.vibrate([150, 60, 250]); document.body.classList.add('crashed'); $('again').textContent = S.arc ? L('Back in the air', 'חזרה לאוויר') : L('TRY AGAIN', 'שוב'); $('airborne').textContent = S.arc ? L('From the start', 'מההתחלה') : L('Back in the air', 'חזרה לאוויר'); S.crashed = true; S.ap.on = false; S.trick = null; S.land = null; Snd.boom(); S.shake = 1.4; S.crashT = 1.7; if (S.cam === 0) { S.camSave = true; S.cam = 1; camSnap = true; } startExplosion(); $('crashWhy').textContent = tr(why); }
 let toastT = 0; function toast(msg, dur) { const t = document.getElementById('toast'); if (!msg) { t.style.display = 'none'; toastT = 0; return; } t.textContent = msg; t.style.display = 'block'; toastT = dur || 3; }
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
@@ -2738,7 +2756,8 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
 function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
-  S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
+  if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
+  courseFor(def); S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
     const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
     const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;
@@ -2753,7 +2772,7 @@ function spawn(def) {
     alt += def.high || 0; S.pos.set(x, alt, z); S.vel.set(d.x * V * Math.cos(gamma), V * Math.sin(gamma), d.z * V * Math.cos(gamma));
     S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
-  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0;
+  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0; if (WORLD.ready) updatePlace();          /* the place name follows a new start at once */
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
   A.sync = true; toast(def.pick ? '📍 ' + L(def.name[0], def.name[1]) : def.type === 'approach' ? L('Approach: ', 'גישה: ') + tr(def.label.replace('Approach: ', '')) : tr(def.label));
 }
@@ -2864,12 +2883,14 @@ function updateControls(dt) {
     // ---- EASY MODE in the air: stick commands bank and climb angle; hands off = wings level, altitude held ----
     rt = rollFor(lr * Math.min(PL.bank, 42 + Math.max(S.ra - 25, 0) * 0.5) * clamp(1 - Math.max((S.gErr || 0) - 0.04, 0) * 5, 0.45, 1) * DEG);      // the bank eases off by itself when the turn starts losing height
     const overField = AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50);
-    let gT;
+    let gT, terrAhead = false;
+    if (Math.abs(climb) > 0.1 || Math.abs(lr) > 0.1) S.apprHold = false;
     if (Math.abs(climb) > 0.1) { gT = (climb > 0 ? PL.up : PL.dn) * climb * DEG; S.holdAlt = null; S.toClimb = false; }
+    else if (S.apprHold) { gT = -3 * DEG; S.holdAlt = null; }          /* a practice approach keeps coming down the glide path until the stick is touched; the flare over the field then lands it */
     else if (S.toClimb) { gT = 5 * DEG; if (S.ra > 450) S.toClimb = false; }
     else { if (S.holdAlt === null) S.holdAlt = S.pos.y + S.vel.y * 1.5; gT = gammaForAlt(S.holdAlt); }
     if (overField && S.gear) {                                                   // over an airfield with the gear down: automatic flare, idle at touchdown
-      if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.2, S.ra * 0.2) / Math.max(S.V, 40)); if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
+      if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.0, S.ra * 0.12) / Math.max(S.V, 40));          /* the flare begins higher and ends at about 200 ft/min */ if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
     } else {                                                                     // open country: stay 40 m above the ground and out-climb rising terrain ahead
       const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
       let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
@@ -2879,13 +2900,14 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
+        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; terrAhead = true; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
     }
     const vmin = S.vs0 * 1.2, idle = S.thr < 0.08;                               // stall protection: lower the nose, add power
     // the power lever closed means no power: the protection does not open the engines behind the pilot's back. The aircraft keeps its speed by gliding down
     if (idle && S.V < vmin + 6) { S.holdAlt = null; gT = Math.min(gT, -0.035 - Math.max(vmin + 3 - S.V, 0) * 0.014); S.boost = 0; S.prot = L('Power is off: gliding down. Raise the power to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים הספק כדי להמשיך לטוס'); }
-    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
+    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = terrAhead ? 1 : clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: push the power lever up', 'איטי מדי: מעלים את ידית ההספק'); }
+    if (terrAhead && S.V < vmin + 8) { S.boost = 1; if (S.gear && !PL.fixedGear && !overField) S.gear = false; }          /* slow with ground rising ahead (the heavy types): everything the engines have, and the wheels up */
     pt = pitchFor(gT, S.V < vmin && S.ra > 20);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
@@ -2899,7 +2921,9 @@ function updateControls(dt) {
     //      (so turns and speed changes do not drop the nose), small banks level themselves, and pull fades near the stall ----
     if (Math.abs(ud) > 0.05) { S.gamHold = null; pt = ud * 0.85; if (pt > 0) pt *= clamp((ASTALL - 0.015 - S.alpha) * 9, 0, 1);
       if (!PL.tricks) pt *= pt > 0 ? clamp((30 * DEG - S.pitch) / (8 * DEG), 0, 1) : clamp((S.pitch + 20 * DEG) / (8 * DEG), 0, 1); }       // the airliner and the business jet stay within 30° nose up and 20° nose down
-    else { if (S.gamHold === null) S.gamHold = S.gam; if (!S.stalled) pt = pitchFor(S.gamHold); }
+    else { if (S.gamHold === null) S.gamHold = S.gam;
+      if (S.gamHold < -4 * DEG && !S.gear) S.gamHold = Math.min(S.gamHold + 3 * DEG * dt, -4 * DEG);          /* a dive that is let go eases out to a gentle descent by itself (it used to be held all the way into the ground) */
+      if (!S.stalled) pt = pitchFor(S.gamHold); }
     const free = !!PL.tricks, steep = Math.abs(S.bank) > 1.2;
     if (steep && Math.abs(ud) <= 0.05) pt = 0;                              // path hold only makes sense the right way up
     if (Math.abs(lr) > 0.05) { rt = lr * (free ? 0.85 : 0.5); if (!free && Math.abs(S.bank) > 1.05 && lr * S.bank > 0) rt = 0; }   // airliners stop rolling at 60 degrees
@@ -2975,13 +2999,13 @@ function physics(dt) {
       // the reason given is the first that applies, most violent first; limits: autoland 9.5 m/s, Medium 7.5, Expert 5.5 (jets) or 6.5
       const sinkMax = S.land ? 9.5 : S.assist ? 7.5 : PL.tricks ? 6.5 : 5.5;
       if (vs < -sinkMax) return crash(L('Hit the ground at ' + Math.round(-vs * 196.85) + ' ft/min.', 'פגיעה בקרקע במהירות ירידה של ' + Math.round(-vs * 196.85) + ' רגל לדקה'));
-      if (V > 2 * S.vs0) return crash(g.field ? 'Touched down far too fast.' : 'Flew into terrain.');
-      if (!g.field && V > Math.max(45, 1.3 * S.vs0)) return crash('Flew into terrain.');
+      if (V > 2 * S.vs0) return crash(L('Touched down far too fast: ' + spdTxt(V) + '. Slow below ' + spdTxt(1.5 * S.vs0) + ' before the wheels touch.', 'נגיעה מהירה מדי: ' + spdTxt(V) + '. מאטים אל מתחת ל-' + spdTxt(1.5 * S.vs0) + ' לפני שהגלגלים נוגעים'));
+      if (!g.field && V > Math.max(45, 1.3 * S.vs0)) return crash(L('Too fast for open ground: ' + spdTxt(V) + '. Away from a runway the limit is ' + spdTxt(Math.max(45, 1.3 * S.vs0)) + '.', 'מהר מדי לשטח פתוח: ' + spdTxt(V) + '. מחוץ למסלול הגבול הוא ' + spdTxt(Math.max(45, 1.3 * S.vs0))));
       if (Math.abs(phi) > 0.26 || theta < -0.1) return crash('Wing or nose struck the ground.');
       if (S.gearPos < 0.9) return crash('Touched down with the landing gear up.');
       S.landed = true; S.shake = clamp(-vs * 0.12, 0.1, 0.8); toast(landingScore(vs), 5);
     }
-    if (!g.field && V > 55) return crash('Left the airfield at speed.');
+    if (!g.field && V > 55) return crash(L('Ran off the end of the runway at ' + spdTxt(V) + '. Pull back to lift off at ' + spdTxt(1.15 * S.vs0) + ', or brake early.', 'המטוס יצא מקצה המסלול במהירות ' + spdTxt(V) + '. מושכים כדי להמריא ב-' + spdTxt(1.15 * S.vs0) + ', או בולמים מוקדם'));
     S.pos.y = floor; if (S.vel.y < 0) S.vel.y = 0; S.onGround = true; S.airTime = 0;
     eul.setFromQuaternion(S.q, 'YXZ'); eul.z *= Math.exp(-8 * dt); eul.x = clamp(eul.x, 0, PL.rot * DEG + 0.07); S.q.setFromEuler(eul);
   } else { if (S.pos.y > floor + 0.15) { if (S.onGround && S.assist && S.thr > 0.5) S.toClimb = true; S.onGround = false; } if (!S.onGround) S.airTime += dt; }
@@ -3017,7 +3041,8 @@ function updateSystems(dt) {
     if (m >= 0) S.edgeDir = 0;
     if (m < 0 && S.assist && !S.onGround && !S.land) { const hT = Math.atan2((X0 + X1) / 2 - S.pos.x, -((Z0 + Z1) / 2 - S.pos.z)) / DEG, e = wrap180(hT - S.hdg);
       if (Math.abs(e) > 4) { const sg = Math.abs(e) > 120 && S.edgeDir ? S.edgeDir : Math.sign(e) || 1, a = sg * 9 * DEG * dt; S.edgeDir = sg;          /* heading straight out, either way round is as good: keep to one */ if (S.arc && !S.ap.on) A.psi += a; else { S.q.premultiply(dq.setFromAxisAngle(YA, -a)); S.vel.applyAxisAngle(YA, -a); if (S.ap.on) S.ap.hdg = (S.hdg + 360) % 360; } } } }
-  if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
+  if ((S.mach || 0) > 1 && !S.mach1) { S.mach1 = true; Snd.boom(); S.shake = 0.5; S.boomT = TNOW; buzz([40, 30, 90]); toast(L('Mach 1! Sonic boom', 'מאך 1! בום על-קולי')); } else if ((S.mach || 0) < 0.93) S.mach1 = false;
+  if ((S.mach || 0) > 2 && !S.mach2) { S.mach2 = true; Snd.boom(); S.boomT = TNOW; buzz([40, 30, 90]); toast(L('Mach 2! Twice the speed of sound', 'מאך 2! פי שניים ממהירות הקול'), 4); } else if ((S.mach || 0) < 1.9) S.mach2 = false;
 }
 
 // ---------- 11. Cameras ----------
@@ -3071,7 +3096,7 @@ function updateCamera(dt) {
   M.g.visible = (S.cam !== 0 || CAMX.blend > 0.19) && !S.crashed; AC.deck.visible = S.cam === 0 && CAMX.blend < 0.19;
   fwd.set(0, 0, -1).applyQuaternion(S.q);
   if (S.cam === 1) {
-    const c = PL.chase; tmpV.copy(S.pos).addScaledVector(fwd, -c[0]); tmpV.y += c[1];
+    const c = PL.chase, near = document.body.classList.contains('touch') ? 0.76 : 1; tmpV.copy(S.pos).addScaledVector(fwd, -c[0] * near); tmpV.y += c[1] * near;          /* on a phone the chase camera sits closer, so the aircraft is not a speck */
     // a new start: the camera begins out to one side, wide and low, and swings in behind (the follow below does the move)
     if (camSnap) { camPos.copy(S.pos).addScaledVector(fwd, -c[0] * 1.5); camPos.x += -fwd.z * c[0] * 1.3; camPos.z += fwd.x * c[0] * 1.3; camPos.y += c[1] * 0.35; camSnap = false; CAMX.bank = 0; }
     else camPos.lerp(tmpV, 1 - Math.exp(-(3.2 + S.V * 0.022) * dt));
@@ -3103,7 +3128,7 @@ function updateCamera(dt) {
     camera.quaternion.copy(S.q).multiply(tmpQ); if (looking) camera.quaternion.multiply(dq.setFromEuler(eul.set(LOOK.pitch, -LOOK.yaw, 0, 'YXZ'))); camera.position.copy(eye).applyQuaternion(S.q).add(S.pos);
   }
   // game feel: the view widens with speed and shakes on afterburner, stall buffet and touchdown
-  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) : 0);       /* the fly-by camera uses a long lens */
+  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) + 7 * clamp(S.V / PL.vmo, 0, 1) * clamp(1 - S.ra / 100, 0, 1) : 0) + (TNOW - (S.boomT === undefined ? -9 : S.boomT) < 1.2 ? 14 * (1 - (TNOW - S.boomT) / 1.2) : 0);          /* wider when fast and low, and a kick as the sound barrier breaks */       /* the fly-by camera uses a long lens */
   camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : S.cam >= 6 ? 0.3 : 1; camera.updateProjectionMatrix();
   if (CAMX.blend > 0) { CAMX.blend = Math.max(0, CAMX.blend - Math.max(dt, 0.001)); const k = 1 - CAMX.blend / 0.38, e = k * k * (3 - 2 * k); tmpV.copy(camera.position); camera.position.lerpVectors(CAMX.fromP, tmpV, e); tmpQ.copy(camera.quaternion); camera.quaternion.copy(CAMX.fromQ).slerp(tmpQ, e); }
   { // keep the aircraft clear of what covers the lower part of the screen: the instrument panel on desktop, the stick and buttons on a phone held upright
@@ -3401,6 +3426,9 @@ function hintText() {
   if (S.trick) return S.trick.type === 'loop' ? L('Looping…', 'לולאה…') : L('Rolling…', 'גלגול…');
   if (S.land) return S.onGround || TNOW - (S.landT0 || 0) > 9 ? '' : L('Hands off: the aircraft lands itself. ' + (T ? 'Tap Cancel landing' : 'Press L') + ' to take over', 'לא נוגעים: המטוס נוחת לבד. כדי להשתלט: ' + (T ? '"ביטול נחיתה"' : 'L'));
   if (S.ap.on) return TNOW - (S.apT0 || 0) > 9 ? '' : L('Autopilot on. The stick moves its altitude and heading targets', 'טייס אוטומטי פועל. הג׳ויסטיק משנה את הגובה והכיוון שהוא שומר');
+  if (T && !S.onGround && S.airTime > 25 && (hintText.m0 === undefined || TNOW - hintText.m0 < 8)) {          // once a visit, after the steering hint: what hides behind the "more" button
+    if (hintText.m0 === undefined) { hintText.m0 = TNOW; const m = $('cMore'); m.classList.add('pulse'); setTimeout(() => m.classList.remove('pulse'), 8000); }
+    return L('The "⋯" button has more: landing, roll, loop, speed of time', 'בכפתור "⋯" יש עוד: נחיתה, גלגול, לולאה, מהירות הזמן'); }
   if (S.arc) {
     if (S.onGround) return A.v > 3 ? '' : T ? L('Push the speed lever up. It takes off by itself', 'מרימים את ידית המהירות. המטוס ממריא לבד') : L('Hold Shift to go. It takes off by itself', 'מחזיקים Shift. המטוס ממריא לבד');
     if (S.airTime < 25) return T ? L('Move the stick where you want to fly. Let go to fly straight', 'מזיזים את הג׳ויסטיק לאן שרוצים לטוס. משחררים, וטסים ישר') : L('The arrows steer. Let go to fly straight. X rolls, Z loops', 'החצים מכוונים. משחררים, וטסים ישר. X גלגול, Z לולאה');
@@ -3408,7 +3436,7 @@ function hintText() {
     return '';
   }
   if (S.onGround) {
-    if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : L('Full power. Raise the nose at ', 'הספק מלא. מרימים את האף ב-') + spdTxt(S.vs0 * 1.15);
+    if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : S.V > S.vs0 * 1.15 + 5 ? L('Pull back now to lift off', 'מושכים עכשיו כדי להמריא') : L('Full power. Raise the nose at ', 'הספק מלא. מרימים את האף ב-') + spdTxt(S.vs0 * 1.15);
     if (S.landed) return S.assist ? '' : (T ? L('Hold Brake to stop', 'מחזיקים "בלם" כדי לעצור') : L('Hold B or Space to brake', 'מחזיקים B או רווח כדי לבלום'));
     return T ? L('Slide the power lever up to take off', 'מעלים את ידית ההספק כדי להמריא') : L('Hold Shift, or press 9, for take-off power', 'מחזיקים Shift, או לוחצים 9, להספק המראה');
   }
@@ -3418,6 +3446,7 @@ function hintText() {
     // otherwise say what the aircraft is doing
     return '';                 // otherwise nothing: the instruments already show height and climb
   }
+  if (S.stalled || S.stallWarn) return L('Stall: nose down and full power', 'הזדקרות: אף למטה והספק מלא');
   if (S.gear && !PL.fixedGear && S.ra > 250 && S.V > S.vs0 * 1.5) return T ? L('The gear is still down: tap Gear', 'הגלגלים עדיין למטה: לוחצים "גלגלים"') : L('The gear is still down: press G', 'הגלגלים עדיין למטה: לוחצים G');
   if (S.gear && FLAPS.length > 1 && S.flapIdx === 0 && S.ra < 400 && S.vel.y < -1) return T ? L('Landing? Tap Flaps for landing flaps', 'נוחתים? לוחצים "מדפים"') : L('Landing? Press F for landing flaps, and fly ', 'נוחתים? לוחצים F למדפים, וטסים ב-') + spdTxt(S.vs0 * 1.3);
   if (S.gear && S.ra < 300 && S.vel.y < -1 && !S.onGround) return S.ra < 12 ? L('Flare: raise the nose gently, power to idle', 'הצפה: מרימים בעדינות את האף, הספק לסרק') : L('Approach speed ', 'מהירות גישה ') + spdTxt(S.vs0 * 1.3);
@@ -3451,7 +3480,7 @@ function drawSys() {
   }
   if (document.body.classList.contains('nopfd')) { const AGL = '<svg viewBox="0 0 14 14" role="img" aria-label="' + L('above ground', 'מעל הקרקע') + '"><path d="M7 1v8M3.5 6L7 9.5 10.5 6M1.5 12.5h11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const h = '<i><b>' + spdNum(S.V) + '</b><span>' + uSpd()[1] + '</span></i><i><b>' + altNum(S.pos.y).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span></i>' +
-      '<i class="s" style="color:var(--sand)" title="' + L('above ground', 'מעל הקרקע') + '">' + AGL + '<b class="agl">' + altNum(Math.max(S.ra, 0)).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span></i><i class="s"><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b></i>';
+      '<i class="s" style="color:var(--sand)" title="' + L('above ground', 'מעל הקרקע') + '">' + AGL + '<b class="agl">' + altNum(Math.max(S.ra, 0)).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span></i><i class="s"><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b></i>' + ((S.mach || 0) > 0.6 ? '<i class="s"><span>M</span><b>' + S.mach.toFixed(2) + '</b></i>' : '');
     const st = $('strip'); if (st._h !== h) { st._h = h; st.innerHTML = h; } }
   document.body.classList.toggle('toasting', $('toast').style.display === 'block');
   $('hint').textContent = hintText(); $('place').textContent = S.place ? L('Over ' + S.place, 'מעל ' + S.placeHe) : '';
@@ -3464,7 +3493,7 @@ function drawSys() {
   else al.style.display = 'none';
   if (touchUI) {   // only the buttons that matter right now
     $('cRoll').hidden = $('cLoop').hidden = !((PL.tricks || S.arc) && air && !S.land && S.ra > (S.arc ? 40 : 150));
-    { const m = $('cMore'), any = !S.crashed, t = RATE.v > 1 ? '×' + RATE.v : '⋯'; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); if (m.textContent !== t) m.textContent = t; }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
+    { const m = $('cMore'), any = !S.crashed, t = RATE.v > 1 ? '\u200E×' + RATE.v : '⋯'; if (m.hidden === any) { m.hidden = !any; if (!any) foldMore(true); } m.classList.toggle('active', !!S.land); if (m.textContent !== t) m.textContent = t; }          // the "more" button is there when it has something to offer, and turns magenta during an automatic landing
     $('cGear').hidden = S.assist || !!PL.fixedGear; $('cFlap').hidden = S.assist || FLAPS.length < 2;
     $('cBrake').hidden = !(S.onGround || !S.assist);
     const uT = S.arc ? L('Up', 'למעלה') : S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה'), dT = S.arc ? L('Down', 'למטה') : S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה'); $('stU').textContent = '▲'; $('stD').textContent = '▼'; $('stick').setAttribute('aria-label', '▲ ' + (SAVE.inv ? dT : uT) + ' · ▼ ' + (SAVE.inv ? uT : dT));          /* chevrons on the stick; the words are for screen readers */ $('thrLbl').textContent = S.arc ? L('Speed', 'מהירות') : L('Power', 'הספק');
@@ -3472,10 +3501,10 @@ function drawSys() {
 }
 
 // ---------- 12b. Settings, smoke trails, air traffic, weather, photo mode ----------
-const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
+const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he', uSpd: 1, uAlt: 1 };          /* a first visit reads km/h and metres (a child's units); knots and feet are a choice in the settings, and the flight instruments keep them */ try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
   if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
-  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= (k === 'tod' ? 3 : 2)) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.gfx)) d.gfx = o.gfx; if (o.tilt === 1) d.tilt = 1; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
+  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= (k === 'tod' ? 3 : 2)) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.gfx)) d.gfx = o.gfx; if (o.best && typeof o.best === 'object') { d.best = {}; for (const k of [0, 1, 2]) if (o.best[k] > 5 && o.best[k] < 3600) d.best[k] = +o.best[k]; } if (o.tilt === 1) d.tilt = 1; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
 function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
   const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
@@ -3522,13 +3551,16 @@ function updatePlace() {
   S.place = best && bd < 900 ? best[1] : ''; S.placeHe = best ? best[0] : '';
 }
 /** Grade a manual touchdown on a runway: sink rate, centreline, and distance from the aiming point. */
+/** The sound and the buzz of something done well: one to three rising notes. */
+function fanfare(n) { [660, 830, 990].slice(0, n).forEach((f, i) => setTimeout(() => Snd.chime(f, 0.22), i * 150)); buzz(n === 3 ? [20, 60, 30] : 18); }
+function buzz(p) { if (navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} }
 function landingScore(vs) {
   const ru = runwayUnder(), fpm = Math.round(-vs * 196.85);
   if (S.land) return L('Automatic landing touchdown: ' + fpm + ' ft/min', 'נגיעה בנחיתה אוטומטית: ' + fpm + ' רגל לדקה');
-  if (!ru) return (vs < -3.5 ? L('Hard landing: ', 'נחיתה קשה: ') : L('Touchdown: ', 'נגיעה: ')) + fpm + L(' ft/min', ' רגל לדקה');
+  if (!ru) return (vs < -3.5 ? L('Hard landing: ', 'נחיתה קשה: ') : L('Touchdown: ', 'נגיעה: ')) + Math.abs(fpm) + L(' ft/min', ' רגל לדקה');
   const s1 = clamp(1 - (fpm - 120) / 700, 0, 1), s2 = clamp(1 - Math.abs(ru.cross) / 20, 0, 1), s3 = clamp(1 - Math.abs(ru.fromThr - 300) / 900, 0, 1);
   const sc = Math.round(100 * (0.5 * s1 + 0.3 * s2 + 0.2 * s3)), grade = sc >= 90 ? 'S' : sc >= 75 ? 'A' : sc >= 55 ? 'B' : 'C';
-  Snd.chime(sc >= 75 ? 760 : 420, 0.3);
+  if (sc >= 75) fanfare(sc >= 90 ? 3 : 2); else Snd.chime(420, 0.3);
   return L('Landing grade ' + grade + ' (' + sc + '/100): ' + fpm + ' ft/min, ' + Math.abs(ru.cross).toFixed(0) + ' m off centre', 'ציון נחיתה ' + grade + ' (' + sc + '/100): ' + fpm + ' רגל לדקה, ' + Math.abs(ru.cross).toFixed(0) + ' מ׳ ממרכז המסלול');
 }
 function buildFun() {
@@ -3595,7 +3627,7 @@ const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down far too fast.': 'נגיעה בקרקע במהירות גבוהה מדי', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים', 'Concorde': 'קונקורד', 'Stealth jet': 'חמקן', 'Heavy bomber': 'מפציץ כבד', 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high': 'מטוס נוסעים על-קולי. פעמיים מהירות הקול בקצה החלל, נוחת מהר עם האף למעלה', 'Black, faceted, invisible to radar. Fast and low, no afterburner': 'שחור, זוויתי ובלתי נראה למכ״ם. מהיר ונמוך, בלי מבער', 'Eight engines and enormous wings. Slow to turn, flies for ever': 'שמונה מנועים וכנפיים ענקיות. פונה לאט, טס בלי סוף',
   'Twin-jet for 150 passengers. Steady and forgiving, slow to turn': 'סילון גדול ל-150 נוסעים. יציב וסלחני, פונה לאט', 'Sleek T-tail jet. Quick, agile, lands short': 'סילון קטן ומהיר. זריז ונוחת בקלות',
   'Afterburner, Mach 1.5, rolls and loops. Hold on': 'מבער, מהירות על-קולית, גלגולים ולולאות. תחזיקו חזק', 'Light propeller plane with show smoke. Slow, nimble, lands anywhere': 'מטוס מדחף קל עם עשן. איטי, זריז ונוחת בכל מקום',
-  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת',
+  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת', 'Tel Aviv at night': 'תל אביב בלילה', 'Storm over Haifa': 'סערה מעל חיפה', 'A surprise flight': 'טיסת הפתעה', 'Rings: the Tel Aviv coast': 'טבעות: חוף תל אביב', 'Rings: the Ramon crater': 'טבעות: מכתש רמון', 'Rings: down the Jordan': 'טבעות: לאורך הירדן',
   'Ben Gurion runway 12': 'נתב״ג, מסלול 12', 'Haifa over the bay': 'חיפה, מעל המפרץ', 'Eilat Ramon': 'רמון (אילת)', 'Rosh Pina airstrip': 'מנחת ראש פינה', 'Masada (Bar Yehuda) airstrip': 'מנחת בר יהודה (מצדה)', 'Beer Sheva airstrip': 'מנחת באר שבע',
   'Cockpit': 'תא הטייס', 'Chase': 'מאחור', 'Wing': 'מהכנף', 'Fly-by': 'מהצד (מעבר)', 'Above': 'מלמעלה', 'Front': 'מלפנים', 'Below': 'מבט למטה', 'Tail': 'מהזנב', 'Continue the last flight': 'המשך הטיסה האחרונה', 'Clear': 'בהיר', 'Dust haze': 'אובך', 'Storm': 'סופה', 'day': 'יום', 'sunset': 'שקיעה', 'night': 'לילה' };
 const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
@@ -3650,7 +3682,8 @@ function arcadeStep(dt) {
       for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12 && !(landing && (gh - here) / (A.v * t * hsAt(S.ra)) < 0.2)) need = Math.max(need,       /* coming down to land, gently rising ground is somewhere to land, not something to climb over */ (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
     if (S.ra < 150 && !S.trick && A.v > vMin * 1.2) A.gam = Math.max(A.gam, -Math.max(S.ra - 6, 0) / 130);          // still fast: it floats just above the ground until it has slowed to landing speed
-    if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -(0.1 + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground
+    if (S.ra < 150 && !S.trick) A.gam = Math.max(A.gam, -((S.ra < 25 ? 0.012 : 0.1) + Math.max(S.ra, 0) / 130));          // automatic flare: the dive flattens out close to the ground, and in the last 25 m it rounds out to a soft touchdown
+    if (!PL.fixedGear && !S.trick && (landing || (S.ra < 150 && A.gam < -0.01))) S.gear = true;          // coming down low: the wheels come out by themselves
     A.phi += (A.turn / PL.aTurn * PL.aBank * DEG - A.phi) * Math.min(1, 6 * dt);
     G2 = A.gam + (S.trick && S.trick.type === 'loop' ? S.trick.ang : 0); const cg = Math.cos(G2);
     const hs = hsAt(S.ra); S.pos.x += Math.sin(A.psi) * cg * A.v * dt * hs; S.pos.y += Math.sin(G2) * A.v * dt; S.pos.z -= Math.cos(A.psi) * cg * A.v * dt * hs;     // a quarter of the true speed across the map when aloft
@@ -3663,12 +3696,13 @@ function arcadeStep(dt) {
       if (A.gam < -0.3) return crash(L('Hit the ground too steeply. Come down gently to land.', 'פגיעה תלולה מדי בקרקע. כדי לנחות יורדים בעדינות'));
       // still too fast: it skips back into the air instead of crashing, and says why
       if (A.v > PL.vs * 1.6) { S.pos.y = floor + 1.5; A.gam = 0.07; A.v *= 0.97; S.shake = 0.3; A.out = false; arcSay('Too fast to land: hold the stick down and it slows by itself', 'מהר מדי לנחיתה: מחזיקים את המוט למטה והמטוס מאט לבד'); }
-      else { S.onGround = true; A.gam = 0; S.landed = true; S.thr = 0; S.shake = 0.25; Snd.chime(700, 0.25); toast(L('Landed!', 'נחתנו!')); }
+      else { const sink = -Math.sin(A.gam) * A.v, onRw = !!runwayUnder(), stars = onRw && sink < 2.2 ? 3 : onRw || g.field ? 2 : 1; S.onGround = true; A.gam = 0; S.landed = true; S.thr = 0; S.shake = 0.25;
+        fanfare(stars); toast('★'.repeat(stars) + ' ' + (stars === 3 ? L('A perfect landing!', 'נחיתה מושלמת!') : stars === 2 ? L('Landed!', 'נחתנו!') : L('Landed, away from a runway', 'נחתנו, מחוץ למסלול')), 4); }
     }
   }
   // attitude, and the values the rest of the simulator reads
   const roll = A.phi + (S.trick && S.trick.type === 'roll' ? S.trick.ang : 0), cg = Math.cos(G2);
-  S.q.setFromEuler(eul.set(G2 + (S.onGround ? 0 : 0.03), -A.psi, -roll, 'YXZ'));
+  S.q.setFromEuler(eul.set(G2 + (S.onGround ? 0 : 0.03 + (S.trick ? 0 : clamp((25 - S.ra) / 25, 0, 1) * clamp(1.5 - A.v / PL.vs, 0, 1) * (PL.key === 'concorde' ? 0.4 : 0.18))), -A.psi, -roll, 'YXZ'));          /* the nose comes up in the flare as the speed falls */
   S.vel.set(Math.sin(A.psi) * cg * A.v, S.onGround ? 0 : Math.sin(G2) * A.v, -Math.cos(A.psi) * cg * A.v);
   S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.n1 += clamp(S.thr - S.n1, -0.6 * dt, 0.6 * dt); S.nLoad = Math.min(Math.hypot(1, A.turn * A.v / G), PL.nmax || 9); S.mach = A.v / isa(S.pos.y).a; S.alpha = 0.03; S.vs0 = PL.vs;
   S.stalled = S.stallWarn = false; S.boost = 0; S.prot = ''; S.holdAlt = null;
@@ -3780,7 +3814,7 @@ function updateRain(dt) {
   u.uOff.value.addScaledVector(rel, dt); u.uOff.value.set(u.uOff.value.x % 70, u.uOff.value.y % 70, u.uOff.value.z % 70); u.uDir.value.copy(rel).multiplyScalar(1 / Math.max(sp, 1)); u.uLen.value = clamp(sp * 0.035, 0.7, 7);
 }
 const LV = [['Easy', 'קל'], ['Medium', 'בינוני'], ['Expert', 'מקצועי']];
-const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. המטוס לא נופל, ונוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
+const LVD = [['The stick steers the aircraft directly. It never stalls. Mind the hills, the buildings and the sea', 'המוט מכוון את המטוס ישירות. המטוס לא מזדקר. נזהרים מהרים, מבניינים ומהים'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];
 /** The three difficulty buttons (start screen and menu). */
 function levelButtons(el, after) {
   el.textContent = '';
@@ -4058,6 +4092,36 @@ function buildOldCity() {
   for (const m of [bm, dm]) { m.frustumCulled = false; m.userData = { x: O.x - 145, z: O.z, half: 340, far: 16000 }; scene.add(m); cityMeshes.push(m); } XT.oldCity = [bm, dm];
 }
 
+/** Ring courses (the "Challenges" section of the menus): a line of glowing rings to fly through in order, in three places. The next ring is green, the ones
+    after it gold; each ring passed chimes; the time runs from the first ring to the last and is said once at the end, with the best time (kept in `SAVE.best`).
+    Nothing is added to the screen: the rings are objects in the world, the time is one message. */
+const COURSES = [
+  { label: 'Rings: the Tel Aviv coast', pts: [[34.752, 32.045, 170], [34.760, 32.062, 210], [34.768, 32.079, 250], [34.774, 32.097, 290], [34.786, 32.113, 250], [34.798, 32.128, 200], [34.806, 32.146, 160]] },
+  { label: 'Rings: the Ramon crater', pts: [[34.72, 30.570, 200], [34.76, 30.585, 150], [34.80, 30.600, 140], [34.84, 30.612, 150], [34.88, 30.630, 190], [34.92, 30.652, 260]] },
+  { label: 'Rings: down the Jordan', pts: [[35.600, 32.700, 150], [35.588, 32.660, 130], [35.577, 32.620, 120], [35.570, 32.580, 120], [35.566, 32.540, 120], [35.560, 32.500, 140]] }];
+const COURSE = { on: false, id: -1, i: 0, t0: 0, rings: [], pool: [] };
+function courseStarts() { return COURSES.map((c, id) => { if (c.def) return c.def; const a = c.pts[0], b = c.pts[1], ax = lon2x(a[0]), az = lat2z(a[1]), dx = ax - lon2x(b[0]), dz = az - lat2z(b[1]), l = Math.hypot(dx, dz), x = ax + dx / l * 1700, z = az + dz / l * 1700;
+  return c.def = { label: c.label, type: 'air', x, z, alt: Math.max(groundAt(ax, az).h + a[2], groundAt(x, z).h + 150), hdg: (Math.atan2(-dx, dz) / DEG + 360) % 360, spd: 105, course: id }; }); }
+function courseBest(id) { const b = SAVE.best && SAVE.best[id]; return b ? courseTime(b) : ''; }
+const courseTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+/** Called from `spawn`: lay out the rings of a course start, or put them away for any other start. */
+function courseFor(def) {
+  for (const m of COURSE.pool) m.visible = false; COURSE.on = false; COURSE.rings = []; if (!def || def.course === undefined || !WORLD.ready) return;
+  const c = COURSES[def.course], R = 62; COURSE.on = true; COURSE.id = def.course; COURSE.i = 0; COURSE.t0 = 0;
+  c.pts.forEach((p, k) => { const x = lon2x(p[0]), z = lat2z(p[1]), y = Math.max(groundAt(x, z).h + p[2], obstacleTop(x, z) + R + 30), q = c.pts[Math.min(k + 1, c.pts.length - 1)], o = c.pts[Math.max(k - 1, 0)];
+    let m = COURSE.pool[k]; if (!m) { m = new THREE.Mesh(new THREE.TorusGeometry(R, 5.5, 8, 44), new THREE.MeshBasicMaterial({ color: 0xffd76a, fog: false, toneMapped: false, transparent: true, opacity: 0.9 })); m.frustumCulled = false; scene.add(m); COURSE.pool[k] = m; }
+    m.position.set(x, y, z); m.rotation.set(0, Math.atan2(lon2x(q[0]) - lon2x(o[0]), lat2z(q[1]) - lat2z(o[1])), 0); m.visible = true; COURSE.rings.push({ m, x, y, z, R }); });
+  toast(L('Fly through the rings, the green one first', 'טסים דרך הטבעות, קודם הירוקה'), 4);
+}
+function updateCourse() {
+  if (!COURSE.on) return; const n = COURSE.rings.length;
+  COURSE.rings.forEach((r, k) => { r.m.visible = k >= COURSE.i; if (k === COURSE.i) { r.m.material.color.setHex(0x5dff8a); r.m.scale.setScalar(1 + 0.05 * Math.sin(TNOW * 6)); } else { r.m.material.color.setHex(0xffd76a); r.m.scale.setScalar(1); } r.m.material.opacity = k === COURSE.i ? 1 : 0.6; });
+  const r = COURSE.rings[COURSE.i]; if (!r || S.crashed) return;
+  if (Math.hypot(S.pos.x - r.x, S.pos.y - r.y, S.pos.z - r.z) < r.R * 0.97) { COURSE.i++; if (COURSE.i === 1) COURSE.t0 = TNOW;
+    if (COURSE.i < n) { Snd.chime(700 + 60 * COURSE.i, 0.18); buzz(15); toast(COURSE.i + ' / ' + n, 1.2); }
+    else { const t = TNOW - COURSE.t0, best = SAVE.best || (SAVE.best = {}), rec = !best[COURSE.id] || t < best[COURSE.id]; if (rec) { best[COURSE.id] = Math.round(t * 10) / 10; persist(); } fanfare(3); COURSE.on = false; r.m.visible = false;
+      toast('★ ' + L('Course done in ', 'המסלול הושלם ב-') + courseTime(t) + (rec ? L('. A new best!', '. שיא חדש!') : L('. Best: ', '. השיא: ') + courseTime(best[COURSE.id])), 6); } }
+}
 /** One puff of smoke or vapour into the trail buffer. */
 function puff(x, y, z, size, alpha) { if (!TR) return; const i = TR.i; TR.i = (i + 1) % TR.n; TR.pos[i * 3] = x; TR.pos[i * 3 + 1] = y; TR.pos[i * 3 + 2] = z; TR.dat[i * 3] = TNOW; TR.dat[i * 3 + 1] = size; TR.dat[i * 3 + 2] = alpha; TR.pts.geometry.attributes.position.needsUpdate = true; TR.pts.geometry.attributes.aDat.needsUpdate = true; }
 
@@ -4076,7 +4140,16 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
+  updateCourse();
+  // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
+  if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
+    if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');
+    else if (fast && S.ra < 22 && S.ra > 1) { XT.lowT = (XT.lowT || 0) + dt; if (XT.lowT > 1.4 && !AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R)) msg = wet ? L('Skimming the sea!', 'רפרוף מעל הים!') : L('Low pass! ', 'מעבר נמוך! ') + altTxt(S.ra); } else XT.lowT = 0;
+    if (msg) { XT.dareT = TNOW; XT.lowT = 0; toast(msg, 2.2); Snd.chime(880, 0.2); buzz(25); } }
+  // the vapour cone as the sound barrier breaks
+  if (S.boomT !== undefined && TNOW - S.boomT < 0.5 && TNOW - S.boomT >= 0) { fwd.set(0, 0, -1).applyQuaternion(S.q); const r = PL.chase[0] * 0.13; for (let k = 0; k < 3; k++) { const a = Math.random() * 6.283; tmpV.set(Math.cos(a) * r, Math.sin(a) * r, PL.chase[0] * 0.05).applyQuaternion(S.q).add(S.pos); puff(tmpV.x, tmpV.y, tmpV.z, r * 0.9, 0.5); } }
   // tyre smoke at touchdown; vapour off the wingtips in a hard pull
+  if (S.onGround && !XT.wasGround && S.V > 15) buzz(30);
   if (S.onGround && !XT.wasGround && S.V > 25) { fwd.set(0, 0, -1).applyQuaternion(S.q); for (let k = 0; k < 10; k++) puff(S.pos.x - fwd.x * (k * 2.2 - 4) + (Math.random() - 0.5) * 5, S.pos.y - GEAR_H + 0.8, S.pos.z - fwd.z * (k * 2.2 - 4) + (Math.random() - 0.5) * 5, 2.6 + Math.random() * 2, 0.5); }
   XT.wasGround = S.onGround;
   if (!S.onGround && !S.arc && S.nLoad > 3.6 && S.V > 70 && S.pos.y < 6000) { XT.vap += S.V * dt; if (XT.vap > 3) { XT.vap = 0; const w = (PL.span || PL.chase[0] * 0.7) * 0.5; for (const sx of [-1, 1]) { tmpV.set(sx * w, 0.2, 1.5).applyQuaternion(S.q).add(S.pos); puff(tmpV.x, tmpV.y, tmpV.z, 0.7, 0.55); } } }
@@ -4151,7 +4224,7 @@ function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button 
 /** Fast forward, as on a video player: the whole world (flight, traffic, weather, the clock) runs at 1, 1.25, 1.5 or 2 times its speed. On touch it is in
     the folded "more" row (the button shows the rate, and so does the "more" button while time runs fast); keys [ and ] on a keyboard; a row in the settings. */
 const RATES = [1, 1.25, 1.5, 2], RATE = { i: 0, v: 1 };
-function setRate(i, say) { RATE.i = clamp(i | 0, 0, RATES.length - 1); RATE.v = RATES[RATE.i]; const t = '×' + RATE.v; $('cRate').textContent = t; $('cRate').classList.toggle('on', RATE.v > 1); S.legSig = ''; if (say) toast(L('Speed ', 'מהירות ') + t, 1.4); }
+function setRate(i, say) { RATE.i = clamp(i | 0, 0, RATES.length - 1); RATE.v = RATES[RATE.i]; const t = '\u200E×' + RATE.v; $('cRate').textContent = t; $('cRate').classList.toggle('on', RATE.v > 1); S.legSig = ''; if (say) toast(L('Speed ', 'מהירות ') + t, 1.4); }
 function action(code) {
   if (S.crashed && (code === 'Escape' || code === 'Tab' || code === 'KeyO')) return;          // the crash screen has its own two buttons; a menu or photo mode opened under it left them dead
   if (code === 'Escape' || (code === 'Tab' && !S.paused)) {          /* Tab opens the menu; inside it Tab moves between the buttons, as everywhere */ if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
@@ -4184,7 +4257,7 @@ function action(code) {
   if (code === 'KeyF' && FLAPS.length < 2) return toast(L('This aircraft has no flaps', 'למטוס הזה אין מדפים'));
   if ((S.assist || S.land) && (code === 'KeyG' || code === 'KeyF')) return toast(code === 'KeyG' ? L('Landing gear is automatic now: it comes down by itself before landing', 'הגלגלים אוטומטיים עכשיו: הם יורדים לבד לפני הנחיתה') : L('Flaps are automatic now', 'המדפים אוטומטיים עכשיו'), 4);
   if (code === 'KeyG') { if (S.onGround) toast(L('The gear stays down on the ground', 'על הקרקע הגלגלים נשארים למטה')); else { S.gear = !S.gear; toast(S.gear ? L('Gear coming down', 'גלגלים יורדים') : L('Gear going up', 'גלגלים עולים')); } }
-  else if (code === 'KeyF') { S.flapIdx = (S.flapIdx + 1) % FLAPS.length; toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }
+  else if (code === 'KeyF') { if (S.flapIdx >= FLAPS.length - 1) S.flapDir = -1; else if (S.flapIdx <= 0) S.flapDir = 1; S.flapIdx = clamp(S.flapIdx + (S.flapDir || 1), 0, FLAPS.length - 1); toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }          /* out step by step and back in step by step: full flap never jumps to none */
   else if (code === 'KeyP') {
     if (S.ap.on) { S.ap.on = false; toast(L('Autopilot off', 'טייס אוטומטי כבוי')); }
     else if (S.onGround || S.ra < 60) toast(L('Autopilot needs 200 ft above ground', 'טייס אוטומטי פועל מ-200 רגל מעל הקרקע'));
@@ -4243,17 +4316,19 @@ const PLANE_IMG = {};
 function shootPlanes() {
   const w = 320, h = 180, keep = { p: camera.position.clone(), q: camera.quaternion.clone(), a: camera.aspect, f: camera.fov, pr: renderer.getPixelRatio() };
   try { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = 30; if (camera.view) camera.clearViewOffset(); camera.updateProjectionMatrix();
-    const at = new THREE.Vector3(lon2x(34.72), 520, lat2z(32.0)); AC.root.position.copy(at); AC.root.quaternion.setFromEuler(new THREE.Euler(0.03, -0.35, 0.05, 'YXZ')); AC.deck.visible = false; if (SHADOW) SHADOW.visible = false;
-    for (const k of PLANE_ORDER) { for (const j of PLANE_ORDER) AC.models[j].g.visible = j === k; const d = PLANES[k].chase[0] * 1.05; camera.position.set(at.x - d * 0.62, at.y + d * 0.2, at.z - d * 0.78); camera.up.set(0, 1, 0); camera.lookAt(at);
+    const at = new THREE.Vector3(lon2x(34.62), 2600, lat2z(32.0)); AC.root.position.copy(at);          /* high over the sea: sky and haze behind, so the aircraft is the picture */ AC.deck.visible = false; if (SHADOW) SHADOW.visible = false;
+    for (const k of PLANE_ORDER) { for (const j of PLANE_ORDER) AC.models[j].g.visible = j === k; const big = k === 'airliner' || k === 'bomber' || k === 'concorde', d = PLANES[k].chase[0] * (k === 'concorde' ? 0.86 : k === 'stealth' ? 0.7 : 0.78); AC.root.quaternion.setFromEuler(new THREE.Euler(big ? 0.04 : 0.1, -0.35, big ? 0.06 : k === 'bizjet' ? -0.18 : 0.3, 'YXZ'));          /* each type close up and at its own angle: the big ones level, the nimble ones banked */
+      camera.position.set(at.x - d * (big ? 0.66 : 0.52), at.y + d * (k === 'stealth' || k === 'concorde' ? 0.34 : 0.16), at.z - d * (big ? 0.74 : 0.84)); camera.up.set(0, 1, 0); camera.lookAt(at);
       sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000); sun.position.copy(at).addScaledVector(sunDir, 1000); sun.target.position.copy(at); sun.target.updateMatrixWorld();
       const m = AC.models[k]; if (m.burner) m.burner.visible = false; if (m.land) for (const l of m.land) l.visible = false; renderer.render(scene, camera); PLANE_IMG[k] = renderer.domElement.toDataURL('image/jpeg', 0.82); }
   } catch (e) { /* no pictures: the cards fall back to text */ }
   renderer.setPixelRatio(keep.pr); camera.position.copy(keep.p); camera.quaternion.copy(keep.q); camera.fov = keep.f; for (const j of PLANE_ORDER) AC.models[j].g.visible = false; resize();
 }
 function planeCards(el, onPick) {
-  el.textContent = '';
+  el.textContent = ''; el.classList.add('planes');
   for (const k of PLANE_ORDER) { const p = PLANES[k], b = document.createElement('button'); b.className = 'pl' + (k === PL.key ? ' on' : ''); b.innerHTML = (PLANE_IMG[k] ? '<img alt="" src="' + PLANE_IMG[k] + '">' : '') + '<b></b><small></small>'; b.querySelector('b').textContent = tr(p.name); b.lastChild.textContent = tr(p.tag);
     b.addEventListener('click', () => onPick(k)); el.appendChild(b); }
+  const on = el.querySelector('.on'); if (on) requestAnimationFrame(() => { el.scrollLeft = on.offsetLeft - el.offsetLeft - (el.clientWidth - on.offsetWidth) / 2; });          // the chosen aircraft is in view
 }
 function gridButtons(el, items) {
   el.textContent = '';
@@ -4274,8 +4349,9 @@ function renderPanel(where) {
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
     ['lv', L('Difficulty', 'רמת קושי'), L(LV[S.mode][0], LV[S.mode][1]), el => levelButtons(el, rer)],
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
-    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); pickButton(el, where, cur, rer); }],
+    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); surpriseButton(el, where, rer); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
+    ...(WORLD.ready ? [['ch', L('Challenges', 'אתגרים'), cur && cur.course !== undefined ? startName(cur) : '', el => gridButtons(el, courseStarts().map(d => [startName(d), courseBest(d.course) ? L('Best ', 'שיא ') + courseBest(d.course) : L('Fly through the rings', 'טסים דרך הטבעות'), go(d), d === cur]))]] : []),
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
   const open = OPEN[where]; body.textContent = '';
@@ -4284,6 +4360,15 @@ function renderPanel(where) {
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
     const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = where === 'pause' ? [L('Nearest airport: ', 'שדה התעופה הקרוב: ') + nearestAirportTxt(), tr(PL.name), L(LV[S.mode][0], LV[S.mode][1])].join(' · ') : [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
+}
+/** "Surprise me": a famous place, an aircraft and a time of day drawn at random (never the same twice running). */
+const SURPRISE = [[34.76, 32.06, 350, 20], [35.20, 31.775, 500, 80], [35.0, 32.84, 450, 200], [35.45, 31.45, 300, 180], [34.80, 30.60, 600, 60], [35.78, 33.28, 900, 30], [34.95, 29.60, 400, 190], [35.55, 32.78, 350, 0], [35.36, 31.33, 500, 20], [34.90, 32.50, 250, 180], [35.30, 32.70, 500, 250], [34.65, 31.80, 300, 30]];
+function surpriseButton(el, where, rer) {
+  const b = document.createElement('button'); b.className = 'pickB'; b.textContent = '🎲 ' + L('Surprise me', 'תפתיעו אותי'); const s = document.createElement('small'); s.textContent = L('A place, an aircraft and a time of day at random', 'מקום, מטוס ושעה ביום באקראי'); b.appendChild(s);
+  b.addEventListener('click', () => { let i; do i = (Math.random() * SURPRISE.length) | 0; while (i === surpriseButton.last); surpriseButton.last = i; const [lon, lat, agl, hdg] = SURPRISE[i], k = PLANE_ORDER[(Math.random() * PLANE_ORDER.length) | 0];
+    const d = { label: 'A surprise flight', type: 'air', lon, lat, agl, hdg, spd: 115, tod: Math.random() < 0.55 ? 0 : Math.random() < 0.6 ? 1 : 2, wx: 0 };
+    if (WORLD.ready) selectPlane(k); else { PL = PLANES[k]; SAVE.plane = k; persist(); } if (where === 'start') { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } else { closeMenu(); spawn(d); } });
+  el.insertBefore(b, el.firstChild);
 }
 /** First in the air starts: any place in Israel, chosen on a map or by name (src/07b-picker.js). Shows the place chosen last. */
 function pickButton(el, where, cur, rer) {
@@ -4366,6 +4451,8 @@ function buildMenu() {
   TAKEOFFS = [FREE[0], { label: 'Takeoff: Haifa', type: 'ground', rw: RUNWAYS[2], rev: true }, { label: 'Takeoff: Eilat Ramon', type: 'ground', rw: RUNWAYS[3] },
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
+  // two more invitations: the city by night and a storm (they set the time of day and the weather too)
+  AIRSTARTS.push({ label: 'Tel Aviv at night', type: 'air', lon: 34.74, lat: 32.03, alt: 420, hdg: 30, spd: 115, tod: 2, wx: 0 }, { label: 'Storm over Haifa', type: 'air', lon: 34.93, lat: 32.74, alt: 700, hdg: 40, spd: 115, tod: 0, wx: 2 });
   LANDTESTS = [
     { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
     { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 2600, flaps: 3, gear: true },
@@ -4439,7 +4526,7 @@ function guardBack() { try { history.pushState({ ifs: 1 }, ''); } catch (e) { /*
 window.addEventListener('popstate', () => {
   if (PICK.open) { closePicker(); return guardBack(); }
   if (!S.started) return;                                  // on the start screen Back leaves, as everywhere
-  if (PH.on) action('KeyO'); else if (S.crashed) { /* the crash screen has its own buttons */ } else if (S.paused) closeMenu(); else openMenu();
+  if (PH.on) action('KeyO'); else if (S.crashed) { if ($('crash').style.display === 'flex') $('again').click(); } else if (S.paused) closeMenu(); else openMenu();          /* on the crash screen Back is its main button */
   guardBack();
 });
 document.addEventListener('contextmenu', e => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
@@ -4464,6 +4551,7 @@ function startFlight() {
 }
 /** Step 1, as soon as the scripts are in: the choice screen. Nothing here needs the world. */
 function init() {
+  if (window.matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch', 'nopfd');          // before the first screen is drawn, so a phone never shows the keyboard section
   buildMenu(); PL = PLANES[SAVE.plane] || PLANES.airliner; setMode(SAVE.mode);
   { const rf = savedFlight(); if (rf) { PL = PLANES[rf.plane] || PL; START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
   if (SAVE.first && !START) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
@@ -4474,8 +4562,9 @@ function init() {
   tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
   const uncover = () => { if (S.paused) closeMenu(); if (PH.on) { PH.on = false; document.body.classList.remove('photo'); } };
-  $('again').addEventListener('click', () => { uncover(); spawn(S.lastSpawn || FREE[0]); });
-  $('airborne').addEventListener('click', () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); });
+  // after a crash: in Easy the main button puts the aircraft straight back in the air where it was (a child wants to fly on, not to start over); in the other levels it starts the flight again
+  const again = () => { uncover(); spawn(S.lastSpawn || FREE[0]); }, airborne = () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); };
+  $('again').addEventListener('click', () => (S.arc ? airborne : again)()); $('airborne').addEventListener('click', () => (S.arc ? again : airborne)());
 }
 /** Step 2, behind the choice screen: the world, one builder at a time with a breath between them, so the screen keeps answering taps. */
 async function buildWorld() {

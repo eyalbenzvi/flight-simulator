@@ -128,6 +128,26 @@ no bundler, no framework. Everything shares one global scope, so the load order 
   - A game controller works with nothing on screen: left stick, triggers or right stick for power, A view, B brake, X land, Y gear, LB flaps, Start menu.
   - At night the instruments dim (`body.night`); the key guide shows keycaps.
 
+## Round five: thirty changes from four reviews (UX, gaming, game design, flight)
+
+- Flight: in Expert a dive that is let go eases out to −4° at 3°/s unless the gear is down (the path hold used to fly it into the ground); Medium gives full
+  power and raises the gear when slow with ground rising ahead (`terrAhead`); a practice approach keeps descending at 3° until the stick is touched
+  (`S.apprHold`); the Medium flare starts higher; Easy rounds out in the last 25 m, shows the nose coming up, and lowers the gear by itself when coming down
+  low; flaps step out and back in (never 30° → 0°); a stall and a late rotation have their own hints; crash reasons state the speed and the limit.
+- Rewards with nothing added to the screen: stars, a fanfare and a buzz for a landing (`fanfare`, `buzz` in `src/07-hud-and-modes.js`; Easy too), one short
+  message for a low pass, a pass between towers or skimming the sea (`updateExtras`, at most every 20 s), a vapour cone, a view kick and a buzz at Mach 1
+  and again at Mach 2, the Mach number in the strip above 0.6.
+- Ring courses (`COURSES`, `courseFor`, `updateCourse` in `src/07c-extras.js`; the "Challenges" menu section, shown once the world is built): rings in the
+  world, the next one green; the time is one message at the end; best times in `SAVE.best`. `spawn` calls `courseFor(def)`, which also puts the rings away.
+- Starts: "Tel Aviv at night" and "Storm over Haifa" carry `tod` / `wx` (applied by `spawn`); "Surprise me" (`surpriseButton`) draws a place, an aircraft
+  and a time of day.
+- Interface: the aircraft are one row to swipe through (`.grid.planes`), cards are close-ups at an angle per type (`shootPlanes`); a first visit reads
+  km/h and metres; messages sit under the readout strip; the lever's percentage is inside it; the opened "more" row stands above its button, clear of the
+  stick's zone; once a visit a hint and a pulse point at "⋯"; the `touch` class is set in `init`; after a crash the main button in Easy is "Back in the
+  air" (in the other levels "Try again") and the phone's Back presses it; the chase camera sits 24% closer on touch.
+- Look: the cockpit panel stands in view with the live flight displays and map in it (top edge 13° below the horizon, no centre post, a thin canopy bow);
+  at night the aircraft keeps a faint moonlit sheen.
+
 ## Start-up
 
 `init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then

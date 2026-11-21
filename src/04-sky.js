@@ -128,6 +128,7 @@ function applyTODv(t, key, bakeAs) {
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
   if (bldMat) bldMat.emissive.setRGB(0.035 * t.lights, 0.03 * t.lights, 0.02 * t.lights);
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
+  for (const m of AC.envMats) if (m.emissive && !m.emissiveMap) m.emissive.setRGB(0.045 * t.lights, 0.06 * t.lights, 0.095 * t.lights);          // at night the aircraft keeps a faint moonlit sheen, so it is not a black cut-out against the city
   for (const m of AC.livery) m.emissiveIntensity = t.lights > 0.3 ? 0.95 : 0;                       // cabin windows light up
   for (const g of AC.glow) g.scale.setScalar(g.userData.r * (1 + 1.5 * t.lights));                  // the aircraft's lights bloom at night
   if (key !== null) bakeSkyReflection();

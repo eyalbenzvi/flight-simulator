@@ -64,7 +64,7 @@ function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button 
 /** Fast forward, as on a video player: the whole world (flight, traffic, weather, the clock) runs at 1, 1.25, 1.5 or 2 times its speed. On touch it is in
     the folded "more" row (the button shows the rate, and so does the "more" button while time runs fast); keys [ and ] on a keyboard; a row in the settings. */
 const RATES = [1, 1.25, 1.5, 2], RATE = { i: 0, v: 1 };
-function setRate(i, say) { RATE.i = clamp(i | 0, 0, RATES.length - 1); RATE.v = RATES[RATE.i]; const t = '×' + RATE.v; $('cRate').textContent = t; $('cRate').classList.toggle('on', RATE.v > 1); S.legSig = ''; if (say) toast(L('Speed ', 'מהירות ') + t, 1.4); }
+function setRate(i, say) { RATE.i = clamp(i | 0, 0, RATES.length - 1); RATE.v = RATES[RATE.i]; const t = '\u200E×' + RATE.v; $('cRate').textContent = t; $('cRate').classList.toggle('on', RATE.v > 1); S.legSig = ''; if (say) toast(L('Speed ', 'מהירות ') + t, 1.4); }
 function action(code) {
   if (S.crashed && (code === 'Escape' || code === 'Tab' || code === 'KeyO')) return;          // the crash screen has its own two buttons; a menu or photo mode opened under it left them dead
   if (code === 'Escape' || (code === 'Tab' && !S.paused)) {          /* Tab opens the menu; inside it Tab moves between the buttons, as everywhere */ if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
@@ -97,7 +97,7 @@ function action(code) {
   if (code === 'KeyF' && FLAPS.length < 2) return toast(L('This aircraft has no flaps', 'למטוס הזה אין מדפים'));
   if ((S.assist || S.land) && (code === 'KeyG' || code === 'KeyF')) return toast(code === 'KeyG' ? L('Landing gear is automatic now: it comes down by itself before landing', 'הגלגלים אוטומטיים עכשיו: הם יורדים לבד לפני הנחיתה') : L('Flaps are automatic now', 'המדפים אוטומטיים עכשיו'), 4);
   if (code === 'KeyG') { if (S.onGround) toast(L('The gear stays down on the ground', 'על הקרקע הגלגלים נשארים למטה')); else { S.gear = !S.gear; toast(S.gear ? L('Gear coming down', 'גלגלים יורדים') : L('Gear going up', 'גלגלים עולים')); } }
-  else if (code === 'KeyF') { S.flapIdx = (S.flapIdx + 1) % FLAPS.length; toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }
+  else if (code === 'KeyF') { if (S.flapIdx >= FLAPS.length - 1) S.flapDir = -1; else if (S.flapIdx <= 0) S.flapDir = 1; S.flapIdx = clamp(S.flapIdx + (S.flapDir || 1), 0, FLAPS.length - 1); toast(L('Flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°'); }          /* out step by step and back in step by step: full flap never jumps to none */
   else if (code === 'KeyP') {
     if (S.ap.on) { S.ap.on = false; toast(L('Autopilot off', 'טייס אוטומטי כבוי')); }
     else if (S.onGround || S.ra < 60) toast(L('Autopilot needs 200 ft above ground', 'טייס אוטומטי פועל מ-200 רגל מעל הקרקע'));
@@ -156,17 +156,19 @@ const PLANE_IMG = {};
 function shootPlanes() {
   const w = 320, h = 180, keep = { p: camera.position.clone(), q: camera.quaternion.clone(), a: camera.aspect, f: camera.fov, pr: renderer.getPixelRatio() };
   try { renderer.setPixelRatio(1); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = 30; if (camera.view) camera.clearViewOffset(); camera.updateProjectionMatrix();
-    const at = new THREE.Vector3(lon2x(34.72), 520, lat2z(32.0)); AC.root.position.copy(at); AC.root.quaternion.setFromEuler(new THREE.Euler(0.03, -0.35, 0.05, 'YXZ')); AC.deck.visible = false; if (SHADOW) SHADOW.visible = false;
-    for (const k of PLANE_ORDER) { for (const j of PLANE_ORDER) AC.models[j].g.visible = j === k; const d = PLANES[k].chase[0] * 1.05; camera.position.set(at.x - d * 0.62, at.y + d * 0.2, at.z - d * 0.78); camera.up.set(0, 1, 0); camera.lookAt(at);
+    const at = new THREE.Vector3(lon2x(34.62), 2600, lat2z(32.0)); AC.root.position.copy(at);          /* high over the sea: sky and haze behind, so the aircraft is the picture */ AC.deck.visible = false; if (SHADOW) SHADOW.visible = false;
+    for (const k of PLANE_ORDER) { for (const j of PLANE_ORDER) AC.models[j].g.visible = j === k; const big = k === 'airliner' || k === 'bomber' || k === 'concorde', d = PLANES[k].chase[0] * (k === 'concorde' ? 0.86 : k === 'stealth' ? 0.7 : 0.78); AC.root.quaternion.setFromEuler(new THREE.Euler(big ? 0.04 : 0.1, -0.35, big ? 0.06 : k === 'bizjet' ? -0.18 : 0.3, 'YXZ'));          /* each type close up and at its own angle: the big ones level, the nimble ones banked */
+      camera.position.set(at.x - d * (big ? 0.66 : 0.52), at.y + d * (k === 'stealth' || k === 'concorde' ? 0.34 : 0.16), at.z - d * (big ? 0.74 : 0.84)); camera.up.set(0, 1, 0); camera.lookAt(at);
       sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000); sun.position.copy(at).addScaledVector(sunDir, 1000); sun.target.position.copy(at); sun.target.updateMatrixWorld();
       const m = AC.models[k]; if (m.burner) m.burner.visible = false; if (m.land) for (const l of m.land) l.visible = false; renderer.render(scene, camera); PLANE_IMG[k] = renderer.domElement.toDataURL('image/jpeg', 0.82); }
   } catch (e) { /* no pictures: the cards fall back to text */ }
   renderer.setPixelRatio(keep.pr); camera.position.copy(keep.p); camera.quaternion.copy(keep.q); camera.fov = keep.f; for (const j of PLANE_ORDER) AC.models[j].g.visible = false; resize();
 }
 function planeCards(el, onPick) {
-  el.textContent = '';
+  el.textContent = ''; el.classList.add('planes');
   for (const k of PLANE_ORDER) { const p = PLANES[k], b = document.createElement('button'); b.className = 'pl' + (k === PL.key ? ' on' : ''); b.innerHTML = (PLANE_IMG[k] ? '<img alt="" src="' + PLANE_IMG[k] + '">' : '') + '<b></b><small></small>'; b.querySelector('b').textContent = tr(p.name); b.lastChild.textContent = tr(p.tag);
     b.addEventListener('click', () => onPick(k)); el.appendChild(b); }
+  const on = el.querySelector('.on'); if (on) requestAnimationFrame(() => { el.scrollLeft = on.offsetLeft - el.offsetLeft - (el.clientWidth - on.offsetWidth) / 2; });          // the chosen aircraft is in view
 }
 function gridButtons(el, items) {
   el.textContent = '';
@@ -187,8 +189,9 @@ function renderPanel(where) {
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
     ['lv', L('Difficulty', 'רמת קושי'), L(LV[S.mode][0], LV[S.mode][1]), el => levelButtons(el, rer)],
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
-    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); pickButton(el, where, cur, rer); }],
+    ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); surpriseButton(el, where, rer); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
+    ...(WORLD.ready ? [['ch', L('Challenges', 'אתגרים'), cur && cur.course !== undefined ? startName(cur) : '', el => gridButtons(el, courseStarts().map(d => [startName(d), courseBest(d.course) ? L('Best ', 'שיא ') + courseBest(d.course) : L('Fly through the rings', 'טסים דרך הטבעות'), go(d), d === cur]))]] : []),
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
   const open = OPEN[where]; body.textContent = '';
@@ -197,6 +200,15 @@ function renderPanel(where) {
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
     const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = where === 'pause' ? [L('Nearest airport: ', 'שדה התעופה הקרוב: ') + nearestAirportTxt(), tr(PL.name), L(LV[S.mode][0], LV[S.mode][1])].join(' · ') : [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
+}
+/** "Surprise me": a famous place, an aircraft and a time of day drawn at random (never the same twice running). */
+const SURPRISE = [[34.76, 32.06, 350, 20], [35.20, 31.775, 500, 80], [35.0, 32.84, 450, 200], [35.45, 31.45, 300, 180], [34.80, 30.60, 600, 60], [35.78, 33.28, 900, 30], [34.95, 29.60, 400, 190], [35.55, 32.78, 350, 0], [35.36, 31.33, 500, 20], [34.90, 32.50, 250, 180], [35.30, 32.70, 500, 250], [34.65, 31.80, 300, 30]];
+function surpriseButton(el, where, rer) {
+  const b = document.createElement('button'); b.className = 'pickB'; b.textContent = '🎲 ' + L('Surprise me', 'תפתיעו אותי'); const s = document.createElement('small'); s.textContent = L('A place, an aircraft and a time of day at random', 'מקום, מטוס ושעה ביום באקראי'); b.appendChild(s);
+  b.addEventListener('click', () => { let i; do i = (Math.random() * SURPRISE.length) | 0; while (i === surpriseButton.last); surpriseButton.last = i; const [lon, lat, agl, hdg] = SURPRISE[i], k = PLANE_ORDER[(Math.random() * PLANE_ORDER.length) | 0];
+    const d = { label: 'A surprise flight', type: 'air', lon, lat, agl, hdg, spd: 115, tod: Math.random() < 0.55 ? 0 : Math.random() < 0.6 ? 1 : 2, wx: 0 };
+    if (WORLD.ready) selectPlane(k); else { PL = PLANES[k]; SAVE.plane = k; persist(); } if (where === 'start') { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } else { closeMenu(); spawn(d); } });
+  el.insertBefore(b, el.firstChild);
 }
 /** First in the air starts: any place in Israel, chosen on a map or by name (src/07b-picker.js). Shows the place chosen last. */
 function pickButton(el, where, cur, rer) {
@@ -279,6 +291,8 @@ function buildMenu() {
   TAKEOFFS = [FREE[0], { label: 'Takeoff: Haifa', type: 'ground', rw: RUNWAYS[2], rev: true }, { label: 'Takeoff: Eilat Ramon', type: 'ground', rw: RUNWAYS[3] },
     { label: 'Takeoff: Rosh Pina', type: 'ground', rw: RUNWAYS[4], rev: true }, { label: 'Takeoff: Masada (Bar Yehuda)', type: 'ground', rw: RUNWAYS[5] }, { label: 'Takeoff: Beer Sheva', type: 'ground', rw: RUNWAYS[6], rev: true }];
   AIRSTARTS = FREE.slice(1);
+  // two more invitations: the city by night and a storm (they set the time of day and the weather too)
+  AIRSTARTS.push({ label: 'Tel Aviv at night', type: 'air', lon: 34.74, lat: 32.03, alt: 420, hdg: 30, spd: 115, tod: 2, wx: 0 }, { label: 'Storm over Haifa', type: 'air', lon: 34.93, lat: 32.74, alt: 700, hdg: 40, spd: 115, tod: 0, wx: 2 });
   LANDTESTS = [
     { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
     { label: 'Approach: Haifa over the bay', type: 'approach', rw: RUNWAYS[2], dist: 2600, flaps: 3, gear: true },
@@ -352,7 +366,7 @@ function guardBack() { try { history.pushState({ ifs: 1 }, ''); } catch (e) { /*
 window.addEventListener('popstate', () => {
   if (PICK.open) { closePicker(); return guardBack(); }
   if (!S.started) return;                                  // on the start screen Back leaves, as everywhere
-  if (PH.on) action('KeyO'); else if (S.crashed) { /* the crash screen has its own buttons */ } else if (S.paused) closeMenu(); else openMenu();
+  if (PH.on) action('KeyO'); else if (S.crashed) { if ($('crash').style.display === 'flex') $('again').click(); } else if (S.paused) closeMenu(); else openMenu();          /* on the crash screen Back is its main button */
   guardBack();
 });
 document.addEventListener('contextmenu', e => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
@@ -377,6 +391,7 @@ function startFlight() {
 }
 /** Step 1, as soon as the scripts are in: the choice screen. Nothing here needs the world. */
 function init() {
+  if (window.matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch', 'nopfd');          // before the first screen is drawn, so a phone never shows the keyboard section
   buildMenu(); PL = PLANES[SAVE.plane] || PLANES.airliner; setMode(SAVE.mode);
   { const rf = savedFlight(); if (rf) { PL = PLANES[rf.plane] || PL; START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
   if (SAVE.first && !START) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
@@ -387,8 +402,9 @@ function init() {
   tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
   const uncover = () => { if (S.paused) closeMenu(); if (PH.on) { PH.on = false; document.body.classList.remove('photo'); } };
-  $('again').addEventListener('click', () => { uncover(); spawn(S.lastSpawn || FREE[0]); });
-  $('airborne').addEventListener('click', () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); });
+  // after a crash: in Easy the main button puts the aircraft straight back in the air where it was (a child wants to fly on, not to start over); in the other levels it starts the flight again
+  const again = () => { uncover(); spawn(S.lastSpawn || FREE[0]); }, airborne = () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); };
+  $('again').addEventListener('click', () => (S.arc ? airborne : again)()); $('airborne').addEventListener('click', () => (S.arc ? again : airborne)());
 }
 /** Step 2, behind the choice screen: the world, one builder at a time with a breath between them, so the screen keeps answering taps. */
 async function buildWorld() {

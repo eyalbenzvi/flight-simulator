@@ -351,11 +351,13 @@ function buildAircraft() {
   const trim = lam(0x4a5058), dk = lam(0x23272c);           // lighter than black, so the panel reads as a panel; and set low, so the world fills most of the view
   const cab2 = () => lam(0x2b3036);
   const dadd = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || AC.deck).add(m); return m; };
-  dadd(new THREE.BoxGeometry(3.4, 0.08, 0.9), dk, 0, 0.62, -16.3).rotation.x = 0.08;                   // glare shield
-  dadd(new THREE.PlaneGeometry(3.3, 0.72), trim, 0, 0.25, -16.45).rotation.x = -0.2;                  // main panel
+  // the panel stands where the eye finds it: its top edge 13 degrees below the horizon, the two flight displays and the map lit in it (they are the game's own
+  // instruments, live), so the lower quarter of the cockpit view is a working panel and not a dark slab
+  dadd(new THREE.BoxGeometry(3.4, 0.06, 0.7), dk, 0, 0.9, -16.25).rotation.x = 0.08;                   // glare shield
+  dadd(new THREE.PlaneGeometry(3.3, 0.66), trim, 0, 0.57, -16.47).rotation.x = -0.28;                 // main panel
   AC.pfdTex = new THREE.CanvasTexture(document.getElementById('pfd')); AC.mapTex = new THREE.CanvasTexture(document.getElementById('map'));
-  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.25, -16.43).rotation.x = -0.2; };
-  scr(0.7, 0.48, -0.62, AC.pfdTex); scr(0.29, 0.53, 0.02, AC.mapTex); scr(0.7, 0.48, 0.66, AC.pfdTex);
+  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.58, -16.44).rotation.x = -0.28; };
+  scr(0.78, 0.53, -0.72, AC.pfdTex); scr(0.29, 0.53, 0.0, AC.mapTex); scr(0.78, 0.53, 0.72, AC.pfdTex);
   dadd(new THREE.BoxGeometry(1.0, 0.5, 1.2), trim, 0, -0.17, -15.9);                                   // pedestal
   for (const s of [-1, 1]) { dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, s * 1.38, 1.42, -16.6, AC.frame).rotation.z = -s * 0.1; dadd(new THREE.BoxGeometry(0.08, 0.5, 3), trim, s * 1.72, 0.3, -15.4, AC.frame); dadd(new THREE.BoxGeometry(0.07, 2.2, 0.09), trim, s * 1.72, 1.4, -15.3, AC.frame); }       // slim posts, a low sill and open side windows
   dadd(new THREE.BoxGeometry(3.6, 0.16, 1.0), trim, 0, 2.2, -16.2, AC.frame);
@@ -369,11 +371,11 @@ function buildAircraft() {
       dadd(new THREE.BoxGeometry(0.52, 1.25, 0.14), seat, sd * 0.62, 0.42, -14.25, AC.frame).rotation.x = -0.12; dadd(new THREE.BoxGeometry(0.52, 0.12, 0.5), seat, sd * 0.62, -0.08, -14.5, AC.frame);   // seats
       dadd(new THREE.BoxGeometry(0.3, 0.2, 0.2), seat, sd * 0.62, 1.12, -14.2, AC.frame); }
     dadd(new THREE.BoxGeometry(1.5, 0.1, 1.3), trim, 0, 2.12, -15.5, AC.frame).rotation.x = 0.1; dadd(new THREE.BoxGeometry(3.6, 0.08, 4.2), cab, 0, 2.3, -14.6, AC.frame);     // overhead panel, ceiling
-    dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, 0, 1.42, -16.62, AC.frame); }                                                                                        // centre post of the windshield
+  }          /* (no centre post: it ran through the middle of the view) */                                                                                        // centre post of the windshield
   // bubble canopies (fighter, aerobatic plane): the canopy bow, the side rails and the nose ahead
   AC.bub = new THREE.Group(); AC.deck.add(AC.bub);
-  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.035, 6, 20, Math.PI), trim); bow.position.set(0, 0.62, -16.25); AC.bub.add(bow);
-    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.06, 0.06, 2.6), trim, sd * 0.78, 0.62, -15.1, AC.bub);
+  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.018, 6, 24, Math.PI), trim); bow.position.set(0, 0.86, -16.25); AC.bub.add(bow);
+    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.05, 0.05, 2.6), trim, sd * 0.82, 0.86, -15.1, AC.bub);
     AC.bubNose = dadd(new THREE.CylinderGeometry(0.1, 0.62, 4.2, 14).rotateX(-Math.PI / 2), lam(0x7d8894), 0, 0.2, -18.9, AC.bub); dadd(new THREE.BoxGeometry(1.5, 0.5, 1.6), cab2(), 0, -0.05, -15.2, AC.bub); }
   AC.deck.add(AC.frame); AC.root.add(AC.deck); AC.deck.visible = false; scene.add(AC.root);
 }

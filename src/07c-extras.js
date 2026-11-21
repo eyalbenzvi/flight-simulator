@@ -114,6 +114,36 @@ function buildOldCity() {
   for (const m of [bm, dm]) { m.frustumCulled = false; m.userData = { x: O.x - 145, z: O.z, half: 340, far: 16000 }; scene.add(m); cityMeshes.push(m); } XT.oldCity = [bm, dm];
 }
 
+/** Ring courses (the "Challenges" section of the menus): a line of glowing rings to fly through in order, in three places. The next ring is green, the ones
+    after it gold; each ring passed chimes; the time runs from the first ring to the last and is said once at the end, with the best time (kept in `SAVE.best`).
+    Nothing is added to the screen: the rings are objects in the world, the time is one message. */
+const COURSES = [
+  { label: 'Rings: the Tel Aviv coast', pts: [[34.752, 32.045, 170], [34.760, 32.062, 210], [34.768, 32.079, 250], [34.774, 32.097, 290], [34.786, 32.113, 250], [34.798, 32.128, 200], [34.806, 32.146, 160]] },
+  { label: 'Rings: the Ramon crater', pts: [[34.72, 30.570, 200], [34.76, 30.585, 150], [34.80, 30.600, 140], [34.84, 30.612, 150], [34.88, 30.630, 190], [34.92, 30.652, 260]] },
+  { label: 'Rings: down the Jordan', pts: [[35.600, 32.700, 150], [35.588, 32.660, 130], [35.577, 32.620, 120], [35.570, 32.580, 120], [35.566, 32.540, 120], [35.560, 32.500, 140]] }];
+const COURSE = { on: false, id: -1, i: 0, t0: 0, rings: [], pool: [] };
+function courseStarts() { return COURSES.map((c, id) => { if (c.def) return c.def; const a = c.pts[0], b = c.pts[1], ax = lon2x(a[0]), az = lat2z(a[1]), dx = ax - lon2x(b[0]), dz = az - lat2z(b[1]), l = Math.hypot(dx, dz), x = ax + dx / l * 1700, z = az + dz / l * 1700;
+  return c.def = { label: c.label, type: 'air', x, z, alt: Math.max(groundAt(ax, az).h + a[2], groundAt(x, z).h + 150), hdg: (Math.atan2(-dx, dz) / DEG + 360) % 360, spd: 105, course: id }; }); }
+function courseBest(id) { const b = SAVE.best && SAVE.best[id]; return b ? courseTime(b) : ''; }
+const courseTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
+/** Called from `spawn`: lay out the rings of a course start, or put them away for any other start. */
+function courseFor(def) {
+  for (const m of COURSE.pool) m.visible = false; COURSE.on = false; COURSE.rings = []; if (!def || def.course === undefined || !WORLD.ready) return;
+  const c = COURSES[def.course], R = 62; COURSE.on = true; COURSE.id = def.course; COURSE.i = 0; COURSE.t0 = 0;
+  c.pts.forEach((p, k) => { const x = lon2x(p[0]), z = lat2z(p[1]), y = Math.max(groundAt(x, z).h + p[2], obstacleTop(x, z) + R + 30), q = c.pts[Math.min(k + 1, c.pts.length - 1)], o = c.pts[Math.max(k - 1, 0)];
+    let m = COURSE.pool[k]; if (!m) { m = new THREE.Mesh(new THREE.TorusGeometry(R, 5.5, 8, 44), new THREE.MeshBasicMaterial({ color: 0xffd76a, fog: false, toneMapped: false, transparent: true, opacity: 0.9 })); m.frustumCulled = false; scene.add(m); COURSE.pool[k] = m; }
+    m.position.set(x, y, z); m.rotation.set(0, Math.atan2(lon2x(q[0]) - lon2x(o[0]), lat2z(q[1]) - lat2z(o[1])), 0); m.visible = true; COURSE.rings.push({ m, x, y, z, R }); });
+  toast(L('Fly through the rings, the green one first', 'טסים דרך הטבעות, קודם הירוקה'), 4);
+}
+function updateCourse() {
+  if (!COURSE.on) return; const n = COURSE.rings.length;
+  COURSE.rings.forEach((r, k) => { r.m.visible = k >= COURSE.i; if (k === COURSE.i) { r.m.material.color.setHex(0x5dff8a); r.m.scale.setScalar(1 + 0.05 * Math.sin(TNOW * 6)); } else { r.m.material.color.setHex(0xffd76a); r.m.scale.setScalar(1); } r.m.material.opacity = k === COURSE.i ? 1 : 0.6; });
+  const r = COURSE.rings[COURSE.i]; if (!r || S.crashed) return;
+  if (Math.hypot(S.pos.x - r.x, S.pos.y - r.y, S.pos.z - r.z) < r.R * 0.97) { COURSE.i++; if (COURSE.i === 1) COURSE.t0 = TNOW;
+    if (COURSE.i < n) { Snd.chime(700 + 60 * COURSE.i, 0.18); buzz(15); toast(COURSE.i + ' / ' + n, 1.2); }
+    else { const t = TNOW - COURSE.t0, best = SAVE.best || (SAVE.best = {}), rec = !best[COURSE.id] || t < best[COURSE.id]; if (rec) { best[COURSE.id] = Math.round(t * 10) / 10; persist(); } fanfare(3); COURSE.on = false; r.m.visible = false;
+      toast('★ ' + L('Course done in ', 'המסלול הושלם ב-') + courseTime(t) + (rec ? L('. A new best!', '. שיא חדש!') : L('. Best: ', '. השיא: ') + courseTime(best[COURSE.id])), 6); } }
+}
 /** One puff of smoke or vapour into the trail buffer. */
 function puff(x, y, z, size, alpha) { if (!TR) return; const i = TR.i; TR.i = (i + 1) % TR.n; TR.pos[i * 3] = x; TR.pos[i * 3 + 1] = y; TR.pos[i * 3 + 2] = z; TR.dat[i * 3] = TNOW; TR.dat[i * 3 + 1] = size; TR.dat[i * 3 + 2] = alpha; TR.pts.geometry.attributes.position.needsUpdate = true; TR.pts.geometry.attributes.aDat.needsUpdate = true; }
 
@@ -132,7 +162,16 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
+  updateCourse();
+  // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
+  if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
+    if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');
+    else if (fast && S.ra < 22 && S.ra > 1) { XT.lowT = (XT.lowT || 0) + dt; if (XT.lowT > 1.4 && !AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R)) msg = wet ? L('Skimming the sea!', 'רפרוף מעל הים!') : L('Low pass! ', 'מעבר נמוך! ') + altTxt(S.ra); } else XT.lowT = 0;
+    if (msg) { XT.dareT = TNOW; XT.lowT = 0; toast(msg, 2.2); Snd.chime(880, 0.2); buzz(25); } }
+  // the vapour cone as the sound barrier breaks
+  if (S.boomT !== undefined && TNOW - S.boomT < 0.5 && TNOW - S.boomT >= 0) { fwd.set(0, 0, -1).applyQuaternion(S.q); const r = PL.chase[0] * 0.13; for (let k = 0; k < 3; k++) { const a = Math.random() * 6.283; tmpV.set(Math.cos(a) * r, Math.sin(a) * r, PL.chase[0] * 0.05).applyQuaternion(S.q).add(S.pos); puff(tmpV.x, tmpV.y, tmpV.z, r * 0.9, 0.5); } }
   // tyre smoke at touchdown; vapour off the wingtips in a hard pull
+  if (S.onGround && !XT.wasGround && S.V > 15) buzz(30);
   if (S.onGround && !XT.wasGround && S.V > 25) { fwd.set(0, 0, -1).applyQuaternion(S.q); for (let k = 0; k < 10; k++) puff(S.pos.x - fwd.x * (k * 2.2 - 4) + (Math.random() - 0.5) * 5, S.pos.y - GEAR_H + 0.8, S.pos.z - fwd.z * (k * 2.2 - 4) + (Math.random() - 0.5) * 5, 2.6 + Math.random() * 2, 0.5); }
   XT.wasGround = S.onGround;
   if (!S.onGround && !S.arc && S.nLoad > 3.6 && S.V > 70 && S.pos.y < 6000) { XT.vap += S.V * dt; if (XT.vap > 3) { XT.vap = 0; const w = (PL.span || PL.chase[0] * 0.7) * 0.5; for (const sx of [-1, 1]) { tmpV.set(sx * w, 0.2, 1.5).applyQuaternion(S.q).add(S.pos); puff(tmpV.x, tmpV.y, tmpV.z, 0.7, 0.55); } } }
