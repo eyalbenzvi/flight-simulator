@@ -518,16 +518,22 @@ const GEO = {};
     red-roofed moshav/kibbutz houses around a water tower, and flat-roofed stone houses around a minaret. */
 function buildScatter() {
   // every tree stands on its own soft shadow (a dark disc, offset away from the afternoon sun), and is darker underneath: no more floating lollipops
-  const shDisc = () => new THREE.CircleGeometry(0.62, 9).rotateX(-Math.PI / 2).translate(0.2, 0.035, -0.22);
-  GEO.tree = mergeGeo([[new THREE.ConeGeometry(0.5, 0.62, 7).translate(0, 0.62, 0), 1, 1, 1], [new THREE.ConeGeometry(0.42, 0.5, 7).translate(0, 0.32, 0), 0.72, 0.72, 0.72], [new THREE.CylinderGeometry(0.06, 0.08, 0.2, 5).translate(0, 0.1, 0), 0.32, 0.24, 0.16], [shDisc(), 0.30, 0.34, 0.42]]);
-  { const cr = new THREE.IcosahedronGeometry(0.5, 1).scale(1, 0.85, 1).translate(0, 0.62, 0), lo = new THREE.SphereGeometry(0.46, 8, 5, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45).scale(1.04, 0.85, 1.04).translate(0, 0.62, 0);
-    GEO.crown = mergeGeo([[cr, 1, 1, 1], [lo, 0.62, 0.62, 0.62], [new THREE.CylinderGeometry(0.07, 0.09, 0.3, 5).translate(0, 0.15, 0), 0.34, 0.26, 0.18], [shDisc(), 0.30, 0.34, 0.42]]); }
+  // Trees, seen from low down: a pine in three tiers, a crown of three lobes, both lighter toward the top so they have volume. The shadow under
+  // each is its own mesh (`tsh`, `bsh`, sharing the trees' instance matrices): a disc that multiplies the ground, dark in the middle and nothing
+  // at the rim, so it is soft on any ground colour (it used to be a hard, nearly black polygon).
+  const lift = g => { const p = g.attributes.position, c = g.attributes.color; let top = 0; for (let k = 0; k < p.count; k++) top = Math.max(top, p.getY(k)); for (let k = 0; k < p.count; k++) { const y = p.getY(k); if (y < 0.3) continue; const f = 0.60 + 0.52 * (y - 0.3) / (top - 0.3); c.setXYZ(k, c.getX(k) * f, c.getY(k) * f, c.getZ(k) * f); } return g; };
+  GEO.tree = lift(mergeGeo([[new THREE.ConeGeometry(0.50, 0.46, 8).translate(0, 0.40, 0), 1, 1, 1], [new THREE.ConeGeometry(0.40, 0.42, 8).translate(0, 0.64, 0), 1, 1, 1], [new THREE.ConeGeometry(0.27, 0.40, 8).translate(0, 0.86, 0), 1, 1, 1], [new THREE.CylinderGeometry(0.06, 0.08, 0.2, 5).translate(0, 0.1, 0), 0.32, 0.24, 0.16]]));
+  GEO.crown = lift(mergeGeo([[new THREE.IcosahedronGeometry(0.5, 1).scale(1, 0.85, 1).translate(0, 0.62, 0), 1, 1, 1], [new THREE.IcosahedronGeometry(0.34, 1).translate(0.25, 0.50, 0.12), 0.94, 0.94, 0.94], [new THREE.IcosahedronGeometry(0.30, 1).translate(-0.21, 0.56, -0.18), 1.05, 1.05, 1.05], [new THREE.CylinderGeometry(0.07, 0.09, 0.3, 5).translate(0, 0.15, 0), 0.34, 0.26, 0.18]]));
+  { const g = new THREE.CircleGeometry(0.78, 18).rotateX(-Math.PI / 2).translate(0.2, 0.06, -0.22), n = g.attributes.position.count, c = new Float32Array(n * 3).fill(1); c[0] = c[1] = c[2] = 0.50; g.setAttribute('color', new THREE.BufferAttribute(c, 3)); GEO.treeShade = g; }
   GEO.house = mergeGeo([[new THREE.BoxGeometry(1, 0.6, 1).translate(0, 0.3, 0), 1, 1, 1], [new THREE.ConeGeometry(0.78, 0.42, 4).rotateY(Math.PI / 4).translate(0, 0.81, 0), 0.76, 0.29, 0.21]]);
   GEO.stone = mergeGeo([[new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), 1, 1, 1]]);
   GEO.tower = mergeGeo([[new THREE.CylinderGeometry(0.1, 0.13, 0.72, 8).translate(0, 0.36, 0), 0.8, 0.8, 0.78], [new THREE.CylinderGeometry(0.5, 0.36, 0.3, 12).translate(0, 0.86, 0), 0.92, 0.92, 0.9]]);
   GEO.minaret = mergeGeo([[new THREE.CylinderGeometry(0.03, 0.06, 0.9, 8).translate(0, 0.45, 0), 0.96, 0.95, 0.9], [new THREE.ConeGeometry(0.05, 0.14, 8).translate(0, 0.97, 0), 0.25, 0.5, 0.35], [new THREE.CylinderGeometry(0.085, 0.085, 0.03, 8).translate(0, 0.7, 0), 0.9, 0.9, 0.86]]);
   const mk = (g, n) => { const m = new THREE.InstancedMesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }), n); m.frustumCulled = false; m.setColorAt(0, new THREE.Color(1, 1, 1)); m.instanceColor.array.fill(1); m.count = 0; scene.add(m); return m; };
+  const shMat = new THREE.MeshBasicMaterial({ vertexColors: true, blending: THREE.MultiplyBlending, transparent: true, depthWrite: false, fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mkSh = host => { const m = new THREE.InstancedMesh(GEO.treeShade, shMat, host.instanceMatrix.count); m.instanceMatrix = host.instanceMatrix; m.frustumCulled = false; m.count = 0; m.renderOrder = 1; scene.add(m); return m; };
   scatter = { bm: mk(GEO.crown, BIGGRID ? 6500 : 2600), tm: mk(GEO.tree, BIGGRID ? 9000 : 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
+  scatter.tsh = mkSh(scatter.tm); scatter.bsh = mkSh(scatter.bm);
 }
 function updateScatter() {
   // The scatter is rebuilt every 170 m of flight, and a low, fast jet covers that twice a second: done in one go it held a frame back each time (the
@@ -576,7 +582,7 @@ function updateScatter() {
     } }
   }
   [[tm, nt], [bm, nb], [hm, nh], [sm, ns], [wm, nw], [mm, nm]].forEach(([m, c]) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
-  S2.job = null; S2.built = true;
+  S2.tsh.count = nt; S2.bsh.count = nb; S2.job = null; S2.built = true;
 }
 
 function buildDetails() {

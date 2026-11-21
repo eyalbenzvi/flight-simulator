@@ -261,8 +261,14 @@ What was done with that (round eight, softening):
   one step at a time: building shadows, draw distance to 75% then 55% (`DET.far` in the cull; thick forests go with the last), and in the "best"
   setting the pixel density in quarter steps to 1.5. One way for the visit. A browser that caps at 30 frames a second (a power-saving mode) will
   walk down all the steps: known, accepted.
-- Left for later, each needs its own round: rounded terrain between grid points (the mesh must stay equal to `triHeight`), road shoulders (needs
-  transparency over a logarithmic depth buffer), districts by character, more hand-made landmarks, and real elevation data.
+- Trees (`GEO.tree`, `GEO.crown`, `lift`, `GEO.treeShade` in `buildScatter`'s geometry block): a pine in three tiers, a crown of three lobes,
+  lighter toward the top. The shadow is its own instanced mesh (`scatter.tsh`, `scatter.bsh`) sharing the trees' instance matrices, drawn with
+  `MultiplyBlending` from vertex colours (grey centre, white rim): soft on any ground. In the pictures the hard black polygons are gone; the new
+  shadow is faint, hardly seen.
+- Looked at and left as they are: the horizon (already soft), city lights at night, road edges (the texture already has a pale shoulder), the
+  list of hand-made landmarks (dozens per city already).
+- Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); districts
+  by character; real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).
 
 ## Start-up
 
