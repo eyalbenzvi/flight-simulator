@@ -72,13 +72,13 @@ function updateControls(dt) {
   if (keys.KeyW || keys.ArrowUp) ud += 1; if (keys.KeyS || keys.ArrowDown) ud -= 1;      // ud > 0 always means nose up / climb, in both flight modes
   if (keys.KeyD || keys.ArrowRight) lr += 1; if (keys.KeyA || keys.ArrowLeft) lr -= 1;
   if (keys.KeyE) yt += 1; if (keys.KeyQ) yt -= 1;
-  if (touch.on) { ud -= touch.y; lr += touch.x; }
+  if (touch.on) { ud -= touch.y; lr += touch.x; } if (PAD.on) { ud -= PAD.y; lr += PAD.x; }
   ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;                    // optional aircraft-stick convention: pull back to climb
   // throttle (reverse thrust becomes available on the ground below idle)
   const tu = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, td = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;
   if (tu) S.thr += 0.45 * dt; if (td) S.thr -= 0.45 * dt;
   S.thr = clamp(S.thr, S.onGround && !PL.tricks ? -0.35 : 0, 1);          // reverse thrust: the two transports only
-  S.brake = !!(keys.KeyB || keys.Space); S.prot = ''; S.boost = 0;
+  S.brake = !!(keys.KeyB || keys.Space || PAD.brk); S.prot = ''; S.boost = 0;
   const air = !S.onGround, climb = ud;                          // Easy mode: "up" means climb
   let pt = ud, rt = lr;
   if (S.trick) {

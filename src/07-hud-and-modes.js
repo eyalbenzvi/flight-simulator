@@ -467,9 +467,9 @@ function arcSay(en, he) { if (TNOW > A.msgT) { A.msgT = TNOW + 4; toast(L(en, he
 function arcadeStep(dt) {
   if (A.sync) arcSync();
   let ud = 0, lr = 0; if (keys.KeyW || keys.ArrowUp) ud += 1; if (keys.KeyS || keys.ArrowDown) ud -= 1; if (keys.KeyD || keys.ArrowRight) lr += 1; if (keys.KeyA || keys.ArrowLeft) lr -= 1;
-  if (touch.on) { ud -= touch.y; lr += touch.x; } ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;
+  if (touch.on) { ud -= touch.y; lr += touch.x; } if (PAD.on) { ud -= PAD.y; lr += PAD.x; } ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;
   const up = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, dn = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;
-  if (up) S.thr += 0.4 * dt; if (dn) S.thr -= 0.4 * dt; S.thr = clamp(S.thr, 0, 1); S.brake = !!(keys.KeyB || keys.Space);
+  if (up) S.thr += 0.4 * dt; if (dn) S.thr -= 0.4 * dt; S.thr = clamp(S.thr, 0, 1); S.brake = !!(keys.KeyB || keys.Space || PAD.brk);
   const vMin = arcVmin(), vMax = PL.aVmax; let G2 = 0;
   if (S.onGround) {
     // on the ground: the lever drives, the stick steers, and it lifts off by itself once it is fast enough
