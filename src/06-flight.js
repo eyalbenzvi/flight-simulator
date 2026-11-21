@@ -72,7 +72,7 @@ function updateControls(dt) {
   if (keys.KeyW || keys.ArrowUp) ud += 1; if (keys.KeyS || keys.ArrowDown) ud -= 1;      // ud > 0 always means nose up / climb, in both flight modes
   if (keys.KeyD || keys.ArrowRight) lr += 1; if (keys.KeyA || keys.ArrowLeft) lr -= 1;
   if (keys.KeyE) yt += 1; if (keys.KeyQ) yt -= 1;
-  if (touch.on) { ud -= touch.y; lr += touch.x; } if (PAD.on) { ud -= PAD.y; lr += PAD.x; }
+  if (touch.on) { ud -= touch.y; lr += touch.x; } if (PAD.on) { ud -= PAD.y; lr += PAD.x; } if (TILT.on && !touch.on) { lr += TILT.x; ud += TILT.y * (SAVE.inv ? -1 : 1); }          /* tilt is always yoke-like: lean it away to go down */
   ud = clamp(ud, -1, 1); lr = clamp(lr, -1, 1); if (SAVE.inv) ud = -ud;                    // optional aircraft-stick convention: pull back to climb
   // throttle (reverse thrust becomes available on the ground below idle)
   const tu = keys.ShiftLeft || keys.ShiftRight || keys.Equal || keys.PageUp, td = keys.ControlLeft || keys.ControlRight || keys.Minus || keys.PageDown;

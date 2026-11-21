@@ -15,6 +15,29 @@ function padRead(dt) {
   PAD.brk = b(1) > 0.5;
 }
 
+/** Steering by tilting the phone, as the big mobile simulators do (an option in the settings; the thumb stick stays and wins while it is touched).
+    It reads gravity from the motion sensor, in the axes of the screen as it is turned now. The way the phone is held when a flight starts or resumes is
+    neutral (`TILT.need`): roll is how far the screen's right edge dips (30 degrees is full), pitch is how far its top leans away or back (22 degrees
+    is full; away is nose down, like a yoke, unless the stick sense is turned round). Android and iOS report gravity with opposite signs: the sign is
+    taken from the posture at calibration. Never tried on a real phone. */
+const TILT = { on: false, ok: false, need: true, x: 0, y: 0, g: null, s: 1, r0: 0, p0: 0, t: 0 };
+function tiltEv(e) {
+  const a = e.accelerationIncludingGravity; if (!TILT.on || !a || a.x === null || a.x === undefined) return;
+  const o = (screen.orientation && typeof screen.orientation.angle === 'number' ? screen.orientation.angle : +window.orientation || 0) * DEG, c = Math.cos(o), sn = Math.sin(o);
+  const raw = [a.x * c - a.y * sn, a.x * sn + a.y * c, a.z]; if (!TILT.g || TILT.need) TILT.g = raw.slice(); else for (let i = 0; i < 3; i++) TILT.g[i] += (raw[i] - TILT.g[i]) * 0.3;
+  const g = TILT.g, len = Math.hypot(g[0], g[1], g[2]) || 1; if (TILT.need) TILT.s = Math.abs(g[1]) > 2.5 ? Math.sign(g[1]) : (Math.sign(g[2]) || 1);
+  const sg = TILT.s, roll = Math.asin(clamp(sg * g[0] / len, -1, 1)), pit = Math.atan2(sg * g[2], sg * g[1]);
+  if (TILT.need) { TILT.need = false; TILT.r0 = roll; TILT.p0 = pit; }
+  const shape = (v, full) => { const d = 0.03, m = Math.min(Math.abs(v) / full, 1); return m < d ? 0 : Math.sign(v) * Math.pow((m - d) / (1 - d), 1.25); };
+  TILT.x = shape(-(roll - TILT.r0), 30 * DEG); TILT.y = shape(-Math.atan2(Math.sin(pit - TILT.p0), Math.cos(pit - TILT.p0)), 22 * DEG); TILT.t = performance.now();
+}
+/** Turn tilt steering on. Must be called from a tap: iOS asks the player's permission for the motion sensor, and only then. */
+function tiltStart() {
+  const D = window.DeviceMotionEvent, go = () => { if (!TILT.ok) { window.addEventListener('devicemotion', tiltEv); TILT.ok = true; } TILT.need = true; TILT.on = true; };
+  const no = () => { SAVE.tilt = 0; persist(); TILT.on = false; toast(L('This device gives no tilt reading. The thumb stick is on', 'המכשיר לא מוסר נתוני הטיה. הג׳ויסטיק פעיל'), 5); };
+  if (!D) return no(); if (typeof D.requestPermission === 'function') { try { D.requestPermission().then(r => r === 'granted' ? go() : no()).catch(no); } catch (e) { no(); } } else go();
+}
+function tiltStop() { TILT.on = false; TILT.x = TILT.y = 0; }
 function buildExtras() {
   buildOldCity();
   // --- the aircraft shadows itself (wing on fuselage, tail on wing): one small shadow map that follows it; larger screens only ---
@@ -96,6 +119,7 @@ function puff(x, y, z, size, alpha) { if (!TR) return; const i = TR.i; TR.i = (i
 
 function updateExtras(dt, run, moved) {
   padRead(dt);
+  if (TILT.on && performance.now() - TILT.t > 600) TILT.x = TILT.y = 0;          // the sensor went quiet: let go rather than hold the last tilt
   const lights = ENV.uLights.value, cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
   // night lamps follow the light; the instruments dim a little at night
   if (lights !== XT.night) { XT.night = lights; for (const [p, k] of [[XT.lamps, 0.95], [XT.red, 1], [XT.green, 1], [XT.flood, 0.9]]) if (p) { p.visible = lights > 0.05; p.material.opacity = Math.min(1, lights * 1.3) * k; }

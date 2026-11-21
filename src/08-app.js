@@ -113,15 +113,28 @@ window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 function setupTouch() {
   if (window.matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) { document.body.classList.add('touch', 'nopfd'); RES.pr = RES.fixed || Math.min(RES.max, 1.5); renderer.setPixelRatio(RES.pr); resize(); }
-  const stick = $('stick'), knob = $('knob');
-  const mv = e => { const r = stick.getBoundingClientRect(); let x = (e.clientX - r.left - r.width / 2) / (r.width / 2), y = (e.clientY - r.top - r.height / 2) / (r.height / 2); const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
-    touch.x = x; touch.y = y; touch.on = true; knob.style.transform = `translate(${x * 37}px,${y * 37}px)`; };
-  const end = () => { touch.x = touch.y = 0; touch.on = false; knob.style.transform = ''; };
-  stick.addEventListener('pointerdown', e => { stick.setPointerCapture(e.pointerId); mv(e); });
-  stick.addEventListener('pointermove', e => { if (touch.on) mv(e); }); stick.addEventListener('pointerup', end); stick.addEventListener('pointercancel', end);
-  const th = $('thrT'); let thOn = false; const tm = e => { const r = th.getBoundingClientRect(); S.thr = clamp(1 - (e.clientY - r.top - 8) / (r.height - 16), 0, 1); };
-  th.addEventListener('pointerdown', e => { th.setPointerCapture(e.pointerId); thOn = true; tm(e); }); th.addEventListener('pointermove', e => { if (thOn) tm(e); });
-  th.addEventListener('pointerup', () => thOn = false); th.addEventListener('pointercancel', () => thOn = false);
+  // --- the stick floats: the whole lower left of the screen is the stick. It appears under the thumb wherever that comes down, so the hand never has to
+  //     find it or stay on a small disc; if the thumb runs past the rim the base follows it; a small dead zone in the middle and a curved response make
+  //     small corrections fine and full deflection still within a thumb's reach. At rest a faint ring shows where it is. ---
+  const stick = $('stick'), knob = $('knob'), zone = $('stZone'); let sid = null, bx = 0, by = 0;
+  const RAD = () => clamp(Math.min(window.innerWidth, window.innerHeight) * 0.17, 56, 86);
+  const place = () => { const R = RAD(), r = $('hud').getBoundingClientRect(); stick.style.width = stick.style.height = 2 * R + 'px'; stick.style.left = bx - r.left - R + 'px'; stick.style.top = by - r.top - R + 'px'; stick.style.bottom = 'auto'; };
+  const mv = e => { const R = RAD(); let dx = e.clientX - bx, dy = e.clientY - by, m = Math.hypot(dx, dy);
+    if (m > R) { bx += dx * (1 - R / m); by += dy * (1 - R / m); dx *= R / m; dy *= R / m; m = R; place(); }            // past the rim: the base comes along
+    const DZ = 0.07, k = m / R < DZ ? 0 : Math.pow((m / R - DZ) / (1 - DZ), 1.45) / (m / R);
+    touch.x = dx / R * k; touch.y = dy / R * k; touch.on = true; knob.style.transform = `translate(${dx}px,${dy}px)`; };
+  const end = e => { if (e && e.pointerId !== sid) return; sid = null; touch.x = touch.y = 0; touch.on = false; knob.style.transform = ''; stick.classList.remove('on'); stick.style.left = stick.style.top = stick.style.bottom = stick.style.width = stick.style.height = ''; };
+  zone.addEventListener('pointerdown', e => { if (sid !== null || !S.started || S.paused) return; sid = e.pointerId; try { zone.setPointerCapture(sid); } catch (x) {} bx = e.clientX; by = e.clientY; stick.classList.add('on'); place(); mv(e); e.preventDefault(); });
+  zone.addEventListener('pointermove', e => { if (e.pointerId === sid) mv(e); }); zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end); window.addEventListener('blur', () => end());
+  // --- the power lever is dragged, not poked: touching it changes nothing, sliding the thumb moves it from where it stands (a tap still sets it there);
+  //     its touch area is wider than what is drawn, and it gives a short tick at idle and at full power ---
+  const th = $('thrT'); let thId = null, ty0 = 0, t0 = 0, moved = false;
+  const tick = v => { if ((v === 0 || v === 1) && S.thr !== v && navigator.vibrate) try { navigator.vibrate(8); } catch (x) {} };
+  const tm = e => { const h = th.getBoundingClientRect().height - 16; if (Math.abs(e.clientY - ty0) > 6) moved = true; if (!moved) return; const v = clamp(t0 + (ty0 - e.clientY) / h, 0, 1); tick(v); S.thr = v; };
+  th.addEventListener('pointerdown', e => { if (thId !== null) return; thId = e.pointerId; try { th.setPointerCapture(thId); } catch (x) {} ty0 = e.clientY; t0 = S.thr; moved = false; });
+  th.addEventListener('pointermove', e => { if (e.pointerId === thId) tm(e); });
+  th.addEventListener('pointerup', e => { if (e.pointerId !== thId) return; thId = null; if (!moved) { const r = th.getBoundingClientRect(), v = clamp(1 - (e.clientY - r.top - 8) / (r.height - 16), 0, 1); tick(v); S.thr = v; } });
+  th.addEventListener('pointercancel', () => thId = null);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
     else tapButton(b, () => { action(k); if (b.parentNode.id === 'ctxMore') foldMore(true); }); });
@@ -198,6 +211,7 @@ function settingsRows(el, where, rer) {
   row(L('Time of day', 'שעה ביום'), [0, 1, 2, 3].map(todName), S.tod, i => { S.tod = i; applyTOD(i); });
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
+  if (touchUI) row(L('Steering', 'היגוי'), [L('Thumb stick', 'ג׳ויסטיק'), L('Tilt the phone', 'הטיית הטלפון')], SAVE.tilt | 0, i => { SAVE.tilt = i; if (i) tiltStart(); else tiltStop(); });
   row(L('Graphics', 'גרפיקה'), [L('Automatic', 'אוטומטי'), L('Fast', 'מהיר'), L('Best', 'מרבי')], SAVE.gfx | 0, i => { SAVE.gfx = i; applyGfx(i); });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
   row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
@@ -218,7 +232,7 @@ const KEYS = [['Climb / descend', 'טיפוס / ירידה', '↑ / ↓ · W / S
   ['Expert: gear, flaps, rudder', 'מקצועי: גלגלים, מדפים, הגה כיוון', 'G · F · Q / E']];
 function keyList(el) { el.className = 'keysL'; for (const [en, he, k] of KEYS) { const d = document.createElement('div'), a = document.createElement('span'), b = document.createElement('b'); a.textContent = L(en, he); b.textContent = k; b.dir = 'ltr'; d.append(a, b); el.appendChild(d); } }
 function openMenu() { if (!S.started) return; document.body.classList.add('paused'); S.paused = true; for (const k in keys) keys[k] = false; renderPanel('pause'); $('menu').style.display = 'flex'; $('menu').scrollTop = 0; }
-function closeMenu() { document.body.classList.remove('paused'); S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
+function closeMenu() { TILT.need = true; document.body.classList.remove('paused'); S.paused = false; $('menu').style.display = 'none'; $('toast').style.display = 'none'; }
 /** Android browsers can wipe 2D canvases after a GPU reset (memory pressure, a heavy settings change) or while the tab sleeps.
     Every canvas the scene keeps as a texture, and the baked map image, would come back blank: a black minimap and invisible
     place names. Each one is saved once as a PNG and repainted when its canvas, or the WebGL context, is restored, and a
@@ -350,6 +364,7 @@ const WORLD = { ready: false, wantFly: false };
 const worldFailed = e => { console.error(e); try { localStorage.removeItem('ifs-save'); } catch (x) {}      /* a damaged save must not fail again after the reload */ $('fly').textContent = '!'; $('fly').disabled = true; $('sBody').textContent = ''; document.body.classList.remove('building');
   $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
 function startFlight() {
+  if (SAVE.tilt && document.body.classList.contains('touch')) tiltStart();          // the motion sensor may only be asked for from a tap, and this is one
   const fly = $('fly'); if (!WORLD.ready) { WORLD.wantFly = true; fly.classList.add('busy'); Snd.init(); return; }          // pressed while the map is still being built: it starts as soon as it is there
   Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = S.cam !== 1;          /* in the chase view the camera glides in from where the start screen's orbit left it */ $('start').style.display = 'none'; $('hud').style.display = 'block';
   if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4);

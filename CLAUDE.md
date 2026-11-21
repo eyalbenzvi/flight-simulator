@@ -161,6 +161,16 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
 - On touch, Land, Roll and Loop are folded behind one "⋯" button (`cMore`, `ctxMore`, `foldMore`): it opens them, and they fold away after a choice or 7 s.
   The button is magenta during an automatic landing (cancel is inside). Only View, and in Expert gear, flaps and brake, stay out.
+- Touch steering (`setupTouch` in `src/08-app.js`; chosen after looking at how the mobile simulators and action flying games do it):
+  - The stick floats. The lower left of the screen (`#stZone`: 46% × 68%, on an upright phone 62% × 46%) is the stick's zone; it appears under the thumb
+    wherever that lands, its base follows a thumb that runs past the rim, there is a 7% dead zone rescaled so nothing is lost, and the response is curved
+    (power 1.45). At rest `#stick` is only a faint ring and takes no touches. The zone takes the drags there, so free look is on the rest of the screen.
+  - The power lever is dragged from where it stands (a touch alone changes nothing; a tap still sets it), has a touch area wider than it looks, and ticks
+    at idle and full power.
+  - Tilt steering is an option in the settings on touch devices (`SAVE.tilt`, `TILT`, `tiltStart` in `src/07c-extras.js`): gravity from `devicemotion`
+    in screen axes, neutral taken when a flight starts or the menu closes, 30° of roll and 22° of pitch for full deflection, always yoke-like. The
+    permission iOS needs is asked from the settings tap or the FLY tap. The maths passes a synthetic test for both platforms' sign conventions, but it
+    has never run on a real phone.
 - HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
 - Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.
 - `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) ; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.
