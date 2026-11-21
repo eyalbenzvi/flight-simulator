@@ -249,6 +249,8 @@ const TERRAIN_FS = `
         float l1=floor(texture2D(tLC,uvL+vec2(hd.x,0.0)).r*255.0+0.5), l2=floor(texture2D(tLC,uvL+vec2(0.0,hd.y)).r*255.0+0.5);
         if(abs(l1-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l1+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); }
         if(abs(l2-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l2+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); } } }
+    /* the beach: ground a few metres above the sea is sand, pale and dry higher up, darker and wet at the water's edge (only the open coasts lie between -3 and 5 m) */
+    { float bh=vW.y+(nC-0.5)*2.2+(nD-0.5)*1.2, beach=(1.0-smoothstep(1.6,4.6,bh))*step(-3.0,vW.y); if(beach>0.01){ col=mix(col,mix(vec3(0.62,0.55,0.41),vec3(0.86,0.79,0.62),smoothstep(0.2,1.5,bh))*(0.93+0.14*nD),beach); urban*=1.0-beach; } }
     float outside=max(max(uB.x-P.x,P.x-uB.z),max(uB.y-P.y,P.y-uB.w));
     if(outside>0.0){ col=vCol*(0.80+0.40*nA)*(0.88+0.24*nB); urban=0.0; }          // beyond the map: plain regional ground, fading into the haze
     // layered rock on steep ground

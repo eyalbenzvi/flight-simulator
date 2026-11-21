@@ -246,8 +246,13 @@ What was done with that (round eight, softening):
 - Second run on that phone: 60 frames a second as played at x2 in all three places (the synced lines are noise at that level). On that evidence
   `BIGGRID` phones also get the building ground shadows (`tBS`), draw distances between the small phone's and the desktop's, and roof detail
   (`buildCities`: a set-back top floor and sometimes a mast on blocks over 34 m, a stair house, white boiler tanks and dark collectors on lower
-  ones; plain instanced boxes per 6 km bucket, drawn within 3 km). These three were written without being run or looked at here (the owner asked
-  that nothing be rendered or measured in this environment): treat them as unverified until he reports.
+  ones; plain instanced boxes per 6 km bucket, drawn within 3 km). Seen afterwards in software-rendered pictures (the owner allows pictures here,
+  not timing): they load and look right. Whether the phone still holds 60 frames a second with them is for him to measure.
+- The beach (`TERRAIN_FS`): ground between -3 and about 4.6 m is sand, wet and darker at the water's edge; only the open coasts lie at that height.
+- A mapped forest or orchard is thick on `BIGGRID` devices (`updateScatter`): up to four trees per 42 m cell within 950 m, limits 9,000 pines and
+  6,500 crowns.
+- Left for later, each needs its own round: rounded terrain between grid points (the mesh must stay equal to `triHeight`), road shoulders (needs
+  transparency over a logarithmic depth buffer), districts by character, more hand-made landmarks, and real elevation data.
 
 ## Start-up
 
