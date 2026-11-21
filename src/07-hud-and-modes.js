@@ -36,15 +36,15 @@ function landPanel(touchUI) {
   if (S.crashed || S.trick || PH.on || !t) cls = '';
   else if (S.land) {
     const rw = S.land, d = realDist(S.pos.x - rw.tx, S.pos.z - rw.tz);
-    const ph = !air ? L('braking to a stop', 'בלימה עד עצירה') : S.ra < 15 ? L('touching down', 'נגיעה במסלול') : S.landPh === 'final' ? L('on final approach', 'בגישה הסופית') : L('flying to the approach path', 'טסים אל קו הגישה (הקו הסגול במפה)');
-    cls = 'active'; main = '<b>' + L('Automatic landing', 'נחיתה אוטומטית') + '</b> · ' + apName(AIRPORTS[rw.ap]) + ' · ' + kmTxt(d) + '<br>' + ph;
+    const ph = !air ? L('braking to a stop', 'בלימה עד עצירה') : S.ra < 15 ? L('touching down', 'נגיעה במסלול') : S.landPh === 'final' ? L('on final approach', 'בגישה הסופית') : L('flying to the approach path', 'טסים אל קו הגישה');
+    cls = 'active'; main = '<b>' + L('Automatic landing', 'נחיתה אוטומטית') + '</b> · ' + apName(AIRPORTS[rw.ap]) + ' ' + kmTxt(d) + ' · ' + ph;
   } else if (air && t.inRange) {
-    cls = 'ready'; main = '<b>' + relArrow(t.brg - S.hdg) + ' ' + apName(t.ap) + ' ' + kmTxt(t.dist) + '</b> · ' + L('automatic landing available: ', 'אפשר לנחות אוטומטית: ') + (touchUI ? L('tap Land', 'לוחצים "נחיתה"') : L('press L', 'לוחצים L'));
-  } else if (air && S.arc && S.ra < 300) {
-    cls = 'info'; main = L('Easy level: you can land on any open ground. Slow down and come down gently', 'ברמה קלה אפשר לנחות בכל שטח פתוח: מאטים ויורדים בעדינות');
-  }
+    // the way to the nearest airport is only shown when it is useful: for a few seconds on coming into range, and when low and near (on touch the green Land button already says it can land)
+    if (!S.landSeen) { S.landSeen = true; S.landSeenT = TNOW + 7; }
+    if (TNOW < S.landSeenT || (S.ra < 900 && t.dist < 15000)) { cls = 'ready'; main = '<b>' + relArrow(t.brg - S.hdg) + ' ' + apName(t.ap) + ' ' + kmTxt(t.dist) + '</b>' + (touchUI ? '' : ' · ' + L('L lands', 'L: נחיתה אוטומטית')); }
+  } else S.landSeen = false;
   let chips = '';
-  if (cls && cls !== 'info' && !(S.arc && !S.land)) {
+  if (cls && (S.land ? air && S.ra < 900 : !S.assist && S.ra < 600)) {          // gear and flaps: while they matter (low, in Expert or during an automatic landing)
     const gp = S.gearPos, g = PL.fixedGear ? L('fixed gear', 'גלגלים קבועים') : (gp > 0.98 ? '▼ ' : gp < 0.02 ? '▲ ' : '… ') + L(gp > 0.98 ? 'gear down' : gp < 0.02 ? 'gear up' : 'gear moving', gp > 0.98 ? 'גלגלים למטה' : gp < 0.02 ? 'גלגלים למעלה' : 'גלגלים בתנועה');
     chips = '<span class="' + (gp > 0.98 || PL.fixedGear ? 'on' : gp < 0.02 ? 'off' : 'mid') + '">' + g + '</span>' + (FLAPS.length > 1 ? '<span>' + L('flaps ', 'מדפים ') + FLAPS[S.flapIdx] + '°</span>' : '') +
       (S.brake ? '<span class="on">' + L('brakes on', 'בלמים') + '</span>' : '') + '<span class="tag">' + (auto ? L('automatic', 'אוטומטי') : L('manual: G gear, F flaps', 'ידני')) + '</span>';
@@ -248,36 +248,35 @@ function hintText() {
   const T = document.body.classList.contains('touch'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓', ft = m => (Math.round(m * FT / 50) * 50).toLocaleString('en') + ' ft';
   if (S.crashed) return '';
   if (S.trick) return S.trick.type === 'loop' ? L('Looping…', 'לולאה…') : L('Rolling…', 'גלגול…');
-  if (S.land) return S.onGround ? '' : L('Hands off: the aircraft lands itself. ' + (T ? 'Tap Cancel landing' : 'Press L') + ' to take over', 'לא נוגעים: המטוס נוחת לבד. כדי להשתלט: ' + (T ? '"ביטול נחיתה"' : 'L'));
-  if (S.ap.on) return L('Autopilot on. The stick moves its altitude and heading targets', 'טייס אוטומטי פועל. הג׳ויסטיק משנה את הגובה והכיוון שהוא שומר');
+  if (S.land) return S.onGround || TNOW - (S.landT0 || 0) > 9 ? '' : L('Hands off: the aircraft lands itself. ' + (T ? 'Tap Cancel landing' : 'Press L') + ' to take over', 'לא נוגעים: המטוס נוחת לבד. כדי להשתלט: ' + (T ? '"ביטול נחיתה"' : 'L'));
+  if (S.ap.on) return TNOW - (S.apT0 || 0) > 9 ? '' : L('Autopilot on. The stick moves its altitude and heading targets', 'טייס אוטומטי פועל. הג׳ויסטיק משנה את הגובה והכיוון שהוא שומר');
   if (S.arc) {
-    if (S.onGround) return A.v > 3 ? L('Here we go!', 'יוצאים לדרך!') : T ? L('Push the speed lever up. It takes off by itself', 'מרימים את ידית המהירות. המטוס ממריא לבד') : L('Hold Shift to go. It takes off by itself', 'מחזיקים Shift. המטוס ממריא לבד');
+    if (S.onGround) return A.v > 3 ? '' : T ? L('Push the speed lever up. It takes off by itself', 'מרימים את ידית המהירות. המטוס ממריא לבד') : L('Hold Shift to go. It takes off by itself', 'מחזיקים Shift. המטוס ממריא לבד');
     if (S.airTime < 25) return T ? L('Move the stick where you want to fly. Let go to fly straight', 'מזיזים את הג׳ויסטיק לאן שרוצים לטוס. משחררים, וטסים ישר') : L('The arrows steer. Let go to fly straight. X rolls, Z loops', 'החצים מכוונים. משחררים, וטסים ישר. X גלגול, Z לולאה');
     if (S.ra < 150 && A.v < PL.vs * 1.9) return L('Fly gently onto the ground to land', 'יורדים בעדינות אל הקרקע כדי לנחות');
     return '';
   }
   if (S.onGround) {
     if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : L('Full power. Raise the nose at ' + Math.round(S.vs0 * 1.15 * KT) + ' kt', 'הספק מלא. מרימים את האף ב-' + Math.round(S.vs0 * 1.15 * KT) + ' קשר');
-    if (S.landed) return S.assist ? L('Slowing down', 'מאטים') : (T ? L('Hold Brake to stop', 'מחזיקים "בלם" כדי לעצור') : L('Hold B or Space to brake', 'מחזיקים B או רווח כדי לבלום'));
+    if (S.landed) return S.assist ? '' : (T ? L('Hold Brake to stop', 'מחזיקים "בלם" כדי לעצור') : L('Hold B or Space to brake', 'מחזיקים B או רווח כדי לבלום'));
     return T ? L('Slide the power lever up to take off', 'מעלים את ידית ההספק כדי להמריא') : L('Hold Shift, or press 9, for take-off power', 'מחזיקים Shift, או לוחצים 9, להספק המראה');
   }
   if (S.assist) {
     if (S.prot) return S.prot;
     if (AIRPORTS.some(ap => Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < ap.R - 50) && S.gear) return T ? L('Over the airport: hold the stick down to land', 'מעל שדה התעופה: מחזיקים את הג׳ויסטיק למטה כדי לנחות') : L('Over the airport: hold ' + dn + ' to land', 'מעל שדה התעופה: מחזיקים ' + dn + ' כדי לנחות');
     // otherwise say what the aircraft is doing
-    if (S.toClimb) return L('Climbing out. Gear and flaps are automatic', 'מטפסים. הגלגלים והמדפים אוטומטיים');
-    if (S.holdAlt !== null) return L('Holding ', 'שומרים גובה ') + ft(S.holdAlt);
-    return S.vel.y > 1.5 ? L('Climbing through ', 'מטפסים, ') + ft(S.pos.y) : S.vel.y < -1.5 ? L('Descending through ', 'יורדים, ') + ft(S.pos.y) : '';
+    return '';                 // otherwise nothing: the instruments already show height and climb
   }
   if (S.gear && !PL.fixedGear && S.ra > 250 && S.V > S.vs0 * 1.5) return T ? L('The gear is still down: tap Gear', 'הגלגלים עדיין למטה: לוחצים "גלגלים"') : L('The gear is still down: press G', 'הגלגלים עדיין למטה: לוחצים G');
   if (S.gear && FLAPS.length > 1 && S.flapIdx === 0 && S.ra < 400 && S.vel.y < -1) return T ? L('Landing? Tap Flaps for landing flaps', 'נוחתים? לוחצים "מדפים"') : L('Landing? Press F for landing flaps, and fly ' + Math.round(S.vs0 * 1.3 * KT) + ' kt', 'נוחתים? לוחצים F למדפים, וטסים ב-' + Math.round(S.vs0 * 1.3 * KT) + ' קשר');
   if (S.gear && S.ra < 300 && S.vel.y < -1 && !S.onGround) return S.ra < 12 ? L('Flare: raise the nose gently, power to idle', 'הצפה: מרימים בעדינות את האף, הספק לסרק') : L('Approach speed ' + Math.round(S.vs0 * 1.3 * KT) + ' kt', 'מהירות גישה ' + Math.round(S.vs0 * 1.3 * KT) + ' קשר');
-  if (S.gamHold !== null) return L('Holding this flight path', 'שומרים על נתיב הטיסה');
   return '';
 }
-/** The always-visible key guide (desktop). It changes with the flight mode and the pitch setting. */
+/** The key guide shows for the first 45 s of a flight, then gets out of the way; "Always" in the settings (or the K key) pins it. */
+const legendOn = () => S.legend && (SAVE.legendPin || TNOW - (S.spawnT || 0) < 45);
+/** The key guide (desktop). It changes with the flight mode and the pitch setting. */
 function drawLegend() {
-  const el = $('legend'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓'; el.style.display = S.legend ? 'grid' : 'none'; el.textContent = '';
+  const el = $('legend'), up = SAVE.inv ? '↓' : '↑', dn = SAVE.inv ? '↑' : '↓'; el.style.display = legendOn() ? 'grid' : 'none'; el.textContent = '';
   if (S.arc) { for (const [k, en, he] of [[up, 'Up', 'למעלה'], [dn, 'Down', 'למטה'], ['← →', 'Turn', 'פנייה'], ['Shift', 'Faster', 'מהר יותר'], ['Ctrl', 'Slower', 'לאט יותר'], ['X', 'Roll', 'גלגול'], ['Z', 'Loop', 'לולאה'], ['Space', 'Brake', 'בלם'], ['L', 'Land automatically', 'נחיתה אוטומטית'], ['C', 'Change view', 'החלפת מבט'], ['Esc', 'Menu', 'תפריט']]) {
       const b = document.createElement('b'), sp = document.createElement('span'); b.textContent = k; b.dir = 'ltr'; sp.textContent = L(en, he); el.appendChild(b); el.appendChild(sp); } return; }
   const rows = [[up, S.assist ? L('Climb', 'טיפוס') : L('Nose up', 'אף למעלה')], [dn, S.assist ? L('Descend', 'ירידה') : L('Nose down', 'אף למטה')], ['← →', S.assist ? L('Turn', 'פנייה') : L('Roll', 'הטיה')], ['Shift / Ctrl', L('Power up / down', 'הספק למעלה / למטה')], ['0 – 9', L('Set power', 'קביעת הספק')], ['B / Space', L('Brake', 'בלם')], ['L', L('Land automatically', 'נחיתה אוטומטית')]];
@@ -296,11 +295,12 @@ function drawSys() {
     const AU = S.assist || S.land ? L(' · AUTO', ' · אוטו׳') : ''; $('sFlap').textContent = FLAPS.length < 2 ? L('NONE', 'אין') : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '') + AU;
     const gp = S.gearPos, ge = $('sGear'); ge.textContent = (PL.fixedGear ? L('FIXED', 'קבועים') : gp > 0.98 ? L('▼ DOWN', '▼ למטה') : gp < 0.02 ? L('▲ UP', '▲ למעלה') : L('MOVING', 'בתנועה')) + (PL.fixedGear ? '' : AU); ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
     const ae = $('sAp'); ae.textContent = S.land ? L('LANDING', 'נחיתה') : S.ap.on ? Math.round(S.ap.alt * FT / 10) * 10 + ' ft / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : L('OFF', 'כבוי'); ae.className = S.ap.on || S.land ? 'mg' : '';
-    $('sMode').textContent = L(LV[S.mode][0], LV[S.mode][1]); $('sMode').className = S.assist ? 'ok' : 'warnc';
+    const cfg = !S.assist || !!S.land || (!S.onGround && S.ra < 500) || Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 || (gp > 0.02 && gp < 0.98);          // gear and flaps rows: in Expert, low, or while they move
+    $('rFlap').hidden = !cfg || FLAPS.length < 2; $('rGear').hidden = !cfg || !!PL.fixedGear; $('rAp').hidden = !(S.ap.on || S.land);
   }
   if (document.body.classList.contains('nopfd')) $('strip').innerHTML = '<b>' + Math.round(S.V * KT) + '</b><span>kt</span><b>' + (Math.round(S.pos.y * FT / 10) * 10).toLocaleString('en') + '</b><span>ft</span><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b>';
   $('hint').textContent = hintText(); $('place').textContent = S.place ? L('Over ' + S.place, 'מעל ' + S.placeHe) : '';
-  if (!touchUI) { const sig = '' + S.mode + SAVE.lang + (SAVE.inv ? 'i' : 'n') + (S.legend ? 1 : 0); if (sig !== S.legSig) { S.legSig = sig; drawLegend(); } }
+  if (!touchUI) { const sig = '' + S.mode + SAVE.lang + (SAVE.inv ? 'i' : 'n') + (legendOn() ? 1 : 0); if (sig !== S.legSig) { S.legSig = sig; drawLegend(); } }
   const al = $('alert'), blink = (TNOW * 3 % 1) < 0.6;
   if (S.stallWarn && !S.crashed) { al.textContent = 'STALL'; al.style.display = blink ? 'block' : 'none'; }
   else if (S.gpws && !S.crashed && !S.assist) { al.textContent = 'PULL UP'; al.style.display = blink ? 'block' : 'none'; }
@@ -319,7 +319,7 @@ function drawSys() {
 const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
   if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
-  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (o.stamps && typeof o.stamps === 'object') d.stamps = o.stamps; } catch (e) { /* no storage: defaults */ } return d; })();
+  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
 function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
   const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
@@ -441,7 +441,7 @@ const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
 function setMode(m) {
   if (S.arc && S.trick && m !== 0) { S.q.setFromEuler(eul.set(A.gam + 0.03, -A.psi, -A.phi, 'YXZ')); const cg = Math.cos(A.gam); S.vel.set(Math.sin(A.psi) * cg * A.v, Math.sin(A.gam) * A.v, -Math.cos(A.psi) * cg * A.v); }      // leaving Easy in the middle of a roll or loop: the right way up
   S.mode = m; S.arc = m === 0; S.assist = m !== 2; S.trick = null; S.holdAlt = null;          /* a half-flown Easy loop must not be handed to the real-physics trick law */ S.gamHold = null; S.toClimb = false; A.sync = true; SAVE.mode = m; persist();
-  document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1]); if (SAVE.pfd !== undefined) document.body.classList.toggle('nopfd', !SAVE.pfd); else if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc);      /* the player's own choice of instruments wins over the level's default */ S.legSig = '';
+  document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L(LV[m][0], LV[m][1]); $('modeB').setAttribute('aria-label', L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1])); if (SAVE.pfd !== undefined) document.body.classList.toggle('nopfd', !SAVE.pfd); else if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc);      /* the player's own choice of instruments wins over the level's default */ S.legSig = '';
 }
 /* Easy's slowest speed: 1.18 x the stall speed for the flaps now set (automatic in Easy), so full flaps allow a real approach speed */
 function arcVmin() { const clm = PL.cl0 + PL.cla * PL.ast; return PL.vs * Math.sqrt(clm / (clm + 0.03 * S.flapDeg)) * 1.18; }

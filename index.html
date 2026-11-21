@@ -36,7 +36,7 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--cyan);outline
 body.touch #modeB{left:calc(10px + var(--sl));top:calc(60px + var(--st));height:44px;padding:0 10px;font-size:13px}
 #menuB{position:absolute;left:calc(10px + var(--sl));top:calc(10px + var(--st));width:44px;height:44px;padding:0;font-size:20px;background:var(--panel)}
 #sys{position:absolute;left:calc(10px + var(--sl));top:calc(64px + var(--st));width:172px;padding:8px 10px;font-size:13px;line-height:1.55;font-variant-numeric:tabular-nums}
-#sys .r{display:flex;justify-content:space-between;gap:10px} #sys .k{color:var(--dim)}
+#sys .r{display:flex;justify-content:space-between;gap:10px} #sys .r[hidden]{display:none} #sys .k{color:var(--dim)}
 #thrBar{height:5px;background:rgba(255,255,255,.12);border-radius:3px;margin:3px 0 5px;overflow:hidden} #thrFill{height:100%;width:0;background:var(--cyan)}
 #top{position:absolute;left:50%;top:calc(10px + var(--st));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;width:max-content;max-width:min(54vw,560px);text-align:center}
 #mission,#strip{padding:6px 12px;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums;display:none}
@@ -44,7 +44,6 @@ body.touch #modeB{left:calc(10px + var(--sl));top:calc(60px + var(--st));height:
 #strip b{font-weight:600;font-size:17px} #strip span{color:var(--dim);margin:0 9px 0 2px;font-size:12px}
 body.nopfd #strip{display:block} body.nopfd #pfd{display:none}
 #hint{color:var(--sand);font-size:14px;line-height:1.25;text-shadow:0 1px 2px #000;background:rgba(8,13,19,.62);padding:3px 10px;border-radius:12px;width:fit-content;margin-left:auto;margin-right:auto} #hint:empty{display:none}
-.about{color:var(--dim);font-size:13px;line-height:1.5}
 #place{font-size:12px;opacity:.8;text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9)}
 #map{position:absolute;right:calc(10px + var(--sr));top:calc(10px + var(--st));height:min(40vh,280px);border-radius:6px;border:1px solid var(--line);cursor:pointer}
 #map.big{height:min(62vh,540px)}
@@ -175,10 +174,9 @@ details.sec[open] summary{margin-bottom:7px}
   <div id="sys" class="panel">
     <div class="r"><span class="k">Throttle</span><span id="sThr">0%</span></div>
     <div id="thrBar"><div id="thrFill"></div></div>
-    <div class="r"><span class="k">Flaps</span><span id="sFlap">0°</span></div>
-    <div class="r"><span class="k">Gear</span><span id="sGear">DOWN</span></div>
-    <div class="r"><span class="k">Autopilot</span><span id="sAp">OFF</span></div>
-    <div class="r"><span class="k">Mode</span><span id="sMode">EASY</span></div>
+    <div class="r" id="rFlap"><span class="k">Flaps</span><span id="sFlap">0°</span></div>
+    <div class="r" id="rGear"><span class="k">Gear</span><span id="sGear">DOWN</span></div>
+    <div class="r" id="rAp"><span class="k">Autopilot</span><span id="sAp">OFF</span></div>
   </div>
   <div id="top">
     <div id="strip" class="panel"></div>

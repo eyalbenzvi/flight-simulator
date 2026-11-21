@@ -23,7 +23,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
-  if (!def.keep) S.lastSpawn = def; S.crashed = false; $('crash').style.display = 'none';
+  S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {

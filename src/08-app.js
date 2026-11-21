@@ -70,7 +70,7 @@ function action(code) {
   if (code === 'KeyC') { S.cam = (S.cam + 1) % 3; camSnap = true; return; }
   if (code === 'KeyT') { S.tod = (S.tod + 1) % 3; applyTOD(S.tod); return; }
   if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
-  if (code === 'KeyK') { S.legend = !S.legend; return; }
+  if (code === 'KeyK') { if (legendOn()) S.legend = false; else { S.legend = true; SAVE.legendPin = true; } S.legSig = ''; return; }
   if (code === 'KeyY') { WX = (WX + 1) % 3; applyTOD(S.tod); toast(L('Weather: ', 'מזג אוויר: ') + tr(WXN[WX])); return; }
   if (code === 'KeyN') { S.names = !S.names; return; }
   if (code === 'KeyV') { S.smoke = !S.smoke; toast(S.smoke ? L('Smoke trail on', 'שובל עשן פועל') : L('Smoke trail off', 'שובל עשן כבוי')); return; }
@@ -83,7 +83,7 @@ function action(code) {
     else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
     else { const t = landTarget();
       if (!t || !t.inRange) toast(L('No airport within 40 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 40 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
-      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.landTries = 0; S.landT = 0; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
+      else { S.landT0 = TNOW; S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.landTries = 0; S.landT = 0; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
   if (code === 'KeyG' && PL.fixedGear) return toast(L('This aircraft has fixed landing gear', 'למטוס הזה גלגלים קבועים'));
@@ -94,7 +94,7 @@ function action(code) {
   else if (code === 'KeyP') {
     if (S.ap.on) { S.ap.on = false; toast(L('Autopilot off', 'טייס אוטומטי כבוי')); }
     else if (S.onGround || S.ra < 60) toast(L('Autopilot needs 200 ft above ground', 'טייס אוטומטי פועל מ-200 רגל מעל הקרקע'));
-    else { S.land = null; S.trick = null; S.ap.on = true; S.ap.alt = S.pos.y; S.ap.hdg = S.hdg; S.ap.spd = Math.max(S.V, S.vs0 * 1.3); toast(L('Autopilot holding altitude, heading and speed', 'טייס אוטומטי: שומר גובה, כיוון ומהירות')); }
+    else { S.apT0 = TNOW; S.land = null; S.trick = null; S.ap.on = true; S.ap.alt = S.pos.y; S.ap.hdg = S.hdg; S.ap.spd = Math.max(S.V, S.vs0 * 1.3); toast(L('Autopilot holding altitude, heading and speed', 'טייס אוטומטי: שומר גובה, כיוון ומהירות')); }
   }
 }
 const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyF', 'KeyB', 'KeyP', 'KeyC', 'KeyT', 'KeyR', 'KeyM', 'KeyH', 'KeyL', 'KeyX', 'KeyZ', 'KeyV', 'KeyI', 'KeyO', 'KeyY', 'KeyN', 'KeyK', 'Space', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Equal', 'Minus', 'PageUp', 'PageDown']);
@@ -155,15 +155,13 @@ function renderPanel(where) {
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
     ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
-    ['pass', L('My flight passport', 'דרכון הטיסה שלי'), stampCount() + ' / ' + PICK_SITES.length, el => stampGrid(el, where, rer)],
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
-  secs.push(['about', L('About and credits', 'אודות וקרדיטים'), '', el => { el.className = 'about'; el.textContent = L('Roads, land cover, buildings and sites: © OpenStreetMap contributors (ODbL). Built-up areas: GHSL, European Commission Joint Research Centre. 3D engine: three.js. The map is simplified and is not for navigation.', 'כבישים, כיסוי קרקע, מבנים ואתרים: © תורמי OpenStreetMap ‏(ODbL). שטחים בנויים: GHSL, מרכז המחקר המשותף של הנציבות האירופית. מנוע תלת-ממד: three.js. המפה מפושטת ואינה מיועדת לניווט.'); }]);
   const open = OPEN[where]; body.textContent = '';
   for (const [id, title, val, fill] of secs) {
     const d = document.createElement('details'); d.className = 'sec'; d.open = open.has(id); d.addEventListener('toggle', () => { if (d.open) open.add(id); else open.delete(id); });
     const s = document.createElement('summary'); s.textContent = title; if (val) { const sm = document.createElement('small'); sm.textContent = val; s.appendChild(sm); }
-    const c = document.createElement('div'); if (id !== 'set' && id !== 'keys' && id !== 'about') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
+    const c = document.createElement('div'); if (id !== 'set' && id !== 'keys') c.className = 'grid'; fill(c); d.append(s, c); body.appendChild(d); }
   $(where === 'start' ? 'sSum' : 'mSum').textContent = [tr(PL.name), L(LV[S.mode][0], LV[S.mode][1]), cur ? startName(cur) : ''].filter(Boolean).join(' · ');
 }
 /** First in the air starts: any place in Israel, chosen on a map or by name (src/07b-picker.js). Shows the place chosen last. */
@@ -187,7 +185,7 @@ function settingsRows(el, where, rer) {
   row(L('Instruments', 'מכשירים'), [L('Simple', 'פשוטים'), L('Full', 'מלאים')], document.body.classList.contains('nopfd') ? 0 : 1, i => { document.body.classList.toggle('nopfd', !i); SAVE.pfd = !!i; });
   row(L('Smoke trail', 'שובל עשן'), onOff, S.smoke ? 0 : 1, i => { S.smoke = !i; });
   row(L('Sound', 'קול'), onOff, Snd.muted ? 1 : 0, i => { if (!!Snd.muted !== !!i) Snd.toggle(); });
-  if (!touchUI) row(L('Key guide on screen', 'מדריך מקשים על המסך'), [L('Shown', 'מוצג'), L('Hidden', 'מוסתר')], S.legend ? 0 : 1, i => { S.legend = !i; });
+  if (!touchUI) row(L('Key guide on screen', 'מדריך מקשים על המסך'), [L('Always', 'תמיד'), L('At the start of a flight', 'בתחילת טיסה'), L('Hidden', 'מוסתר')], !S.legend ? 2 : SAVE.legendPin ? 0 : 1, i => { S.legend = i < 2; SAVE.legendPin = i === 0; S.legSig = ''; });
   if (where === 'pause') { const b = document.createElement('button'); b.className = 'sec2'; b.style.marginTop = '10px'; b.textContent = L('Photo mode: look at the aircraft from any side', 'מצב צילום: מסתכלים על המטוס מכל צד');
     b.addEventListener('click', () => { closeMenu(); action('KeyO'); }); el.appendChild(b); }
 }
@@ -260,7 +258,7 @@ function loop(now) {
       if (!S.crashed && (!S.onGround || S.V > 4)) {          // buildings and other aircraft are solid, also for an aircraft rolling on the ground
         if (hitObstacle(S.pos.x, S.pos.y - GEAR_H * 0.5, S.pos.z, PL.chase[0] * 0.12)) crash(L('Flew into a building.', 'התנגשות בבניין'));
         else if (!S.onGround) for (const a of AIT) if (a.g.position.distanceToSquared(S.pos) < 900) { crash(L('Mid-air collision.', 'התנגשות באוויר')); break; } }
-      updateSystems(dt); readAttitude(); emitTrails(dt); if (frame % 20 === 0) { updatePlace(); updateStamps(); }
+      updateSystems(dt); readAttitude(); emitTrails(dt); if (frame % 20 === 0) updatePlace();
     }
     updateExplosion(dt); if (S.crashed && S.crashT > 0) { S.crashT -= dt; if (S.crashT <= 0) $('crash').style.display = 'flex'; }
     if (toastT > 0) { toastT -= dt; if (toastT <= 0) $('toast').style.display = 'none'; }

@@ -86,10 +86,12 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
 - HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
 - Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.
-- `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) and
-  the passport stamps; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.
-- The flight passport (`updateStamps`, `stampGrid`, `STAMP_FACTS` in `src/07b-picker.js`): flying within 2 km (real) of a `PICK_SITES` place below
-  1,500 m earns its stamp and a sentence about it; the menu section lists them and opens the picker on the chosen one.
+- `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) ; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.
+- Keep the screen quiet (the owner's rule: hide what is not needed now, never remove a function). In cruise only the speed strip, the map, the
+  menu button and the level chip show. The way to the nearest airport appears for 7 s on coming into range and when low and near; gear and
+  flap chips and rows only when low, in Expert or while landing; the autopilot row only when it is on; status hints ("holding 2,000 ft") are gone,
+  only instructions remain, and the autoland and autopilot hints show for 9 s; the key guide shows for the first 45 s of a flight unless pinned
+  (`legendOn`, `SAVE.legendPin`). There is no passport, score or credits section in the menus.
 - Easy mode climbs over rising ground by itself when low (`arcadeStep`), so letting go never flies into a hill; flat ground can still be landed on.
 
 ## Flight model
