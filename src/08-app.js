@@ -148,8 +148,8 @@ function setupTouch() {
   th.addEventListener('pointerup', e => { if (e.pointerId !== thId) return; thId = null; if (!moved) { const r = th.getBoundingClientRect(), v = clamp(1 - (e.clientY - r.top - 8) / (r.height - 16), 0, 1); tick(v); S.thr = v; } });
   th.addEventListener('pointercancel', () => thId = null);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
-    if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
-    else tapButton(b, () => { action(k); if (b.id === 'cRate') foldMore(false); else if (b.parentNode.id === 'ctxMore') foldMore(true); }); });          /* the rate button stays open, to be tapped again */
+    if (b.dataset.hold) { b.addEventListener('pointerdown', () => { keys[k] = true; clearTimeout(moreT); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => { if (keys[k] && b.parentNode.id === 'ctxMore') foldMore(false); keys[k] = false; }); }          /* the fire button, folded like the rest, keeps the row open while it is in use */
+    else tapButton(b, () => { action(k); if (b.id === 'cRate' || b.id === 'cWpn') foldMore(false); else if (b.parentNode.id === 'ctxMore') foldMore(true); }); });          /* the rate button stays open, to be tapped again */
   // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
   tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });

@@ -208,7 +208,8 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   Even then the world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
 - At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
   A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
-- How it shows: nothing outside a range. Inside, for an armed aircraft: `#cFire` (hold for the gun, tap for a missile or bombs; shows the rounds left),
+- How it shows: nothing outside a range. Inside, for an armed aircraft the "⋯" button turns orange (`#cMore.armed`) and the folded row holds (the
+  owner asked for the fire buttons folded by default; the row stays open while they are in use and folds 7 s after) `#cFire` (hold for the gun, tap for a missile or bombs; shows the rounds left),
   `#cWpn` when there is more than one weapon, `#aim` (the gun's line, or where a bomb let go now would land: `wpnImpact` runs the bomb's own steps) and
   `#aimLock` on a drone the missile has locked; orange dashed rings on the minimap. Keys: Enter fires, U changes weapon; controller: right shoulder
   fires, Select changes weapon. Ammunition comes back on any new start and after landing. Two starts in "start in the air" lead to the ranges
