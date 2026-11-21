@@ -293,6 +293,14 @@ const roadHW = (cls, dual) => dual ? [8, 9, 11][cls] : [3.5, 5, 6][cls];
 /** Drawing order where roads cross: a bigger road lies a little higher, so the smaller one passes under it instead of flickering. */
 const roadRank = (cls, dual) => dual ? (cls === 2 ? 4 : cls + 2) : cls;
 let ROADLINES = null;
+/** Where a road cannot be drawn: 1 on water, 2 on an airfield (runways are full size on the compressed map, so they cover real roads), 0 elsewhere.
+    A short stretch of water (up to about 400 m: a river mouth, a bay the modelled coast cuts into the real road) is not a cut: the road crosses it
+    as a causeway at the water's level. */
+function roadCuts(D, hw) {
+  const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, hw) ? 2 : 0);
+  for (let i = 0; i < D.length;) { if (cut[i] !== 1) { i++; continue; } let j = i; while (j + 1 < D.length && cut[j + 1] === 1) j++; if (j - i < 9 && i > 0 && j < D.length - 1) for (let k = i; k <= j; k++) cut[k] = 0; i = j + 1; }
+  return cut;
+}
 /** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
     (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
 let RAILLINES = null;
@@ -349,20 +357,31 @@ function roadLines() {
     // first, an end that stops 70 to 400 m short of another road is joined to it by a straight link (the street that connects them is below the classes
     // the extract keeps), unless the link would cross water or an airfield
     const edge = (x, z) => x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500;
-    all.forEach((r, i) => { for (const head of [true, false]) { const [x, z] = head ? r.D[0] : r.D[r.D.length - 1]; if (edge(x, z) || groundAt(x, z).water || airfieldAt(x, z, 250)) continue; let best = null, bd = 400;
-        for (let a = -5; a <= 5; a++) for (let c = -5; c <= 5; c++) for (const q of (PH.get((Math.floor(x / 80) + a) + ':' + (Math.floor(z / 80) + c)) || [])) { if (q[2] === i) continue; const d = Math.hypot(q[0] - x, q[1] - z); if (d < bd) { bd = d; best = q; } }
-        if (!best || bd < 70) continue; const n = Math.ceil(bd / 40), link = []; let ok = true; for (let k = 1; k <= n; k++) { const px = x + (best[0] - x) * k / n, pz = z + (best[1] - z) * k / n; if (groundAt(px, pz).water || lcAt(px, pz) === 9 || airfieldAt(px, pz, 30)) { ok = false; break; } link.push([px, pz]); }
-        if (ok) { if (head) r.D = link.reverse().concat(r.D); else r.D = r.D.concat(link); } } });
-    const loose = (p, i) => { const [x, z] = p; if (x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500 || groundAt(x, z).water || airfieldAt(x, z, 250)) return 0;
+    const joinEnds = all => { const SH = new Map(); all.forEach((r, i) => { const hw = roadHW(r.cls, r.dual); for (let k = 0; k + 1 < r.D.length; k++) { const sg = [r.D[k][0], r.D[k][1], r.D[k + 1][0], r.D[k + 1][1], i, hw];
+          for (let gx = Math.floor(Math.min(sg[0], sg[2]) / 100); gx <= Math.floor(Math.max(sg[0], sg[2]) / 100); gx++) for (let gz = Math.floor(Math.min(sg[1], sg[3]) / 100); gz <= Math.floor(Math.max(sg[1], sg[3]) / 100); gz++) { const k2 = gx + ':' + gz; (SH.get(k2) || SH.set(k2, []).get(k2)).push(sg); } } });
+      // the nearest point on any other road (on its segments, not only at its points): an end that does not reach that road's surface is carried on to its
+      // centreline, however small the gap (hundreds of ends stopped a few metres to a hundred metres short of the road they belong to)
+      all.forEach((r, i) => { for (const head of [true, false]) { const [x, z] = head ? r.D[0] : r.D[r.D.length - 1]; if (edge(x, z) || groundAt(x, z).water || airfieldAt(x, z, 250)) continue; let bx = 0, bz = 0, bd = 400, bhw = 0;
+          for (let a = -4; a <= 4; a++) for (let c = -4; c <= 4; c++) for (const sg of (SH.get((Math.floor(x / 100) + a) + ':' + (Math.floor(z / 100) + c)) || [])) { if (sg[4] === i) continue; const dx = sg[2] - sg[0], dz = sg[3] - sg[1], t = clamp(((x - sg[0]) * dx + (z - sg[1]) * dz) / (dx * dx + dz * dz || 1), 0, 1), qx = sg[0] + dx * t, qz = sg[1] + dz * t, d = Math.hypot(qx - x, qz - z); if (d < bd) { bd = d; bx = qx; bz = qz; bhw = sg[5]; } }
+          if (bd >= 400 || bd <= bhw * 0.5) continue; const n = Math.ceil(bd / 40), link = []; let ok = true; for (let k = 1; k <= n; k++) { const px = x + (bx - x) * k / n, pz = z + (bz - z) * k / n; if (groundAt(px, pz).water || lcAt(px, pz) === 9 || airfieldAt(px, pz, 30)) { ok = false; break; } link.push([px, pz]); }
+          if (ok) { if (head) r.D = link.reverse().concat(r.D); else r.D = r.D.concat(link); } } }); };
+    joinEnds(all);
+    // second, every road is split where it runs into the sea, a lake or an airfield, and the ends that makes are loose ends like any other: a stub left
+    // between the last junction and the water or the fence is removed below (roads used to stop dead at the shore and at the airfields)
+    { const parts = []; for (const r of all) { const cut = roadCuts(r.D, roadHW(r.cls, r.dual)); if (!cut.some(c => c)) { parts.push(r); continue; }
+        for (let a = 0; a < r.D.length;) { if (cut[a]) { a++; continue; } let b = a; while (b + 1 < r.D.length && !cut[b + 1]) b++; if (b - a >= 1) parts.push({ cls: r.cls, ref: r.ref, dual: r.dual, D: r.D.slice(a, b + 1), cutHead: a > 0, cutTail: b < r.D.length - 1 }); a = b + 1; } }
+      all.length = 0; for (const q of parts) all.push(q); PH.clear(); all.forEach((r, i) => r.D.forEach(p => { const k = Math.floor(p[0] / 80) + ':' + Math.floor(p[1] / 80); (PH.get(k) || PH.set(k, []).get(k)).push([p[0], p[1], i]); })); }
+    const loose = (p, i, wasCut) => { const [x, z] = p; if (x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500 || (!wasCut && (groundAt(x, z).water || airfieldAt(x, z, 250)))) return 0;
       for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + a) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 70) return 0;
-      if (urbanAt(x, z) > 0.02 || LOCS.some(l => Math.abs(lon2x(l[2]) - x) < 900 && Math.abs(lat2z(l[3]) - z) < 900)) return 1; return 2; };          // 1: ends at a settlement, 2: ends nowhere
-    ROADLINES = all.filter((r, i) => { let len = 0; for (let k = 1; k < r.D.length; k++) len += Math.hypot(r.D[k][0] - r.D[k - 1][0], r.D[k][1] - r.D[k - 1][1]); const a = loose(r.D[0], i), b = loose(r.D[r.D.length - 1], i);
+      if (wasCut) return 2; if (urbanAt(x, z) > 0.02 || LOCS.some(l => Math.abs(lon2x(l[2]) - x) < 900 && Math.abs(lat2z(l[3]) - z) < 900)) return 1; return 2; };          // 1: ends at a settlement, 2: ends nowhere
+    ROADLINES = all.filter((r, i) => { let len = 0; for (let k = 1; k < r.D.length; k++) len += Math.hypot(r.D[k][0] - r.D[k - 1][0], r.D[k][1] - r.D[k - 1][1]); const a = loose(r.D[0], i, r.cutHead), b = loose(r.D[r.D.length - 1], i, r.cutTail);
       if (a && b && len < 6500) return false; if ((a === 2 || b === 2) && len < 1600) return false;
       // a longer road with an end in the middle of nowhere: its tail is cut back to the last junction (when that is within 9 km)
       const cutAt = (D) => { let t = 0; for (let k = 1; k < D.length; k++) { t += Math.hypot(D[k][0] - D[k - 1][0], D[k][1] - D[k - 1][1]); if (t > 9000) return 0; const [x, z] = D[k];
           for (let u = -1; u <= 1; u++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + u) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 60) return k; } return 0; };
       if (a === 2) { const k = cutAt(r.D); if (k) r.D = r.D.slice(k); } if (b === 2) { const k = cutAt(r.D.slice().reverse()); if (k) r.D = r.D.slice(0, r.D.length - k); }
-      return r.D.length >= 2; }); }
+      return r.D.length >= 2; });
+    joinEnds(ROADLINES); }          /* once more: cutting a tail back to its junction leaves it a few metres short of the road there */
   return ROADLINES;
 }
 /** Road and railway corridors, so nothing is built on a road. Every centreline segment (the same splines the road meshes use)
@@ -439,18 +458,19 @@ function buildRoads() {
   for (const [li, { cls, D, dual, e0, e1 }] of roadLines().entries()) {
     // where a road meets water or an airfield it is cut (runways are full size on the compressed map, so they cover real roads);
     // a short stub left beside an airfield is dropped rather than drawn as a road that ends in a field
-    const cut = D.map(([x, z]) => groundAt(x, z).water ? 1 : airfieldAt(x, z, roadHW(cls, dual)) ? 2 : 0), runs = [];
+    const cut = roadCuts(D, roadHW(cls, dual)), runs = [];
     for (let i = 0; i < D.length;) { if (cut[i]) { i++; continue; } let j = i; while (j + 1 < D.length && !cut[j + 1]) j++;
-      const nearField = (i > 0 && cut[i - 1] === 2) || (j + 1 < D.length && cut[j + 1] === 2); if (j - i >= (nearField ? 10 : 2)) runs.push([i, j]); i = j + 1; }
+      const nearField = (i > 0 && cut[i - 1] === 2) || (j + 1 < D.length && cut[j + 1] === 2); if (j - i >= (nearField ? 10 : 1)) runs.push([i, j]); i = j + 1; }          /* a run of two points is drawn too: 2,750 short pieces by the junctions used to be left out, each a gap in its road */
     const hw = roadHW(cls, dual), lift = 2.2 + roadRank(cls, dual) * 0.2 + (cls === 2 && dual ? (li % 4) * 0.04 : 0), { P, U, N, I } = G[dual ? 2 : 1];
     for (const [i0, i1] of runs) { let prev = -1, path = [], len = 0;
       for (let i = i0; i <= i1; i++) {
         const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl;
         const tp = Math.min(e0 !== undefined ? i / 3 : 1, e1 !== undefined ? (D.length - 1 - i) / 3 : 1), hwI = tp < 1 ? lerp(i < 3 && e0 !== undefined ? e0 : e1, hw, Math.max(tp, 0)) : hw;
         const k = P.length / 3; len += i > i0 ? Math.hypot(px - D[i - 1][0], pz - D[i - 1][1]) : 0;
-        for (const s of [-1, 1]) { const vx = px + nx * hwI * s, vz = pz + nz * hwI * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + lift, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
+        const gw = groundAt(px, pz), wl = gw.water ? gw.h - 1 : -1e9;          /* over a short stretch of water the road is a causeway just above it */
+        for (const s of [-1, 1]) { const vx = px + nx * hwI * s, vz = pz + nz * hwI * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz), wl) + lift, vz); N.push(0, 1, 0); U.push(s < 0 ? 0 : 1, len / 40); }
         if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k);
-        prev = k; path.push([px, triHeight(px, pz) + 3.8, pz, cls]);
+        prev = k; path.push([px, Math.max(triHeight(px, pz), wl) + 3.8, pz, cls]);
       }
       if (path.length > 4) roadPaths.push(path); }
   }

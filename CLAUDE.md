@@ -182,6 +182,18 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   sand, rock, solar field; nothing generic on cemeteries or water; a residential or industrial cell with nothing in or beside it gets a house or a shed
   (half of them). Hand-made landmarks move inland when part of them would stand in water, and keep off airfields; salt pans are not laid on slopes.
 
+## Round seven: a lighter Medium, a view that stays, roads that connect
+
+- Medium's terrain help is light (the owner's wish: it used to pull up in front of every tower): only the ground counts, never buildings; the margin under
+  the wheels is 10 m plus a little for speed while the stick is in use and grows to 40 m after a few seconds hands-off (`S.handsT`); it looks half as far
+  ahead and acts only when the path really leads into the ground. Hands-off over the hills still clears them (15 of 15 in the test); a tower in the way
+  is the pilot's business.
+- Free look stays where the player turned it (`LOOK`): no swing back on release. A change of view, a new start or a double tap puts it back.
+- Roads (`roadLines`, `roadCuts`): every loose end is carried on to the centreline of the nearest other road within 400 m (`joinEnds`, measured to the
+  road's segments; run again after pruning), runs of two points are drawn (2,750 short pieces by the junctions used to be left out), a road is split
+  where it meets the sea, a lake or an airfield and the stub left there is pruned like any loose end, and up to about 400 m of water is crossed as a
+  causeway. Ends that stop short of another road went from about 715 to 44 (those whose link would cross water or an airfield).
+
 ## Start-up
 
 `init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then

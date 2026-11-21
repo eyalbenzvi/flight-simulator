@@ -23,6 +23,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * V, 0.35, 1.2)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
+  LOOK.yaw = LOOK.pitch = 0;
   if (def.plane && PL.key !== def.plane && WORLD.ready) selectPlane(def.plane);          // a start that brings its own aircraft
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
@@ -164,13 +165,16 @@ function updateControls(dt) {
     if (overField && S.gear) {                                                   // over an airfield with the gear down: automatic flare, idle at touchdown
       if (!S.toClimb && climb <= 0.1) { gT = Math.max(gT, -Math.max(1.0, S.ra * 0.12) / Math.max(S.V, 40));          /* the flare begins higher and ends at about 200 ft/min */ if (S.ra < 5) S.thr = Math.min(S.thr, 0); if (S.ra < 30) S.holdAlt = null; }
     } else {                                                                     // open country: stay 40 m above the ground and out-climb rising terrain ahead
-      const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
-      let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
-      const tMax = clamp(330 / PL.up, 11, 40);      // sluggish aircraft look further ahead; races follow gates that already clear the ground
-      for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (Math.max(groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h, t <= 16 ? obstacleTop(S.pos.x + ux * d, S.pos.z + uz * d) : -1e9) - base) / d); }       // towers count as ground ahead
+      // A light hand (the owner's wish: it used to pull up in front of every tower, so flying between the buildings of a city was a fight). Only the ground
+      // itself counts now, not buildings; the margin under the wheels is 10 m plus a little for speed (it was 25 m and more); and it looks half as far ahead
+      S.handsT = Math.abs(climb) > 0.1 || Math.abs(lr) > 0.1 ? 0 : (S.handsT || 0) + dt;          // with the hands off for a few seconds the margin grows to 40 m, enough to pass over ordinary houses on a rise (towers are the pilot's business)
+      const hk = clamp((S.handsT - 2) / 3, 0, 1), mrg = lerp(10 + S.V * 0.03, 40 + S.V * 0.05, hk), hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - mrg;
+      let gReq = -(S.ra - mrg) * 0.3 / Math.max(S.V, 40);
+      const tMax = clamp(170 / PL.up, 6, 20);      // sluggish aircraft look further ahead; races follow gates that already clear the ground
+      for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h - base) / d); }
       if (Math.abs(S.bank) > 0.15) { const sg = Math.sign(S.bank);          // in a turn, also look along the curve
-        for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
-      if (gT < gReq) {
+        for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
+      if (gT < gReq - 0.012) {          /* only when the path really leads into the ground */
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
         if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; terrAhead = true; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
@@ -324,10 +328,11 @@ const CAMS = ['Cockpit', 'Chase', 'Wing', 'Fly-by', 'Above', 'Front', 'Below', '
     camera round the aircraft. Letting go eases the view back to straight ahead. */
 const LOOK = { yaw: 0, pitch: 0, id: null, x: 0, y: 0, t: 0 };
 function setupLook() {
-  canvas.addEventListener('pointerdown', e => { if (PH.on || !S.started || S.paused || LOOK.id !== null) return; LOOK.id = e.pointerId; LOOK.x = e.clientX; LOOK.y = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} });
+  canvas.addEventListener('pointerdown', e => { if (PH.on || !S.started || S.paused || LOOK.id !== null) return; LOOK.id = e.pointerId; LOOK.x = e.clientX; LOOK.y = e.clientY; LOOK.moved = 0; try { canvas.setPointerCapture(e.pointerId); } catch (x) {} });
   canvas.addEventListener('pointermove', e => { if (e.pointerId !== LOOK.id) return; const k = 3.2 / Math.max(window.innerWidth, 600);
+    LOOK.moved = (LOOK.moved || 0) + Math.abs(e.clientX - LOOK.x) + Math.abs(e.clientY - LOOK.y);
     LOOK.yaw = clamp(LOOK.yaw + (e.clientX - LOOK.x) * k, -2.7, 2.7); LOOK.pitch = clamp(LOOK.pitch - (e.clientY - LOOK.y) * k, -1.1, 0.9); LOOK.x = e.clientX; LOOK.y = e.clientY; LOOK.t = TNOW; });
-  const up = e => { if (e.pointerId === LOOK.id) LOOK.id = null; }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+  const up = e => { if (e.pointerId !== LOOK.id) return; LOOK.id = null; if (TNOW - (LOOK.t || -9) > 0.25 || LOOK.moved < 8) { const now = performance.now(); if (now - (LOOK.tap || 0) < 350) LOOK.yaw = LOOK.pitch = 0; LOOK.tap = now; } }; canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 }
 let SHADOW = null, SHADOW_TEX = null, LPOOL = null, ENVRT = null;
 /** A soft silhouette of an aircraft, drawn once: the ground shadow (a texture made during init, so the canvas guard covers it). */
@@ -361,7 +366,7 @@ function bakeSkyReflection() {
     of view blends; shake is a smooth buffet, not pixel noise; and the picture is shifted so the aircraft sits clear of the instruments. */
 const CAMX = { last: -1, blend: 0, fromP: new THREE.Vector3(), fromQ: new THREE.Quaternion(), bank: 0, vo: 0, fb: new THREE.Vector3(), fbT: 0, fbOk: false, fbSide: 1 };
 function updateCamera(dt) {
-  if (LOOK.id === null && (LOOK.yaw || LOOK.pitch)) { const k = Math.exp(-5 * dt); LOOK.yaw *= k; LOOK.pitch *= k; if (Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch) < 0.002) LOOK.yaw = LOOK.pitch = 0; }
+  if (LOOK.cam !== S.cam) { LOOK.cam = S.cam; LOOK.yaw = LOOK.pitch = 0; }          // the view stays where the player turned it (it used to swing back on release); a change of view, a new start or a double tap puts it back
   const looking = LOOK.yaw !== 0 || LOOK.pitch !== 0;
   if (CAMX.last !== S.cam) { CAMX.fbOk = false; if (CAMX.last >= 0 && !camSnap) { CAMX.blend = 0.38; CAMX.fromP.copy(camera.position); CAMX.fromQ.copy(camera.quaternion); } CAMX.last = S.cam; }      // a change of view glides, it does not cut
   const M = AC.m; AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q);
