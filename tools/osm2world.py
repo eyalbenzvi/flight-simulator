@@ -59,7 +59,10 @@ def bc_of(b, t):
     return 'other'
 
 # ---- identifiable sites ----
-SK = ['tall', 'mosque', 'church', 'synagogue', 'watertower', 'tower', 'mast', 'chimney', 'lighthouse', 'tank', 'stadium', 'hospital', 'mall', 'plant', 'turbine', 'fortress', 'ruins', 'silo', 'minaret', 'belltower', 'lookout']
+SK = ['tall', 'mosque', 'church', 'synagogue', 'watertower', 'tower', 'mast', 'chimney', 'lighthouse', 'tank', 'stadium', 'hospital', 'mall', 'plant', 'turbine', 'fortress', 'ruins', 'silo', 'minaret', 'belltower', 'lookout',
+      'school', 'hotel', 'station', 'pitch', 'court', 'pool', 'fuel', 'shop', 'civic', 'monument', 'barn', 'warehouse', 'sewage']
+# smallest footprint (m2) for the kinds that are only worth showing from a certain size
+MINA = {'school': 350, 'hotel': 400, 'pitch': 2500, 'court': 350, 'pool': 150, 'shop': 600, 'civic': 250, 'barn': 350, 'warehouse': 2500, 'sewage': 2000}
 def num(v):
     try: return float(str(v).split(';')[0].replace('m', '').strip())
     except Exception: return None
@@ -94,9 +97,25 @@ def site_of(t, is_area):
     if pw == 'generator' and t.get('generator:source') == 'wind': return 'turbine'
     if hi in ('castle', 'fort', 'citadel', 'city_gate'): return 'fortress'
     if hi in ('archaeological_site', 'ruins') and is_area: return 'ruins'
-    if b and b != 'no':
+    isb = bool(b) and b != 'no'; sp = t.get('sport', ''); to = t.get('tourism'); sh = t.get('shop')
+    if isb:
         h = height_of(t)
         if h and h >= 40: return 'tall'
+    if is_area and (b in ('school', 'kindergarten', 'university', 'college') or (isb and am in ('school', 'kindergarten', 'university', 'college'))): return 'school'
+    if is_area and (b == 'hotel' or (isb and to == 'hotel')): return 'hotel'
+    if b == 'train_station' or (t.get('railway') == 'station' and t.get('station') not in ('subway', 'light_rail')): return 'station'
+    if le == 'pitch' and is_area: return 'pitch' if sp in ('soccer', 'football', 'american_football', 'rugby', 'athletics', 'baseball') else ('court' if sp in ('basketball', 'tennis', 'multi', 'volleyball', 'handball', 'futsal', '') else None)
+    if le == 'swimming_pool' and is_area and t.get('access') != 'private': return 'pool'
+    if am == 'fuel': return 'fuel'
+    if is_area and (sh in ('supermarket', 'department_store') or b in ('supermarket', 'retail')): return 'shop'
+    if is_area and (am in ('townhall', 'community_centre', 'library', 'theatre', 'arts_centre', 'cinema', 'fire_station', 'police', 'courthouse') or to == 'museum' or b in ('civic', 'public')): return 'civic'
+    if hi == 'monument' or (hi == 'memorial' and t.get('memorial') in (None, 'war_memorial', 'statue', 'obelisk', 'stele', 'sculpture') and t.get('name')): return 'monument'
+    if is_area and b in ('cowshed', 'barn', 'farm_auxiliary', 'stable', 'sty'): return 'barn'
+    if is_area and b in ('warehouse', 'industrial', 'hangar'): return 'warehouse'
+    if mm == 'wastewater_plant' and is_area: return 'sewage'
+    if isb:
+        h = height_of(t)
+        if h and h >= 25: return 'tall'
     return None
 
 def footprint(coords):
@@ -167,7 +186,7 @@ class Handler(osmium.SimpleHandler):
         k = site_of(t, True)
         if k:
             f = f or footprint(coords)
-            if f: self.add_site(k, f[0], f[1], t, f)
+            if f and f[2] >= MINA.get(k, 0): self.add_site(k, f[0], f[1], t, f)
         c = lc_of(t)
         if c and not t.get('building') and keep_lc(c, t, coords): self.polys[c].append([(px(lo), py(la)) for lo, la in coords])
     def relation(self, r):

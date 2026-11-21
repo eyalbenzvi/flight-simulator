@@ -154,7 +154,7 @@ function buildCities() {
   const styleNear = (i, j) => { for (let r = 1; r <= 3; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) { const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue; const oo = (jj * w + ii) * 4; if (d[oo + 3]) return d[oo + 1] & 7; } return 0; };
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
     const o = (j * w + i) * 4, inRaster = d[o + 3] > 0, cov = bo[o] / 255, bc = bo[o + 1] & 15, nlog = bo[o + 1] >> 4, bh = bo[o + 2], lc = LCR.d[o];
-    if (!inRaster && !((cov >= 0.05 && nlog >= 2) || nlog >= 4)) continue;
+    if (!inRaster && !((cov >= 0.012 && nlog >= 2) || nlog >= 3 || cov >= 0.03)) continue;          /* also the few houses of a small village, a farmyard, a lone large building (it used to take eight buildings or 5% cover) */
     const sd = inRaster ? d[o + 2] / 255 : hash2(i * 1.7 + 3.1, j * 2.3 + 1.7), s2 = (sd * 7.31) % 1, s3 = (sd * 3.77) % 1, szc = inRaster ? d[o + 1] >> 3 : Math.min(3, Math.round(cov * 6)), szk = 0.7 + 0.13 * szc;
     let st = inRaster ? d[o + 1] & 7 : 0, ht = inRaster ? d[o] : 0;
     if (bc === 3 || (lc === 12 && (bc === 0 || bc === 4) && cov > 0.04)) st = 5;                              // industrial sheds
