@@ -4,11 +4,12 @@ const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
 /** Render resolution follows the device and the frame rate: it starts at the screen's own pixel density (up to 2×) and steps down only while
     frames run slow, back up when there is time to spare (`autoRes` in the main loop). `?res=1.5` in the address pins it. */
-const RES = { max: Math.min(window.devicePixelRatio || 1, 2), min: Math.min(window.devicePixelRatio || 1, 0.75), pr: 1, acc: 0, n: 0, hold: 0, cap: 9, fixed: +(new URLSearchParams(location.search).get('res')) || 0 };
+const RES = { max: Math.min(window.devicePixelRatio || 1, 2), min: Math.min(window.devicePixelRatio || 1, 0.75), pr: 1, acc: 0, n: 0, hold: 0, cap: 9, slow: 0, fixed: +(new URLSearchParams(location.search).get('res')) || 0 };
 RES.pr = RES.fixed || Math.min(RES.max, 1.75); renderer.setPixelRatio(RES.pr);
 function autoRes(ms) {
   if (RES.fixed || ms > 250 || document.hidden) return; RES.acc += ms; if (++RES.n < 45) return; const avg = RES.acc / RES.n; RES.acc = RES.n = 0; if (RES.hold > 0) RES.hold--;
-  let pr = RES.pr; if (avg > 27 && pr > RES.min) { pr = Math.max(RES.min, pr - 0.25); RES.cap = pr; RES.hold = 12; } else if (avg < 14.5 && pr < Math.min(RES.max, RES.cap + (RES.hold ? 0 : 0.25)) && !RES.hold) { pr = Math.min(RES.max, pr + 0.25); RES.hold = 4; }
+  let pr = RES.pr; if (avg > 30 && pr <= RES.min && POST.on && ++RES.slow > 3) POST.on = false;
+  if (avg > 27 && pr > RES.min) { pr = Math.max(RES.min, pr - 0.25); RES.cap = pr; RES.hold = 12; } else if (avg < 14.5 && pr < Math.min(RES.max, RES.cap + (RES.hold ? 0 : 0.25)) && !RES.hold) { pr = Math.min(RES.max, pr + 0.25); RES.hold = 4; }
   if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); resize(); }
 }
 const scene = new THREE.Scene();
@@ -34,9 +35,43 @@ const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a7a5a, 0.75); scene.add(hemi
 const sun = new THREE.DirectionalLight(0xfff4e0, 1); scene.add(sun);
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 74 : 60; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); postSize(); camera.aspect = w / h; camera.fov = w < h ? 74 : 60; camera.updateProjectionMatrix();
 }
-window.addEventListener('resize', resize); resize();
+/** Post pass: the frame is drawn into a (multisampled) target, its bright parts are blurred at a quarter and an eighth of the size and added back
+    (bloom: lamps, the sun on water and glass, the afterburner glow), with a light sharpen. Off with `?post=0`, and switched off by itself on a
+    device that stays slow at the lowest resolution. */
+const POST = { on: new URLSearchParams(location.search).get('post') !== '0', ok: false, k: 1 };
+function postSetup() {
+  try {
+    const gl2 = renderer.capabilities.isWebGL2, mk = (ms) => { const t = ms && gl2 ? new THREE.WebGLMultisampleRenderTarget(4, 4, { depthBuffer: true }) : new THREE.WebGLRenderTarget(4, 4, { depthBuffer: !!ms }); t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter; t.texture.generateMipmaps = false; return t; };
+    POST.main = mk(true); POST.a = [mk(), mk()]; POST.b = [mk(), mk()];
+    POST.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); POST.scene = new THREE.Scene();
+    const vs = 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }';
+    const mat = (fs, u) => new THREE.ShaderMaterial({ uniforms: u, vertexShader: vs, fragmentShader: fs, depthTest: false, depthWrite: false, toneMapped: false });
+    POST.bright = mat('uniform sampler2D t; uniform vec2 px; varying vec2 vUv; vec3 b(vec2 o){ vec3 c=texture2D(t,vUv+o*px).rgb; float l=max(c.r,max(c.g,c.b)); return c*smoothstep(0.80,1.0,l); } void main(){ gl_FragColor=vec4((b(vec2(-1.0,-1.0))+b(vec2(1.0,-1.0))+b(vec2(-1.0,1.0))+b(vec2(1.0,1.0)))*0.25,1.0); }', { t: { value: null }, px: { value: new THREE.Vector2() } });
+    POST.blur = mat('uniform sampler2D t; uniform vec2 d; varying vec2 vUv; void main(){ vec3 c=texture2D(t,vUv).rgb*0.227; c+=(texture2D(t,vUv+d*1.385).rgb+texture2D(t,vUv-d*1.385).rgb)*0.316; c+=(texture2D(t,vUv+d*3.231).rgb+texture2D(t,vUv-d*3.231).rgb)*0.0703; gl_FragColor=vec4(c,1.0); }', { t: { value: null }, d: { value: new THREE.Vector2() } });
+    POST.mix = mat('uniform sampler2D t; uniform sampler2D b1; uniform sampler2D b2; uniform vec2 px; uniform float k; varying vec2 vUv; void main(){ vec3 c=texture2D(t,vUv).rgb; vec3 n=(texture2D(t,vUv+vec2(px.x,0.0)).rgb+texture2D(t,vUv-vec2(px.x,0.0)).rgb+texture2D(t,vUv+vec2(0.0,px.y)).rgb+texture2D(t,vUv-vec2(0.0,px.y)).rgb)*0.25; c=max(c+(c-n)*0.22,vec3(0.0)); vec3 bl=texture2D(b1,vUv).rgb*0.75+texture2D(b2,vUv).rgb*0.95; gl_FragColor=vec4(c+bl*k*(1.0-c*0.35),1.0); }', { t: { value: null }, b1: { value: null }, b2: { value: null }, px: { value: new THREE.Vector2() }, k: { value: 1 } });
+    POST.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), POST.bright); POST.quad.frustumCulled = false; POST.scene.add(POST.quad);
+    POST.ok = true; postSize();
+  } catch (e) { POST.ok = false; }
+}
+function postSize() {
+  if (!POST.ok) return; const v = renderer.getDrawingBufferSize(new THREE.Vector2()), w = Math.max(8, v.x | 0), h = Math.max(8, v.y | 0);
+  POST.main.setSize(w, h); for (const t of POST.a) t.setSize(w >> 2 || 2, h >> 2 || 2); for (const t of POST.b) t.setSize(w >> 3 || 2, h >> 3 || 2);
+}
+function postPass(m, src, dst) { POST.quad.material = m; m.uniforms.t.value = src.texture; renderer.setRenderTarget(dst); renderer.render(POST.scene, POST.cam); }
+/** Draw one frame, through the post pass when it is on. */
+function renderFrame() {
+  if (!POST.on || !POST.ok) { renderer.render(scene, camera); return; }
+  const M = POST.main, A = POST.a, B = POST.b;
+  renderer.setRenderTarget(M); renderer.render(scene, camera);
+  POST.bright.uniforms.px.value.set(1 / M.width, 1 / M.height); postPass(POST.bright, M, A[0]);
+  POST.blur.uniforms.d.value.set(1 / A[0].width, 0); postPass(POST.blur, A[0], A[1]); POST.blur.uniforms.d.value.set(0, 1 / A[0].height); postPass(POST.blur, A[1], A[0]);
+  POST.blur.uniforms.d.value.set(1 / B[0].width, 0); postPass(POST.blur, A[0], B[0]); POST.blur.uniforms.d.value.set(0, 1 / B[0].height); postPass(POST.blur, B[0], B[1]);
+  POST.blur.uniforms.d.value.set(1.6 / B[0].width, 0); postPass(POST.blur, B[1], B[0]); POST.blur.uniforms.d.value.set(0, 1.6 / B[0].height); postPass(POST.blur, B[0], B[1]);
+  const u = POST.mix.uniforms; u.b1.value = A[0].texture; u.b2.value = B[1].texture; u.px.value.set(1 / M.width, 1 / M.height); u.k.value = POST.k; postPass(POST.mix, M, null);
+}
+window.addEventListener('resize', resize); resize(); postSetup();
 
 // Procedural tileable noise texture (used for ground grain and water ripples)
 function noiseTexture(size, cells, lo, hi, oct) {
