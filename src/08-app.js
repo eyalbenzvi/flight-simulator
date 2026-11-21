@@ -67,7 +67,7 @@ function action(code) {
   if (PH.on) return;
   if (code === 'KeyR') { if (S.lastSpawn) spawn(S.lastSpawn); return; }
   if (code === 'KeyM') return Snd.toggle();
-  if (code === 'KeyC') { S.cam = (S.cam + 1) % 3; camSnap = true; return; }
+  if (code === 'KeyC') { S.cam = (S.cam + 1) % CAMS.length; camSnap = S.cam === 0 || S.cam === 3; toast(tr(CAMS[S.cam]), 1.6); return; }
   if (code === 'KeyT') { S.tod = (S.tod + 1) % 3; applyTOD(S.tod); return; }
   if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
   if (code === 'KeyK') { if (legendOn()) S.legend = false; else { S.legend = true; SAVE.legendPin = true; } S.legSig = ''; return; }
@@ -314,7 +314,28 @@ document.addEventListener('visibilitychange', () => { if (S.started && document.
   if (Snd.ctx) { if (document.hidden) Snd.ctx.suspend(); else if (S.started) Snd.ctx.resume(); } });          // no engine drone from a tab in the background
 
 // leaving the page in mid-flight asks first: Ctrl (power down) with W (climb) is the browser's close-tab shortcut, which a page cannot block
-window.addEventListener('beforeunload', e => { if (S.started && !S.paused && !S.crashed && !S.onGround) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { saveFlight(); if (S.started && !S.crashed) { e.preventDefault(); e.returnValue = ''; } });
+/* The game must not end by accident.
+   - Back (the phone's button or a swipe from the edge) does not leave a flight: it opens the menu, and Back again returns to the flight. A history entry is
+     kept in front of the page for that; from the start screen, before a flight, Back leaves as usual.
+   - Pulling the page down does not reload it (overscroll-behavior in the CSS); a long press opens no browser menu; a pinch does not zoom the page.
+   - If the page is closed or reloaded anyway (the tab was put to sleep, a crash, a mistaken reload), the flight is saved every few seconds and the start screen
+     offers to continue it. */
+function guardBack() { try { history.pushState({ ifs: 1 }, ''); } catch (e) { /* no history: nothing to guard */ } }
+window.addEventListener('popstate', () => {
+  if (PICK.open) { closePicker(); return guardBack(); }
+  if (!S.started) return;                                  // on the start screen Back leaves, as everywhere
+  if (PH.on) action('KeyO'); else if (S.crashed) { /* the crash screen has its own buttons */ } else if (S.paused) closeMenu(); else openMenu();
+  guardBack();
+});
+document.addEventListener('contextmenu', e => { if (!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.preventDefault(); });
+for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, e => e.preventDefault());
+canvas.addEventListener('webglcontextlost', e => e.preventDefault());                 // lets the browser restore the picture instead of leaving it black
+/** The flight as it is now, for continuing after the page was closed: position, height, heading, speed, aircraft, level. */
+function saveFlight() { try { if (!S.started || S.crashed || S.onGround) { if (S.started) localStorage.removeItem('ifs-flight'); return; }
+  localStorage.setItem('ifs-flight', JSON.stringify({ x: S.pos.x, z: S.pos.z, y: S.pos.y, hdg: S.hdg, v: S.V, plane: PL.key, t: Date.now() })); } catch (e) { /* no storage */ } }
+function savedFlight() { try { const f = JSON.parse(localStorage.getItem('ifs-flight') || 'null'); if (!f || Date.now() - f.t > 45 * 60000 || ![f.x, f.z, f.y, f.hdg, f.v].every(Number.isFinite) || f.x < X0 || f.x > X1 || f.z < Z0 || f.z > Z1 || !PLANES[f.plane]) return null;
+  return { type: 'air', label: 'Continue the last flight', x: f.x, z: f.z, alt: Math.max(f.y, groundAt(f.x, f.z).h + 150), hdg: f.hdg, spd: clamp(f.v / PLANES[f.plane].vc, 0.6, 1.6) * 120, plane: f.plane }; } catch (e) { return null; } }
 
 // ---------- 17. Boot ----------
 function init() {
@@ -322,8 +343,9 @@ function init() {
   buildMenu(); buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   // settings from the last visit
   if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
-  if (SAVE.first) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
-  shootPlanes(); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; document.body.classList.add('ready'); setInterval(() => { if (S.started) persist(); }, 5000);
+  { const rf = savedFlight(); if (rf) { selectPlane(rf.plane); START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
+  if (SAVE.first && !START) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
+  shootPlanes(); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; document.body.classList.add('ready'); guardBack(); setInterval(() => { if (S.started) { persist(); saveFlight(); } }, 5000);
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = S.cam !== 1;          /* in the chase view the camera glides in from where the start screen's orbit left it */ $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });

@@ -309,7 +309,7 @@ function updateSystems(dt) {
 
 // ---------- 11. Cameras ----------
 const camPos = new THREE.Vector3(), tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion();
-const CAMS = ['Cockpit', 'Chase', 'Wing'];
+const CAMS = ['Cockpit', 'Chase', 'Wing', 'Fly-by', 'Above', 'Front', 'Below', 'Tail'];
 /** Free look: drag on the view (mouse, or a finger away from the controls) to look around from the cockpit or the wing, or to swing the chase
     camera round the aircraft. Letting go eases the view back to straight ahead. */
 const LOOK = { yaw: 0, pitch: 0, id: null, x: 0, y: 0, t: 0 };
@@ -347,11 +347,11 @@ function bakeSkyReflection() {
 }
 /** Camera feel: the chase camera leans into turns and trails the aircraft a little; a new start swings in from the side instead of cutting; a change
     of view blends; shake is a smooth buffet, not pixel noise; and the picture is shifted so the aircraft sits clear of the instruments. */
-const CAMX = { last: -1, blend: 0, fromP: new THREE.Vector3(), fromQ: new THREE.Quaternion(), bank: 0, vo: 0 };
+const CAMX = { last: -1, blend: 0, fromP: new THREE.Vector3(), fromQ: new THREE.Quaternion(), bank: 0, vo: 0, fb: new THREE.Vector3(), fbT: 0, fbOk: false, fbSide: 1 };
 function updateCamera(dt) {
   if (LOOK.id === null && (LOOK.yaw || LOOK.pitch)) { const k = Math.exp(-5 * dt); LOOK.yaw *= k; LOOK.pitch *= k; if (Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch) < 0.002) LOOK.yaw = LOOK.pitch = 0; }
   const looking = LOOK.yaw !== 0 || LOOK.pitch !== 0;
-  if (CAMX.last !== S.cam) { if (CAMX.last >= 0 && !camSnap) { CAMX.blend = 0.38; CAMX.fromP.copy(camera.position); CAMX.fromQ.copy(camera.quaternion); } CAMX.last = S.cam; }      // a change of view glides, it does not cut
+  if (CAMX.last !== S.cam) { CAMX.fbOk = false; if (CAMX.last >= 0 && !camSnap) { CAMX.blend = 0.38; CAMX.fromP.copy(camera.position); CAMX.fromQ.copy(camera.quaternion); } CAMX.last = S.cam; }      // a change of view glides, it does not cut
   const M = AC.m; AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q);
   M.g.visible = (S.cam !== 0 || CAMX.blend > 0.19) && !S.crashed; AC.deck.visible = S.cam === 0 && CAMX.blend < 0.19;
   fwd.set(0, 0, -1).applyQuaternion(S.q);
@@ -367,15 +367,29 @@ function updateCamera(dt) {
       camera.position.copy(S.pos).add(tmpV); camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 1.5); tmpV2.lerp(S.pos, clamp((Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch)) * 2, 0, 1)); }
     else { const sl = c[0] * 0.30 * Math.sin(CAMX.bank * 4); tmpV2.x += -fwd.z * sl; tmpV2.z += fwd.x * sl; }          // look into the turn: the aircraft slides toward the outside of the frame
     camera.lookAt(tmpV2); if (!looking) camera.rotateZ(-CAMX.bank);
+  } else if (S.cam === 3) {
+    // fly-by: a camera standing in the world ahead of the aircraft, watching it come, pass and go; then it moves on ahead again
+    const c = PL.chase, hs = hsAt(S.ra), F = CAMX.fb, d = F.distanceTo(S.pos), behind = (S.pos.x - F.x) * S.vel.x + (S.pos.z - F.z) * S.vel.z > 0;
+    if (camSnap || !CAMX.fbOk || d > c[0] * 16 + S.V * hs * 6 || (behind && d > c[0] * 7) || TNOW - CAMX.fbT > 14) { const hv = Math.hypot(S.vel.x, S.vel.z) || 1, ux = S.vel.x / hv, uz = S.vel.z / hv, ah = Math.max(c[0] * 5, S.V * hs * 4.5), sd = (CAMX.fbSide = -(CAMX.fbSide || 1)) * c[0] * 1.5;
+      F.set(S.pos.x + ux * ah - uz * sd, 0, S.pos.z + uz * ah + ux * sd); const g = groundAt(F.x, F.z); F.y = Math.max(g.h + 3, Math.max(g.h, triHeight(F.x, F.z)) + 3, S.pos.y + S.vel.y * 4.5 - c[0] * 0.3); CAMX.fbT = TNOW; CAMX.fbOk = true; camSnap = false; CAMX.blend = 0; }
+    camera.position.copy(F); camera.up.set(0, 1, 0); camera.lookAt(S.pos);
+  } else if (S.cam === 4) {
+    // from straight above, the nose at the top of the picture
+    const c = PL.chase; camera.position.copy(S.pos); camera.position.y += c[0] * 2.3; tmpV.set(fwd.x, 0, fwd.z); if (tmpV.lengthSq() < 1e-4) tmpV.set(0, 0, -1); camera.up.copy(tmpV.normalize()); camera.lookAt(S.pos); camSnap = false;
+  } else if (S.cam === 5) {
+    // from the front: ahead of the nose and a little above, looking back at the aircraft
+    const c = PL.chase; tmpV.set(fwd.x, 0, fwd.z).normalize(); camera.position.copy(S.pos).addScaledVector(tmpV, c[0] * 0.95).addScaledVector(tmpV2.set(-tmpV.z, 0, tmpV.x), c[0] * 0.28); camera.position.y += c[1] * 0.3;
+    camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 1.5); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camSnap = false;
   } else {
-    const e = S.cam === 0 ? PL.eye : PL.wingEye, eye = tmpV.set(e[0], e[1], e[2]);
-    const tgt = S.cam === 0 ? tmpV2.set(e[0], e[1] - 0.12, e[2] - 2) : tmpV2.set(PL.wingTgt[0], PL.wingTgt[1], PL.wingTgt[2]);
+    // views fixed to the aircraft: the cockpit, the wing, under the belly looking down and ahead, and the top of the fin looking forward along the fuselage
+    const c0 = PL.chase, e = S.cam === 0 ? PL.eye : S.cam === 6 ? [0, -PL.gearH * 0.62 - 0.2, 0.5] : S.cam === 7 ? [0, c0[1] * 0.46, c0[0] * 0.33] : PL.wingEye, eye = tmpV.set(e[0], e[1], e[2]);
+    const tgt = S.cam === 0 ? tmpV2.set(e[0], e[1] - 0.12, e[2] - 2) : S.cam === 6 ? tmpV2.set(0, e[1] - 1.35, e[2] - 1.6) : S.cam === 7 ? tmpV2.set(0, e[1] - 1.6, e[2] - 9) : tmpV2.set(PL.wingTgt[0], PL.wingTgt[1], PL.wingTgt[2]);
     tmpM.lookAt(eye, tgt, YA); tmpQ.setFromRotationMatrix(tmpM);
     camera.quaternion.copy(S.q).multiply(tmpQ); if (looking) camera.quaternion.multiply(dq.setFromEuler(eul.set(LOOK.pitch, -LOOK.yaw, 0, 'YXZ'))); camera.position.copy(eye).applyQuaternion(S.q).add(S.pos);
   }
   // game feel: the view widens with speed and shakes on afterburner, stall buffet and touchdown
-  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) : 0);
-  camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : 1; camera.updateProjectionMatrix();
+  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) : 0);       /* the fly-by camera uses a long lens */
+  camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : S.cam >= 6 ? 0.3 : 1; camera.updateProjectionMatrix();
   if (CAMX.blend > 0) { CAMX.blend = Math.max(0, CAMX.blend - Math.max(dt, 0.001)); const k = 1 - CAMX.blend / 0.38, e = k * k * (3 - 2 * k); tmpV.copy(camera.position); camera.position.lerpVectors(CAMX.fromP, tmpV, e); tmpQ.copy(camera.quaternion); camera.quaternion.copy(CAMX.fromQ).slerp(tmpQ, e); }
   { // keep the aircraft clear of what covers the lower part of the screen: the instrument panel on desktop, the stick and buttons on a phone held upright
     const w = window.innerWidth, h = window.innerHeight, tch = document.body.classList.contains('touch'), want = S.cam !== 1 ? 0 : tch ? (h > w ? 0.10 * h : 0) : document.body.classList.contains('nopfd') ? 0 : 0.07 * h;
@@ -383,7 +397,7 @@ function updateCamera(dt) {
   S.shake *= Math.exp(-4 * dt);
   // shake: a touchdown bump and the stall buffet. The afterburner only trembles a little, and not at all from inside: in the cockpit the panel is a metre from the eye,
   // so centimetres of camera movement made the whole picture jump for as long as the burner was lit
-  const amp = ((S.stallWarn ? 0.16 : 0) + (M.burner && S.n1 > 0.9 ? 0.012 : 0) + S.shake) * (S.cam === 1 ? 1 : 0.12);
+  const amp = ((S.stallWarn ? 0.16 : 0) + (M.burner && S.n1 > 0.9 ? 0.012 : 0) + S.shake) * (S.cam === 0 || S.cam === 2 || S.cam >= 6 ? 0.12 : 1);
   if (amp > 0.004 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
     camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(Math.min(amp, 0.5) * 0.006 * Math.sin(t * 43)); }
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
@@ -404,7 +418,10 @@ function updateCamera(dt) {
   M.flap.forEach(f => { f.rotation.x = S.flapDeg * DEG; f.position.z = f.userData.z + S.flapDeg * 0.01 * PL.gearH; });
   if (M.gear) { M.gear.visible = S.gearPos > 0.03; M.gear.scale.y = Math.max(0.05, S.gearPos); M.gear.position.y = -0.35 * PL.gearH * (1 - S.gearPos); }
   if (M.beacon) M.beacon.visible = (TNOW % 1.2) < 0.12; const st = (TNOW % 1.5) < 0.07 || ((TNOW + 0.2) % 1.5) < 0.07; M.strobes.forEach(s => s.visible = st);
-  if (M.prop) M.prop.rotation.z += (8 + 40 * Math.abs(S.n1)) * dt;
+  if (M.prop) { const n = Math.abs(S.n1); M.prop.rotation.z += (8 + 40 * n) * dt; if (M.blades) { const blur = clamp((n - 0.12) / 0.3, 0, 1); for (const b of M.blades) b.visible = blur < 0.98; M.disc.visible = blur > 0.02; M.disc.material.opacity = blur; } }      // the blades give way to a blurred disc
+  if (M.fans) for (const f of M.fans) f.rotation.z += (3 + 34 * Math.abs(S.n1)) * dt;
+  if (M.wheels && S.onGround) for (const [w, r] of M.wheels) w.rotation.x -= S.V / r * dt;
+  if (M.spoil) { const up = S.brake || (S.onGround && S.landed && S.V > 8) ? 0.75 : 0; for (const sp of M.spoil) sp.rotation.x += (-up - sp.rotation.x) * Math.min(1, 6 * dt); }      // spoilers rise on the brake and after touchdown
   if (M.burner) { const ab = clamp((S.n1 - 0.85) / 0.15, 0, 1); M.burner.visible = ab > 0.02; M.burner.scale.set(1, 1, ab * (0.9 + 0.07 * Math.sin(TNOW * 47) + 0.05 * Math.sin(TNOW * 83))); M.burner.position.z = 7.7 + 2.75 * M.burner.scale.z; if (M.nozzle) M.nozzle.material.color.setRGB(0.06 + ab * 0.94, 0.03 + ab * 0.55, 0.02 + ab * 0.2); }       /* a steady flame with a slight pulse, and a glowing nozzle */
   AC.stick.rotation.x = -ctl.pitch * 0.3; AC.stick.rotation.z = -ctl.roll * 0.3; AC.thr.position.z = -15.75 - S.thr * 0.18;
 }

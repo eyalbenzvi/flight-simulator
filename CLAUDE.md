@@ -95,6 +95,16 @@ no bundler, no framework. Everything shares one global scope, so the load order 
     (floor, seats, overhead; a canopy bow and nose for bubble canopies); the terminal has windowed walls, a curved roof, piers, an apron texture, a tower.
   - A closed power lever means no power in every level: the aircraft glides down (Medium's protections do not add power behind the pilot's back).
   - Shake is small and almost absent in the cockpit and wing views (a metre from the panel, centimetres of camera movement made everything jump).
+- Views (`CAMS`, `S.cam`, the C key or the View button cycles, the settings row lists them): 0 cockpit, 1 chase, 2 wing, 3 fly-by (a camera standing in the
+  world ahead, with a long lens, that moves on after the aircraft has passed), 4 above, 5 front (looking back at the aircraft), 6 below (under the belly,
+  looking down and ahead), 7 tail (the top of the fin). Views 0, 2, 6, 7 are fixed to the aircraft and take free look.
+- Aircraft detail: turbofans are lathe nacelles with a chrome lip, a fan that turns (`M.fans`, `fanMat`), a duct and a core nozzle, on swept pylons; gear
+  legs have oleos, torque links, hubs and doors and the wheels turn on the ground (`M.wheels`); spoilers rise on the brake (`M.spoil`); the aerobatic
+  plane is a lathe with a painted sweep, a sunburst on the wings, three blades that give way to a blurred disc (`M.blades`, `M.disc`) and a pilot under
+  a clear canopy; the fighter carries a drop tank, pylons and formation-light strips.
+- The game must not end by accident (`guardBack`, `saveFlight`, `savedFlight` in `src/08-app.js`): Back in flight opens the menu and Back again resumes
+  (a history entry is kept in front of the page; from the start screen Back leaves as usual); leaving asks first; pull-to-refresh, the long-press menu
+  and page pinch are off; the flight is saved every 5 s and the start screen offers "Continue the last flight" for 45 minutes.
 - Interface polish layer (the last block of CSS in `index.html`): tokens (`--r1`, `--r2`, `--glass`, `--glass-solid`, `--elev`, `--ease`), a Hebrew font
   stack with no letter-spacing, menus as a side sheet (a bottom sheet on an upright phone) so the world shows, aircraft cards with pictures rendered at
   start-up (`shootPlanes`), a one-line title with the aircraft glyph, a dawn loading screen (`body:not(.ready)`), entry animations, one message slot

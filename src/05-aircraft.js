@@ -61,10 +61,16 @@ function liveryMat(o, big) {
   // cockpit: six panes round the top of the nose
   x.fillStyle = '#141b24'; const zc0 = o.z0 - R * (big ? 0.55 : 0.2), zc1 = o.z0 - R * (big ? 1.15 : 1.0);
   for (let k = -3; k < 3; k++) { const u0 = 0.5 + k * 0.047 + 0.004, u1 = u0 + 0.039, t = Math.abs(k + 0.5) / 3; x.beginPath(); x.moveTo(U(u0), Y(zc0 + t * R * 0.25)); x.lineTo(U(u1), Y(zc0 + t * R * 0.25)); x.lineTo(U(u1), Y(zc1 + t * R * 0.3)); x.lineTo(U(u0), Y(zc1 + t * R * 0.3)); x.closePath(); x.fill(); }
-  x.fillStyle = '#3a4047'; x.beginPath(); x.ellipse(W / 2, Y(zN), W, dz(R * 0.35), 0, 0, 7); x.fill();                                         // radome tip
+  x.fillStyle = '#8f979f'; x.fillRect(0, Y(zN + R * 0.18), W, H);                                         // radome tip
   const map = new THREE.CanvasTexture(c1), em = new THREE.CanvasTexture(c2); map.anisotropy = em.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const m = new THREE.MeshPhongMaterial({ map, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: 0, shininess: 70 }); AC.livery.push(m); AC.envMats.push(m); return m;
 }
+/** The front of a turbofan as a texture: twenty-two dark blades with lighter edges round a hub. */
+let FAN_MAT = null;
+function fanMat() { if (FAN_MAT) return FAN_MAT; const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#0f1215'; x.fillRect(0, 0, 128, 128); x.translate(64, 64);
+  for (let i = 0; i < 22; i++) { x.rotate(Math.PI * 2 / 22); x.fillStyle = '#2b3138'; x.beginPath(); x.moveTo(4, -14); x.quadraticCurveTo(22, -40, 9, -63); x.lineTo(-3, -63); x.quadraticCurveTo(10, -40, -3, -14); x.fill(); x.strokeStyle = 'rgba(190,200,210,.5)'; x.lineWidth = 1; x.beginPath(); x.moveTo(4, -14); x.quadraticCurveTo(22, -40, 9, -63); x.stroke(); }
+  x.fillStyle = '#c9ced4'; x.beginPath(); x.arc(0, 0, 15, 0, 7); x.fill();
+  return FAN_MAT = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }); }
 function buildAircraft() {
   const ph = (c, s) => { const m = new THREE.MeshPhongMaterial({ color: c, shininess: s || 50 }); AC.envMats.push(m); return m; }, lam = c => new THREE.MeshLambertMaterial({ color: c });
   AC.cabinMat = new THREE.MeshBasicMaterial({ color: 0x1b2430 });
@@ -76,9 +82,24 @@ function buildAircraft() {
     const pivot = (x, y, z, parent) => { const g = new THREE.Group(); g.position.set(x, y, z); (parent || M.g).add(g); return g; };
     const lamp = (c, x, y, z, r) => { const sp2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, toneMapped: false })); sp2.userData.r = (r || 0.22) * 3.6; sp2.scale.setScalar(sp2.userData.r); sp2.position.set(x, y, z); M.g.add(sp2); AC.glow.push(sp2); return sp2; };       // lights that glow, and bloom at night
     const surf = (arr, x, y, z, w, t, c, mat, parent) => { const p = pivot(x, y, z, parent); add(new THREE.BoxGeometry(w, t, c), mat, 0, 0, c / 2, p); p.userData.z = z; arr.push(p); return p; };
-    const leg = (x, z, r, top, parent) => { const bot = -sp.gearH, l = top - bot - r; add(new THREE.CylinderGeometry(0.04 + r * 0.16, 0.04 + r * 0.16, l, 8), dark, x, bot + r + l / 2, z, parent);
-      for (const s of [-1, 1]) add(new THREE.CylinderGeometry(r, r, r * 0.55, 14).rotateZ(Math.PI / 2), tyre, x + s * r * 0.52, bot + r, z, parent); };
+    // a gear leg: an outer strut with a chrome oleo below it, a torque link, an axle and two wheels with light hubs; the wheels turn on the ground
+    const chrome = ph(0xd9dde2, 140), hub = ph(0xbfc5cb, 60);
+    const leg = (x, z, r, top, parent, door) => { const bot = -sp.gearH, l = top - bot - r, t = 0.045 + r * 0.17;
+      add(new THREE.CylinderGeometry(t, t * 1.1, l * 0.6, 10), ph(0xe6e9ec, 50), x, bot + r + l * 0.7, z, parent); add(new THREE.CylinderGeometry(t * 0.62, t * 0.62, l * 0.45, 10), chrome, x, bot + r + l * 0.2, z, parent);
+      add(new THREE.BoxGeometry(t * 0.5, l * 0.3, t * 2.2), dark, x, bot + r + l * 0.3, z + t * 1.4, parent).rotation.x = 0.5;                                // torque link
+      add(new THREE.CylinderGeometry(t * 0.5, t * 0.5, r * 1.5, 8).rotateZ(Math.PI / 2), dark, x, bot + r, z, parent);                                      // axle
+      for (const s of [-1, 1]) { const wh = pivot(x + s * r * 0.56, bot + r, z, parent); (M.wheels = M.wheels || []).push([wh, r]);
+        add(new THREE.CylinderGeometry(r, r, r * 0.5, 18).rotateZ(Math.PI / 2), tyre, 0, 0, 0, wh); add(new THREE.CylinderGeometry(r * 0.55, r * 0.55, r * 0.54, 10).rotateZ(Math.PI / 2), hub, 0, 0, 0, wh);
+        add(new THREE.BoxGeometry(r * 0.56, r * 0.2, r * 0.2), dark, 0, 0, 0, wh); }
+      if (door) add(new THREE.BoxGeometry(0.04, l * 0.55, r * 2.4), door, x + Math.sign(x || 1) * (r * 0.95 + 0.12), bot + r + l * 0.72, z, parent).rotation.z = Math.sign(x || 1) * 0.12; };
 
+    // a turbofan: a lathe nacelle with a rounded, polished lip, a fan that turns with the engine, a dark duct, and a core nozzle with its plug
+    const engine = (x, y, z, r, l) => { const prof = [[r * 0.86, -l * 0.5], [r * 1.0, -l * 0.44], [r * 1.07, -l * 0.25], [r * 1.08, 0], [r * 1.0, l * 0.3], [r * 0.82, l * 0.5]].map(p => new THREE.Vector2(p[0], p[1]));
+      const ng = new THREE.LatheGeometry(prof, 22); ng.rotateX(Math.PI / 2); add(ng, ph(sp.key === 'airliner' ? 0xf2f4f6 : 0xf4f1ea, 70), x, y, z);
+      add(new THREE.TorusGeometry(r * 0.9, r * 0.075, 8, 24), chrome, x, y, z - l * 0.5 + 0.02);                                                           // intake lip
+      add(new THREE.CylinderGeometry(r * 0.86, r * 0.86, l * 0.5, 20, 1, true).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x14171b, side: THREE.BackSide }), x, y, z - l * 0.24);   // inlet duct
+      const fan = pivot(x, y, z - l * 0.36); add(new THREE.CircleGeometry(r * 0.86, 24), fanMat(), 0, 0, 0, fan).rotation.y = Math.PI; add(new THREE.ConeGeometry(r * 0.24, r * 0.5, 12).rotateX(-Math.PI / 2), ph(0xe9ecef, 90), 0, 0, -r * 0.2, fan); (M.fans = M.fans || []).push(fan);
+      add(cyl(r * 0.5, r * 0.78, l * 0.3, 16), ph(0x8b9199, 110), x, y, z + l * 0.6); add(cyl(r * 0.08, r * 0.42, l * 0.34, 12), ph(0x5c6168, 90), x, y, z + l * 0.78); };
     if (key === 'airliner' || key === 'bizjet') {
       // ---- tube-and-wing jets share one parametric builder ----
       const big = key === 'airliner';
@@ -99,10 +120,11 @@ function buildAircraft() {
         surf(M.ail, s * o.ail[0], o.wy, o.ail[1], o.ail[2], o.wt * 0.28, o.ail[3], body, wg);
         surf(M.flap, s * o.flap[0], o.wy - 0.05, o.flap[1], o.flap[2], o.wt * 0.32, o.flap[3], body, wg);
         const [ex, ey, ez, er, el] = o.eng;
-        add(cyl(er * 0.95, er * 1.07, el, 20), body, s * ex, ey, ez); add(cyl(er * 0.89, er * 0.89, 0.12, 20), dark, s * ex, ey, ez - el / 2 - 0.03);
-        add(cyl(er * 0.41, er * 0.73, el * 0.36, 14), dark, s * ex, ey, ez + el / 2 + el * 0.14);
-        if (o.rear) add(new THREE.BoxGeometry(ex - R * 0.7, 0.16, el * 0.55), body, s * (R * 0.7 + (ex - R * 0.7) / 2), ey, ez);
-        else add(new THREE.BoxGeometry(0.3, 1.0, 3.6), wingM, s * ex, ey + 0.95, ez + 1.0);
+        engine(s * ex, ey, ez, er, el);
+        if (o.rear) add(planform([[0, -el * 0.3], [s * (ex - R * 0.75), -el * 0.22], [s * (ex - R * 0.75), el * 0.22], [0, el * 0.3]], 0.2), body, s * R * 0.75, ey, ez);          // stub pylon
+        else { add(finGeo([[ez - el * 0.25, ey + er * 0.75], [ez + el * 0.1, o.wy - 0.1], [ez + el * 0.85, o.wy - 0.1], [ez + el * 0.55, ey + er * 0.8]], 0.26), body, s * ex, 0, 0);                         // pylon, swept back to the wing
+          for (const fx of [0.36, 0.62, 0.84]) add(new THREE.SphereGeometry(0.2, 8, 6), body, s * tip[0] * fx, o.wy - 0.28 + 1.0 * tip[0] * fx * o.dih, lerp(o.wing[4][1], o.wing[2][1], fx) - 0.5, wg).scale.set(0.9, 0.9, 5.2);   // flap-track fairings
+          M.spoil = M.spoil || []; const sp2 = pivot(s * tip[0] * 0.5, o.wy + o.wt * 0.5 + 0.02, lerp(o.wing[4][1], o.wing[2][1], 0.5) - 1.7, wg); add(new THREE.BoxGeometry(tip[0] * 0.34, 0.04, 0.8), wingM, 0, 0, 0.4, sp2); M.spoil.push(sp2); }
         M.emit.push([s * ex, ey, ez + el / 2 + 1.5]);
         add(planform(o.hs.map(p => [s * p[0], p[1]]), o.wt * 0.52), wingM, 0, o.hsy, 0);
         surf(M.elev, s * o.elev[0], o.hsy, o.elev[1], o.elev[2], o.wt * 0.24, o.elev[3], body);
@@ -111,7 +133,13 @@ function buildAircraft() {
       }
       add(finGeo(o.fin, R * 0.18), acc, 0, 0, 0);
       M.rud = pivot(0, o.rud[0], o.rud[1]); M.rud.rotation.x = o.rud[4]; add(new THREE.BoxGeometry(R * 0.08, o.rud[2], o.rud[3]), body, 0, 0, o.rud[3] / 2, M.rud);
-      M.gear = pivot(0, 0, 0); leg(0, o.gn, o.wr * 0.72, -R * 0.6, M.gear); leg(-o.gm[0], o.gm[1], o.wr, o.wy, M.gear); leg(o.gm[0], o.gm[1], o.wr, o.wy, M.gear);
+      M.gear = pivot(0, 0, 0); leg(0, o.gn, o.wr * 0.72, -R * 0.6, M.gear, body); leg(-o.gm[0], o.gm[1], o.wr, o.wy, M.gear, body); leg(o.gm[0], o.gm[1], o.wr, o.wy, M.gear, body);
+      // small things that make it an aircraft: the belly fairing, antennas, pitot probes, the tail-cone exhaust, a stripe on the fin
+      add(new THREE.SphereGeometry(1, 14, 10), body, 0, -R * 0.82, (o.wing[0][1] + o.wing[4][1]) / 2).scale.set(R * 0.92, R * 0.36, (o.wing[4][1] - o.wing[0][1]) * 0.72);
+      add(finGeo([[-2.2, R * 0.98], [-1.5, R * 1.3], [-1.2, R * 1.3], [-1.3, R * 0.98]], 0.05), body, 0, 0, 0); add(finGeo([[3, -R * 0.98], [3.3, -R * 1.25], [3.6, -R * 1.25], [3.7, -R * 0.98]], 0.05), body, 0, 0, 0);
+      for (const sg of [-1, 1]) add(cyl(0.02, 0.03, 0.5, 6), chrome, sg * R * 0.78, -R * 0.3, o.z0 - R * 0.9);
+      add(new THREE.CircleGeometry(R * 0.2, 10), new THREE.MeshBasicMaterial({ color: 0x1a1c1f }), 0, R * 0.62, o.z1 + o.tail + 0.02);
+      add(finGeo([[o.fin[1][0] - (o.fin[1][0] - o.fin[0][0]) * 0.5, o.fin[1][1] * 0.52], [o.fin[1][0] + 0.2, o.fin[1][1] * 0.86], [o.fin[2][0] - 0.1, o.fin[1][1] * 0.86], [o.fin[3][0] + (o.fin[2][0] - o.fin[3][0]) * 0.45, o.fin[1][1] * 0.52]], R * 0.19), ph(big ? 0xe9c877 : 0xc9a44a, 70), 0, 0, 0);
       lamp(0xffffff, 0, R * 0.4, o.z1 + o.tail, R * 0.11); M.beacon = lamp(0xff3030, 0, R * 1.08, -1, R * 0.15);
       M.land = [lamp(0xfff4dc, -R * 1.2, o.wy + 0.1, o.wing[0][1] + 0.4, R * 0.42), lamp(0xfff4dc, R * 1.2, o.wy + 0.1, o.wing[0][1] + 0.4, R * 0.42), lamp(0xfff4dc, 0, -R * 0.75, o.gn, R * 0.3)];
     } else if (key === 'fighter') {
@@ -157,25 +185,48 @@ function buildAircraft() {
       for (const s of [-1, 1]) add(planform([[s * 0.6, -1.1], [s * 2.9, 0.3], [s * 2.9, 1.0], [s * 0.6, 0.8]], 0.1), g2, 0, 0, 0, tp);
       add(finGeo([[3.3, 0.6], [6.2, 3.7], [7.1, 3.7], [6.9, 0.6]], 0.12), g2, 0, 0, 0);
       M.rud = pivot(0, 2.1, 6.95); add(new THREE.BoxGeometry(0.07, 2.5, 0.5), g1, 0, 0, 0.25, M.rud);
-      M.gear = pivot(0, 0, 0); leg(0, -3.3, 0.2, -0.6, M.gear); leg(-0.95, 1.6, 0.28, -0.3, M.gear); leg(0.95, 1.6, 0.28, -0.3, M.gear);
+      M.gear = pivot(0, 0, 0); leg(0, -3.3, 0.2, -0.6, M.gear, g2); leg(-0.95, 1.6, 0.28, -0.3, M.gear, g2); leg(0.95, 1.6, 0.28, -0.3, M.gear, g2);
+      // stores and markings: a centreline drop tank on its pylon, underwing pylons, pale formation-light strips, a dark fin cap, an air-data probe on the fin
+      { const tk = [[0.02, -2.6], [0.26, -1.9], [0.34, -0.6], [0.34, 0.9], [0.22, 2.0], [0.03, 2.7]].map(p => new THREE.Vector2(p[0], p[1])), tg = new THREE.LatheGeometry(tk, 12); tg.rotateX(Math.PI / 2); add(tg, g3, 0, -1.55, 1.3);
+        add(new THREE.BoxGeometry(0.08, 0.5, 1.6), g2, 0, -1.12, 1.3); for (const sg of [-1, 1]) { add(new THREE.BoxGeometry(0.07, 0.3, 1.5), g2, sg * 2.6, -0.28, 2.4);
+          add(new THREE.BoxGeometry(0.02, 0.1, 1.3), ph(0xd9e6a8, 40), sg * 0.99, 0.18, -0.4); add(new THREE.BoxGeometry(0.9, 0.02, 0.1), ph(0xd9e6a8, 40), sg * 3.4, 0.05, 3.3); } }
+      add(finGeo([[5.75, 3.2], [6.2, 3.72], [7.1, 3.72], [7.05, 3.2]], 0.13), dark, 0, 0, 0); add(cyl(0.012, 0.012, 0.7, 5), dark, 0, 3.5, 5.9);
       M.beacon = lamp(0xff3030, 0, 3.8, 6.6, 0.1); M.strobes.push(lamp(0xffffff, 0, -0.75, 2, 0.12));
     } else {
       // ---- aerobatic monoplane: propeller, fixed gear, big control surfaces ----
       const red = ph(0xd3302b, 80), wht = ph(0xf5f2ea, 70);
-      add(cyl(0.5, 0.5, 2.8, 16), red, 0, 0, -0.8); add(cyl(0.13, 0.5, 3.7, 16), wht, 0, 0.04, 2.45);
-      add(cyl(0.5, 0.36, 0.7, 16), wht, 0, 0, -2.55); add(cyl(0.2, 0.03, 0.5, 12), dark, 0, 0, -3.15);          // cowling + spinner
-      M.prop = pivot(0, 0, -3.0); add(new THREE.BoxGeometry(0.14, 2.1, 0.04), dark, 0, 0, 0, M.prop);
-      add(cyl(1.05, 1.05, 0.02, 24), new THREE.MeshBasicMaterial({ color: 0x9aa4ad, transparent: true, opacity: 0.16, depthWrite: false }), 0, 0, 0, M.prop);
-      add(new THREE.SphereGeometry(0.42, 14, 10), canopy, 0, 0.36, -0.2).scale.set(1, 1, 2.9);
+      // fuselage: one lathe from the cowling to the tail post, painted on a canvas: a red nose and belly, white top, a red sweep along the side
+      { const prof = [[-2.95, 0.34], [-2.6, 0.46], [-2.0, 0.52], [-0.6, 0.53], [0.8, 0.46], [2.4, 0.30], [4.1, 0.10], [4.35, 0.05]], pts = prof.map(p => new THREE.Vector2(p[1], p[0])), fg = new THREE.LatheGeometry(pts, 18); fg.rotateX(Math.PI / 2);
+        const p = fg.attributes.position, uv = fg.attributes.uv; for (let k = 0; k < p.count; k++) { const z = p.getZ(k), y = p.getY(k); if (y > 0 && z > -1.6 && z < 2.6) p.setY(k, y * (1 + 0.16 * Math.sin((z + 1.6) / 4.2 * Math.PI))); uv.setY(k, (z + 2.95) / 7.3); } fg.computeVertexNormals();
+        const c = document.createElement('canvas'); c.width = 256; c.height = 512; const x = c.getContext('2d'), Y = z => 512 * (1 - (z + 2.95) / 7.3);
+        x.fillStyle = '#f5f2ea'; x.fillRect(0, 0, 256, 512); x.fillStyle = '#d3302b'; x.fillRect(0, Y(-1.9), 256, 512 - Y(-1.9)); x.fillRect(0, 0, 40, 512); x.fillRect(216, 0, 40, 512);                    // nose, belly
+        for (const u of [64, 192]) { const sg = u < 128 ? 1 : -1; x.beginPath(); x.moveTo(u - sg * 24, Y(-1.9)); x.lineTo(u + sg * 30, Y(-1.9)); x.lineTo(u + sg * 4, Y(3.9)); x.lineTo(u - sg * 24, Y(3.9)); x.closePath(); x.fill();          // the sweep narrows to the tail
+          x.fillStyle = '#1c2f52'; x.fillRect(u + sg * 30 - (sg > 0 ? 0 : 5), Y(3.6), 5, Y(-1.9) - Y(3.6)); x.fillStyle = '#d3302b'; }
+        const fm = new THREE.MeshPhongMaterial({ map: new THREE.CanvasTexture(c), shininess: 90 }); AC.envMats.push(fm); add(fg, fm, 0, 0, 0); }
+      add(new THREE.TorusGeometry(0.33, 0.035, 6, 16), dark, 0, 0, -2.96); for (const sg of [-1, 1]) add(cyl(0.035, 0.035, 0.5, 6), ph(0x8b9199, 120), sg * 0.3, -0.42, -2.1).rotation.x = 0.5;                     // cowl intake, exhaust stacks
+      // propeller: a spinner and three tapered blades; as the engine speeds up the blades give way to a blurred disc with a yellow tip ring
+      M.prop = pivot(0, 0, -3.05); add(new THREE.ConeGeometry(0.2, 0.55, 14).rotateX(-Math.PI / 2), wht, 0, 0, -0.18, M.prop); M.blades = [];
+      for (let b = 0; b < 3; b++) { const bl = pivot(0, 0, 0, M.prop); bl.rotation.z = b * Math.PI * 2 / 3; const bm = add(new THREE.BoxGeometry(0.17, 1.0, 0.035), dark, 0, 0.6, 0, bl); bm.rotation.y = 0.35; add(new THREE.BoxGeometry(0.12, 0.14, 0.04), ph(0xf2c230, 40), 0, 1.05, 0, bl).rotation.y = 0.35; M.blades.push(bl); }
+      { const dc = document.createElement('canvas'); dc.width = dc.height = 128; const dx = dc.getContext('2d'), dg = dx.createRadialGradient(64, 64, 6, 64, 64, 64); dg.addColorStop(0, 'rgba(60,64,70,.0)'); dg.addColorStop(0.3, 'rgba(60,64,70,.20)'); dg.addColorStop(0.86, 'rgba(60,64,70,.13)'); dg.addColorStop(0.9, 'rgba(242,194,48,.3)'); dg.addColorStop(0.97, 'rgba(242,194,48,.2)'); dg.addColorStop(1, 'rgba(60,64,70,0)'); dx.fillStyle = dg; dx.fillRect(0, 0, 128, 128);
+        M.disc = add(new THREE.CircleGeometry(1.13, 28), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(dc), transparent: true, depthWrite: false, side: THREE.DoubleSide }), 0, 0, -3.06); }
+      // canopy: clear, with a frame, and the pilot under it
+      { const glass = new THREE.MeshPhongMaterial({ color: 0x33424f, shininess: 160, specular: 0xdcecf8, transparent: true, opacity: 0.38 }); AC.envMats.push(glass);
+        add(new THREE.BoxGeometry(0.42, 0.5, 0.45), dark, 0, 0.36, 0.25); add(new THREE.SphereGeometry(0.16, 10, 8), ph(0xf0f0ea, 90), 0, 0.72, 0.05); add(new THREE.BoxGeometry(0.3, 0.3, 0.22), ph(0x2a3c66, 40), 0, 0.5, 0.05);            // seat, helmet, shoulders
+        add(new THREE.SphereGeometry(0.44, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), glass, 0, 0.36, -0.15).scale.set(0.95, 1.0, 2.8); add(new THREE.TorusGeometry(0.42, 0.028, 6, 14, Math.PI), wht, 0, 0.36, -1.05).scale.set(0.95, 0.75, 1); }
+      // the wings carry a sunburst on top: red rays on white, the same on both sides (it shows the attitude from far away)
+      const sun2 = (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 128; const x = c.getContext('2d'); x.fillStyle = '#f5f2ea'; x.fillRect(0, 0, 256, 128); x.fillStyle = '#d3302b';
+        for (const sg of [-1, 1]) for (let r = 0; r < 5; r++) { const a0 = 0.10 + r * 0.30, a1 = a0 + 0.15; x.beginPath(); x.moveTo(128, 128); x.lineTo(128 + sg * Math.cos(a0) * 300, 128 - Math.sin(a0) * 300); x.lineTo(128 + sg * Math.cos(a1) * 300, 128 - Math.sin(a1) * 300); x.closePath(); x.fill(); }
+        const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.repeat.set(1 / 8.4, 1 / 2.1); t.offset.set(0.5, 0.74); const m = new THREE.MeshPhongMaterial({ map: t, shininess: 80 }); AC.envMats.push(m); return m; })();
       for (const s of [-1, 1]) {
-        add(planform([[s * 0.4, -1.45], [s * 4, -0.85], [s * 4, 0.05], [s * 0.4, 0.5]], 0.14), s < 0 ? red : wht, 0, -0.3, 0);
-        surf(M.ail, s * 2.4, -0.3, 0.2, 2.9, 0.06, 0.42, s < 0 ? wht : red);
+        add(planform([[s * 0.4, -1.45], [s * 4, -0.85], [s * 4, 0.05], [s * 0.4, 0.5]], 0.14), sun2, 0, -0.3, 0);
+        surf(M.ail, s * 2.4, -0.3, 0.2, 2.9, 0.06, 0.42, red);
         add(planform([[s * 0.1, 3.3], [s * 1.5, 3.5], [s * 1.5, 3.95], [s * 0.1, 4.0]], 0.07), red, 0, 0.15, 0);
-        add(new THREE.BoxGeometry(0.07, 0.75, 0.3), dark, s * 0.62, -0.62, -1.2).rotation.z = s * 0.75;             // spring gear leg
-        add(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 14).rotateZ(Math.PI / 2), tyre, s * 0.92, -0.85, -1.2);
-        add(new THREE.SphereGeometry(0.24, 10, 8), red, s * 0.92, -0.8, -1.2).scale.set(0.5, 0.8, 1.6);              // wheel pant
+        add(new THREE.BoxGeometry(0.07, 0.75, 0.3), ph(0xd9dde2, 120), s * 0.62, -0.62, -1.2).rotation.z = s * 0.75;             // spring gear leg
+        { const wh = pivot(s * 0.92, -0.85, -1.2); (M.wheels = M.wheels || []).push([wh, 0.2]); add(new THREE.CylinderGeometry(0.2, 0.2, 0.14, 16).rotateZ(Math.PI / 2), tyre, 0, 0, 0, wh); add(new THREE.CylinderGeometry(0.1, 0.1, 0.15, 8).rotateZ(Math.PI / 2), ph(0xbfc5cb, 60), 0, 0, 0, wh); add(new THREE.BoxGeometry(0.16, 0.05, 0.05), dark, 0, 0, 0, wh); }
+        { const sp3 = [[0.02, -0.5], [0.15, -0.3], [0.2, 0.0], [0.16, 0.32], [0.03, 0.62]].map(p => new THREE.Vector2(p[0], p[1])), sg2 = new THREE.LatheGeometry(sp3, 10, 0, Math.PI); sg2.rotateX(Math.PI / 2); sg2.rotateZ(Math.PI / 2); add(sg2, red, s * 0.92, -0.8, -1.2).scale.set(0.8, 1.15, 1); }   // wheel spat
         lamp(s < 0 ? 0xff2020 : 0x20ff40, s * 4.0, -0.28, -0.3, 0.07);
       }
+      add(new THREE.BoxGeometry(0.03, 0.3, 0.05), ph(0xd9dde2, 120), 0, -0.25, 4.05).rotation.x = -0.5; add(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 10).rotateZ(Math.PI / 2), tyre, 0, -0.4, 4.15);        // tail wheel
       surf(M.elev, 0, 0.15, 3.98, 2.9, 0.05, 0.4, wht);
       add(finGeo([[3.1, 0.2], [3.85, 1.5], [4.3, 1.5], [4.25, 0.2]], 0.07), red, 0, 0, 0);
       M.rud = pivot(0, 0.85, 4.28); add(new THREE.BoxGeometry(0.06, 1.3, 0.45), wht, 0, 0, 0.22, M.rud);
