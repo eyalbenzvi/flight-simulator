@@ -192,7 +192,7 @@ function mapLabels(W, H, u, big, zs) {
   for (const [n, x, y, lo] of wps) { const t = big ? L(...WP_NAMES[n]) : L(n, WPS[n] || n); label(t, x, y, big ? 13 : 10, big, 'wp', lo < 35 ? ['l', 'r', 'u', 'd'] : ['r', 'l', 'u', 'd']); }
   if (big) {
     const near = (x, y) => wps.some(w => Math.hypot(w[1] - x, w[2] - y) < px(14)), minPop = Math.max(1, 20 / Math.pow(zs, 1.5));
-    const locs = LOCS.filter(l => l[4] >= minPop).sort((a, b) => b[4] - a[4]).map(l => [L(l[1], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
+    const locs = LOCS.filter(l => l[4] >= minPop).sort((a, b) => b[4] - a[4]).map(l => [L(l[1] || l[0], l[0]), mx(lon2x(l[2])), mz(lat2z(l[3])), l[4]]);
     for (const [t, x, y, pop] of locs) if (pop >= 100 && !near(x, y)) label(t, x, y, 12, true, 'loc', ['r', 'l', 'u', 'd']);
     for (const r of ROADLBL) if (r.cls === 2) shield(r);
     for (const [t, x, y, pop] of locs) if (pop < 100 && !near(x, y)) label(t, x, y, 10.5, false, 'loc', ['r', 'l', 'u', 'd']);
@@ -210,7 +210,10 @@ function drawMap() {
   M.drawImage(mapImg, 0, 0, W, H); M.fillStyle = big ? 'rgba(0,10,20,.28)' : 'rgba(0,10,20,.16)'; M.fillRect(0, 0, W, H);
   if (z > 1.4) {                                       // zoomed in: redraw the roads as sharp lines over the baked image
     M.lineJoin = M.lineCap = 'round';
-    for (const c of [0, 1, 2]) for (const p of roadPaths) { if (p[0][3] !== c) continue; M.strokeStyle = c === 2 ? 'rgba(255,236,170,.95)' : c === 1 ? 'rgba(240,240,235,.8)' : 'rgba(230,230,225,.5)'; M.lineWidth = px(c === 2 ? 2.2 : c === 1 ? 1.4 : 0.9); M.beginPath();
+    for (const c of [0, 1, 2]) for (const p of roadPaths) { if (p[0][3] !== c) continue;
+      if (!p.bb) { let a = 1e9, b = 1e9, e = -1e9, f = -1e9; for (const q of p) { a = Math.min(a, q[0]); b = Math.min(b, q[2]); e = Math.max(e, q[0]); f = Math.max(f, q[2]); } p.bb = [mx(a), mz(b), mx(e), mz(f)]; }
+      if (p.bb[2] < vx0 || p.bb[0] > vx1 || p.bb[3] < vy0 || p.bb[1] > vy1) continue;          // only the roads in view
+      M.strokeStyle = c === 2 ? 'rgba(255,236,170,.95)' : c === 1 ? 'rgba(240,240,235,.8)' : 'rgba(230,230,225,.5)'; M.lineWidth = px(c === 2 ? 2.2 : c === 1 ? 1.4 : 0.9); M.beginPath();
       p.forEach((q, i) => i ? M.lineTo(mx(q[0]), mz(q[2])) : M.moveTo(mx(q[0]), mz(q[2]))); M.stroke(); } }
   M.lineWidth = px(1.2); M.strokeStyle = '#ff66ee';                                     // ILS approach feathers
   for (const rw of RUNWAYS) { if (!rw.ils) continue; const x = mx(rw.tx), y = mz(rw.tz), ex = mx(rw.tx - rw.dx * gsDist(450)), ey = mz(rw.tz - rw.dz * gsDist(450));
@@ -313,7 +316,8 @@ function drawSys() {
 }
 
 // ---------- 12b. Settings, smoke trails, air traffic, weather, photo mode ----------
-const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if (o.mode >= 0 && o.mode <= 2) d.mode = o.mode; if (o.lang === 'en') d.lang = 'en'; if (o.pick && Array.isArray(o.pick.at) && Array.isArray(o.pick.name)) d.pick = o.pick;
+const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
+  if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
   for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (o.stamps && typeof o.stamps === 'object') d.stamps = o.stamps; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
@@ -403,7 +407,7 @@ function updateWeather(dt) {
   if (S.lt <= 0) { S.lt = 4 + Math.random() * 10; S.flash = 0.16; ENV.skyCol.value.setRGB(1.5, 1.5, 1.8); skyU.top.value.setRGB(0.7, 0.72, 0.85); setTimeout(() => Snd.boom(), 300 + Math.random() * 1500); }
 }
 function photoCamera() {
-  const d = PL.chase[0] * PH.d, ce = Math.cos(PH.el); AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q); AC.m.g.visible = true; AC.deck.visible = false;
+  const d = PL.chase[0] * PH.d, ce = Math.cos(PH.el); AC.root.position.copy(S.pos); AC.root.quaternion.copy(S.q); AC.m.g.visible = !S.crashed; AC.deck.visible = false;
   camera.position.set(S.pos.x + Math.sin(PH.az) * ce * d, S.pos.y + Math.sin(PH.el) * d, S.pos.z + Math.cos(PH.az) * ce * d); camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 2);
   camera.up.set(0, 1, 0); camera.lookAt(S.pos); if (keys.ArrowLeft) PH.az += 0.02; if (keys.ArrowRight) PH.az -= 0.02; if (keys.ArrowUp) PH.el = Math.min(PH.el + 0.015, 1.4); if (keys.ArrowDown) PH.el = Math.max(PH.el - 0.015, -0.3);
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
@@ -435,8 +439,9 @@ const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touc
   'Cockpit': 'תא הטייס', 'Chase': 'מאחור', 'Wing': 'מהכנף', 'Clear': 'בהיר', 'Dust haze': 'אובך', 'Storm': 'סופה', 'day': 'יום', 'sunset': 'שקיעה', 'night': 'לילה' };
 const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
 function setMode(m) {
-  S.mode = m; S.arc = m === 0; S.assist = m !== 2; S.holdAlt = null; S.gamHold = null; S.toClimb = false; A.sync = true; SAVE.mode = m; persist();
-  document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1]); if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc); S.legSig = '';
+  if (S.arc && S.trick && m !== 0) { S.q.setFromEuler(eul.set(A.gam + 0.03, -A.psi, -A.phi, 'YXZ')); const cg = Math.cos(A.gam); S.vel.set(Math.sin(A.psi) * cg * A.v, Math.sin(A.gam) * A.v, -Math.cos(A.psi) * cg * A.v); }      // leaving Easy in the middle of a roll or loop: the right way up
+  S.mode = m; S.arc = m === 0; S.assist = m !== 2; S.trick = null; S.holdAlt = null;          /* a half-flown Easy loop must not be handed to the real-physics trick law */ S.gamHold = null; S.toClimb = false; A.sync = true; SAVE.mode = m; persist();
+  document.body.classList.toggle('arc', S.arc); $('modeB').textContent = L('Level: ', 'רמה: ') + L(LV[m][0], LV[m][1]); if (SAVE.pfd !== undefined) document.body.classList.toggle('nopfd', !SAVE.pfd); else if (!document.body.classList.contains('touch')) document.body.classList.toggle('nopfd', S.arc);      /* the player's own choice of instruments wins over the level's default */ S.legSig = '';
 }
 /* Easy's slowest speed: 1.18 x the stall speed for the flaps now set (automatic in Easy), so full flaps allow a real approach speed */
 function arcVmin() { const clm = PL.cl0 + PL.cla * PL.ast; return PL.vs * Math.sqrt(clm / (clm + 0.03 * S.flapDeg)) * 1.18; }
@@ -530,6 +535,11 @@ const OBST = new Map(), EXP = { parts: [], t: -1 };
 function addObst(x, z, w, d, rot, y0, y1) {
   const o = [x, z, w / 2, d / 2, Math.cos(rot), Math.sin(rot), y0, y1], r = Math.hypot(w, d) / 2;
   for (let gx = Math.floor((x - r) / 128); gx <= Math.floor((x + r) / 128); gx++) for (let gz = Math.floor((z - r) / 128); gz <= Math.floor((z + r) / 128); gz++) { const k = gx * 100003 + gz; let a = OBST.get(k); if (!a) OBST.set(k, a = []); a.push(o); }
+}
+/** Top of the tallest obstacle around a point (its 128 m cell and the eight around it), or -Infinity: for routes that must clear buildings and the Masada rock, not only the ground. */
+function obstacleTop(x, z) {
+  let top = -Infinity; for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = OBST.get((Math.floor(x / 128) + a) * 100003 + Math.floor(z / 128) + b); if (c) for (const o of c) if (o[7] > top) top = o[7]; }
+  return top;
 }
 function hitObstacle(x, y, z, pad) {
   const a = OBST.get(Math.floor(x / 128) * 100003 + Math.floor(z / 128)); if (!a) return false;

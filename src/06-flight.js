@@ -19,8 +19,10 @@ let toastT = 0; function toast(msg, dur) { const t = document.getElementById('to
 
 /** Throttle and pitch for steady flight at speed V on flight-path angle gamma (used when spawning in the air). */
 function trimFor(V, alt, gamma, flapDeg, gear) {
-  const rho = isa(alt).rho, qd = 0.5 * rho * V * V, CL = MASS * G * Math.cos(gamma) / (qd * SW);
-  const CD = CD0 + KIND * CL * CL + (gear && !PL.fixedGear ? 0.02 : 0) + 0.0015 * flapDeg, T = qd * SW * CD + MASS * G * Math.sin(gamma);
+  const rho = isa(alt).rho, qd = 0.5 * rho * V * V; let CL = MASS * G * Math.cos(gamma) / (qd * SW), CD = 0, T = 0;
+  for (let i = 0; i < 4; i++) {          // thrust is tilted up by the angle of attack: it carries part of the weight and only its cosine pushes (it matters for the fighter on approach)
+    const al = (CL - CL0 - 0.03 * flapDeg) / CLA; CD = CD0 + KIND * CL * CL + (gear && !PL.fixedGear ? 0.02 : 0) + 0.0015 * flapDeg; T = (qd * SW * CD + MASS * G * Math.sin(gamma)) / Math.max(Math.cos(al), 0.5);
+    CL = (MASS * G * Math.cos(gamma) - T * Math.sin(al)) / (qd * SW); }
   return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
@@ -41,7 +43,7 @@ function spawn(def) {
     alt += def.high || 0; S.pos.set(x, alt, z); S.vel.set(d.x * V * Math.cos(gamma), V * Math.sin(gamma), d.z * V * Math.cos(gamma));
     S.q.setFromEuler(eul.set(gamma + tr.alpha, -hdg * DEG, 0, 'YXZ')); S.thr = S.n1 = tr.thr; S.gear = gear; S.gearPos = gear ? 1 : 0; S.flapIdx = f; S.flapDeg = FLAPS[f]; S.onGround = false;
   }
-  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = 0; S.boost = 0; if (S.noEngine) S.thr = S.n1 = 0;
+  S.ra = S.pos.y - groundAt(S.pos.x, S.pos.z).h - GEAR_H; S.V = S.vel.length(); S.gam = S.V > 5 ? Math.asin(clamp(S.vel.y / S.V, -1, 1)) : 0; S.gamHold = null; S.boost = 0;          /* the flight path it starts on is the one Expert holds hands-off (it used to hold level, on descent power) */ if (S.noEngine) S.thr = S.n1 = 0;
   S.vs0 = Math.sqrt(2 * MASS * G / (isa(S.pos.y).rho * SW * (CL0 + CLA * ASTALL + 0.03 * S.flapDeg)));
   A.sync = true; toast(def.pick ? '📍 ' + L(def.name[0], def.name[1]) : def.type === 'approach' ? L('Approach: ', 'גישה: ') + tr(def.label.replace('Approach: ', '')) : tr(def.label));
 }
@@ -112,16 +114,22 @@ function updateControls(dt) {
         //      From beside or behind it: first fly to an entry point far out on the extended centreline. Height follows the glide path. ----
         const rx = S.pos.x - rw.tx, rz = S.pos.z - rw.tz, along = -(rx * rw.dx + rz * rw.dz), cross = rx * -rw.dz + rz * rw.dx;
         const R = S.V * S.V / (G * Math.tan(25 * DEG)) * hsAt(S.ra), entry = Math.max(gsDist(420), 4 * R + 1500);       // R: turn radius at 25° of bank, on the map
-        if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) S.landJoin = false;
+        if (realDist(rx, rz) < 20000) S.landT = (S.landT || 0) + dt;                  // time spent manoeuvring near the field
+        if (S.landJoin && (along < 1500 || Math.abs(cross) > along * 1.2)) { S.landJoin = false; S.landTries = (S.landTries || 0) + 0.5; }
+        if (S.landTries > 3 || S.landT > 600) { S.land = null; S.landTries = 0; S.landT = 0; S.holdAlt = null; toast(L('Could not line up with the runway. Fly farther out and press Land again', 'לא הצלחנו להתיישר מול המסלול. מתרחקים ולוחצים שוב על נחיתה'), 6); return; }       // rather than circle for ever
         else if (!S.landJoin && along > 2.5 * R + Math.abs(cross) * 0.6 + 800 + (Math.abs(wrap180(S.hdg - rw.hdg)) > 90 ? 2.5 * R : 0)) S.landJoin = true;     // heading away: room for the turn back
+        if (rw.obMax === undefined) { rw.obMax = -Infinity; for (let ox = -1800; ox <= 1800; ox += 128) for (let oz = -1800; oz <= 1800; oz += 128) rw.obMax = Math.max(rw.obMax, obstacleTop(rw.tx + ox, rw.tz + oz)); }      // the tallest thing around the field (at Masada, the rock): manoeuvring near the field stays above it
+        const rock = !S.landJoin && rw.obMax > rw.elev + 150 && Math.hypot(rx, rz) < 2600 && rw.obMax + 70 - S.pos.y > 20;       // low beside a tall rock: climb straight out along the runway before turning
         let hT;
         if (S.landJoin) hT = rw.hdg - clamp(cross / (1.5 * R) * 60, -60, 60);
         else hT = Math.atan2(rw.tx - rw.dx * entry - S.pos.x, -(rw.tz - rw.dz * entry - S.pos.z)) / DEG;
+        if (rock && Math.abs(wrap180(rw.hdg - S.hdg)) < 100) hT = rw.hdg;
         const bl = !S.landJoin && S.ra < 250 ? 10 : 25; rt = rollFor(clamp(wrap180(hT - S.hdg) * 1.2, -bl, bl) * DEG);     // low down, climb before turning hard
         const gsAlt = rw.elev + GEAR_H + gsHeight((S.landJoin ? Math.max(along, 0) : entry) + 300);
         const terr = Math.max(groundAt(S.pos.x, S.pos.z).h, groundAt(S.pos.x + S.vel.x * 12 * hsAt(S.ra), S.pos.z + S.vel.z * 12 * hsAt(S.ra)).h) + (S.landJoin ? clamp(along * 0.06, 40, 180) : 180);     // terrain clearance, less close to the runway
-        const low = terr - S.pos.y > 20;                       // below the safe height: full power and a steep climb come before speed and turning
-        pt = pitchFor(clamp((Math.max(gsAlt, terr) - S.pos.y) * 0.001, -0.13, low ? 0.2 : 0.09));
+        const hsN = hsAt(S.ra), obT = Math.max(!S.landJoin && rw.obMax > rw.elev + 150 && Math.hypot(rx, rz) < 2600 ? rw.obMax : -Infinity, obstacleTop(S.pos.x, S.pos.z), obstacleTop(S.pos.x + S.vel.x * 6 * hsN, S.pos.z + S.vel.z * 6 * hsN), obstacleTop(S.pos.x + S.vel.x * 12 * hsN, S.pos.z + S.vel.z * 12 * hsN), obstacleTop(S.pos.x + S.vel.x * 22 * hsN, S.pos.z + S.vel.z * 22 * hsN), obstacleTop(S.pos.x + S.vel.x * 36 * hsN, S.pos.z + S.vel.z * 36 * hsN)) + 70;       // and clear of buildings and the Masada rock
+        const low = Math.max(terr, S.landJoin && along > 0 && along < 600 ? -1e9 : obT) - S.pos.y > 20;                       // below the safe height: full power and a steep climb come before speed and turning
+        pt = pitchFor(clamp((Math.max(gsAlt, terr, S.landJoin && along > 0 && along < 600 ? -1e9 : obT) - S.pos.y) * 0.001, -0.13, low ? 0.2 : 0.09));
         const dT = realDist(rx, rz), vT = S.vs0 * (dT < 25000 ? 1.4 : 1.6); S.thr = low ? 1 : clamp(S.thr + ((vT - S.V) * 0.02 - S.dV * 0.3) * dt, 0, 1); S.brake = !low && S.V > vT + 18; if (low) S.boost = 1;
         if (dT < 15000) { S.gear = true; S.flapIdx = Math.max(S.flapIdx, fi(1)); }
       } else {
@@ -156,7 +164,7 @@ function updateControls(dt) {
       const hv0 = Math.hypot(S.vel.x, S.vel.z) || 1, hv = hv0 * hsAt(S.ra), ux = S.vel.x / hv0, uz = S.vel.z / hv0, base = S.pos.y - GEAR_H - 25 - S.V * 0.08;
       let gReq = -(S.ra - 25 - S.V * 0.08) * 0.3 / Math.max(S.V, 40);
       const tMax = clamp(330 / PL.up, 11, 40);      // sluggish aircraft look further ahead; races follow gates that already clear the ground
-      for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h - base) / d); }
+      for (const t of [0.5, 1, 1.5, 2, 3, 4, 5.5, 7, 9, 11, 16, 22, 30, 40]) { if (t > tMax) break; const d = hv * t; gReq = Math.max(gReq, (Math.max(groundAt(S.pos.x + ux * d, S.pos.z + uz * d).h, t <= 16 ? obstacleTop(S.pos.x + ux * d, S.pos.z + uz * d) : -1e9) - base) / d); }       // towers count as ground ahead
       if (Math.abs(S.bank) > 0.15) { const sg = Math.sign(S.bank);          // in a turn, also look along the curve
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {

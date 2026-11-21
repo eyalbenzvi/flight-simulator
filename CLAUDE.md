@@ -72,6 +72,12 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - Touch targets are at least 44 px; icon buttons get localized `aria-label`s in `applyLang`, which also sets `<html lang>`.
 - Every user-facing string is bilingual (`L('English', 'עברית')`, or `TRD` for data labels). Aviation instruments (PFD, ft, kt) stay as they are.
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
+- HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
+- Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.
+- `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) and
+  the passport stamps; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.
+- The flight passport (`updateStamps`, `stampGrid`, `STAMP_FACTS` in `src/07b-picker.js`): flying within 2 km (real) of a `PICK_SITES` place below
+  1,500 m earns its stamp and a sentence about it; the menu section lists them and opens the picker on the chosen one.
 - Easy mode climbs over rising ground by itself when low (`arcadeStep`), so letting go never flies into a hill; flat ground can still be landed on.
 
 ## Flight model
@@ -96,17 +102,25 @@ Re-run these numbers after changing `PLANES` (the analytical part is a few lines
 - 0 Easy (`S.arc`): `arcadeStep` replaces the physics. Speed changes come from the real thrust and drag (`arcadeAccel`, with gear and flap drag), so take-off runs and
   rollouts are realistic (airliner: lift-off after about 1.1 km and 26 s, touchdown at about 133 kt, stops in about 700 m). The slowest speed
   `arcVmin()` follows the automatic flaps. After landing with the power at idle the brakes come on by themselves. The stick steers the flight path directly, the lever sets speed,
-  release flies straight and level, there is an automatic flare near the ground. Crashes: water, hillside, too fast, buildings.
+  release flies straight and level, there is an automatic flare near the ground. Holding the stick down low slows to landing speed and floats
+  until slow, so that alone lands it. Nothing ends the flight in Easy: water or a too-fast touchdown skips back into the air, and `crash()` in Easy is
+  a bump with a message and a return to 300 m above the spot. Each aircraft has a ceiling (`aCeil`), and it cannot climb at idle (`gmax` follows the lever).
 - 1 Medium (`S.assist`): real physics with flight-path hold, automatic gear and flaps, stall and terrain protection.
 - 2 Expert: real physics, rate command with flight-path hold when the stick is released, manual gear and flaps.
 - Autoland (`S.land`) and the autopilot (`S.ap.on`) always run on the physics path, also from Easy mode.
 - Automatic landing (L key / Land button) starts anywhere within `LAND_RANGE` (40 km, real) of the nearest runway with an ILS (`landTarget`).
   Phases in `S.landPh`: `intercept` (fly to an entry point on the extended centreline, or, with `S.landJoin`, a localizer intercept
   onto it, glide-path height, terrain clearance), `final` (the ILS law, captured when lined up and not more than 5° high; going round
-  if far too high close in), `rollout` (after touchdown, also through a bounce). Tested from 70 random starts at all six airports.
+  if far too high, too fast or not over the runway close in), `rollout` (after touchdown, also through a bounce). The localizer gain divides by
+  `hsAt` (ground speed on the map is scaled), the flare is flown on the flight path, obstacles (`obstacleTop`) count in the clearance height, and
+  after 3 failed tries or 10 minutes near the field it gives up with a message (`S.landTries`, `S.landT`). 45 of 45 random starts land within
+  10 m of the centreline; the airliner at Masada (a 1,200 m strip beside a 370 m rock) usually gives up.
 - `landPanel` (in `src/07-hud-and-modes.js`) drives the landing panel under the speed strip and the touch button states: Land is
   green when an airport is in range, dimmed when not (tapping says where the nearest one is), magenta while landing; the chips say
   whether gear and flaps are automatic (Easy, Medium, autoland) or manual (Expert, keys G and F).
+- Touchdown limits (`physics`): sink 9.5 m/s autoland, 7.5 Medium, 5.5 Expert jets, 6.5 Expert fighter and stunt; over 2 × Vs0 is a crash anywhere,
+  off a field over max(45 m/s, 1.3 × Vs0). The reason shown is the most violent that applies. Never name a local `L` or `D` in code that calls `L()`.
+- The edge of the map: a warning 5 km (real) inside it; beyond it Easy and Medium turn back by themselves (`updateSystems`), Expert is only told.
 - Pitch input is positive = nose up in every mode; `SAVE.inv` flips it for people who want a real stick.
 
 ## Roads

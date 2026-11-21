@@ -48,7 +48,7 @@ const Snd = { ctx: null, muted: false,
 
 // ---------- 14. Input ----------
 function startTrick(type) {
-  if (S.arc && !S.land && !S.ap.on) {      // Easy mode: every aircraft can roll and loop
+  if (S.arc && !S.land) { S.ap.on = false;     // Easy mode: every aircraft can roll and loop (the autopilot lets go)
     if (S.trick || S.onGround) return; if (S.ra < (type === 'loop' ? 120 : 40)) return toast(L('Climb a little higher first', 'קודם מטפסים קצת')); A.gam = Math.max(A.gam, 0); S.trick = { type, t: 0, ang: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 }; return; }
   if (!PL.tricks) return toast(L('The ' + PL.name.toLowerCase() + ' is not built for aerobatics. Try the fighter or the aerobatic plane', tr(PL.name) + ' לא בנוי לפעלולים. נסו את מטוס הקרב או את מטוס הפעלולים'), 4);
   if (S.trick || S.land || S.crashed) return;
@@ -56,7 +56,11 @@ function startTrick(type) {
   if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
+/** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
+    It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
+function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
 function action(code) {
+  if (S.crashed && (code === 'Escape' || code === 'Tab' || code === 'KeyO')) return;          // the crash screen has its own two buttons; a menu or photo mode opened under it left them dead
   if (code === 'Escape' || (code === 'Tab' && !S.paused)) {          /* Tab opens the menu; inside it Tab moves between the buttons, as everywhere */ if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
   if (S.paused) return;
   if (code === 'KeyO') { PH.on = !PH.on; document.body.classList.toggle('photo', PH.on); camSnap = true; if (PH.on) for (const k in keys) keys[k] = false; return; }
@@ -65,7 +69,7 @@ function action(code) {
   if (code === 'KeyM') return Snd.toggle();
   if (code === 'KeyC') { S.cam = (S.cam + 1) % 3; camSnap = true; return; }
   if (code === 'KeyT') { S.tod = (S.tod + 1) % 3; applyTOD(S.tod); return; }
-  if (code === 'KeyI') { document.body.classList.toggle('nopfd'); return; }
+  if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
   if (code === 'KeyK') { S.legend = !S.legend; return; }
   if (code === 'KeyY') { WX = (WX + 1) % 3; applyTOD(S.tod); toast(L('Weather: ', 'מזג אוויר: ') + tr(WXN[WX])); return; }
   if (code === 'KeyN') { S.names = !S.names; return; }
@@ -79,7 +83,7 @@ function action(code) {
     else if (S.onGround) toast(L('Automatic landing works in the air', 'נחיתה אוטומטית פועלת רק באוויר'));
     else { const t = landTarget();
       if (!t || !t.inRange) toast(L('No airport within 40 km. Nearest: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. Fly towards it and try again', 'אין שדה תעופה בטווח 40 ק״מ. הקרוב: ' + apName(t.ap) + ', ' + kmTxt(t.dist) + ' ' + dirTxt(t.brg) + '. טסים לכיוונו ומנסים שוב'), 6);
-      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.landTries = 0; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
+      else { S.land = t.rw; S.landPh = 'intercept'; S.landJoin = false; S.landTries = 0; S.landT = 0; S.ap.on = false; S.trick = null; S.holdAlt = null; toast(L('Automatic landing at ' + apName(t.ap) + ' started. Hands off', 'נחיתה אוטומטית ב' + apName(t.ap) + ' התחילה. לא נוגעים'), 4.5); } }
     return;
   }
   if (code === 'KeyG' && PL.fixedGear) return toast(L('This aircraft has fixed landing gear', 'למטוס הזה גלגלים קבועים'));
@@ -98,7 +102,9 @@ window.addEventListener('keydown', e => {
   if (PICK.open) return;                 // typing in the place search, not flying
   if (!S.started) { if (e.code === 'Enter' && !$('fly').disabled && (document.activeElement === document.body || !document.activeElement)) $('fly').click(); return; }      // Enter on a focused button presses that button
   const dg = /^Digit(\d)$/.exec(e.code); if (dg && !S.paused && !PH.on) { S.thr = +dg[1] / 9; e.preventDefault(); return; }      // 0 = idle … 9 = full power
-  if (e.code === 'Tab' && S.paused) return;
+  if (S.paused && e.code !== 'Escape') return;                // in the menu the keys belong to the page: Tab, Space, Enter and scrolling work as everywhere
+  // browser shortcuts stay the browser's (Ctrl+R reloads, it does not restart the flight). Ctrl alone is the power-down key, so the arrows and Space still fly with it held
+  if (e.metaKey || e.altKey || (e.ctrlKey && /^(Key|Digit|Minus|Equal)/.test(e.code))) return;
   if (HANDLED.has(e.code)) { e.preventDefault(); if (!keys[e.code] && !e.repeat) action(e.code); keys[e.code] = true; }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -116,8 +122,9 @@ function setupTouch() {
   th.addEventListener('pointerup', () => thOn = false); th.addEventListener('pointercancel', () => thOn = false);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
-    else b.addEventListener('click', () => action(k)); });
+    else tapButton(b, () => action(k)); });
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
+  $('map').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); $('map').classList.toggle('big'); } });
 }
 
 // ---------- 15. Menus ----------
@@ -177,7 +184,7 @@ function settingsRows(el, where, rer) {
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
   row(L('Place names', 'שמות מקומות'), [L('Shown', 'מוצגים'), L('Hidden', 'מוסתרים')], S.names ? 0 : 1, i => { S.names = !i; });
-  row(L('Instruments', 'מכשירים'), [L('Simple', 'פשוטים'), L('Full', 'מלאים')], document.body.classList.contains('nopfd') ? 0 : 1, i => { document.body.classList.toggle('nopfd', !i); });
+  row(L('Instruments', 'מכשירים'), [L('Simple', 'פשוטים'), L('Full', 'מלאים')], document.body.classList.contains('nopfd') ? 0 : 1, i => { document.body.classList.toggle('nopfd', !i); SAVE.pfd = !!i; });
   row(L('Smoke trail', 'שובל עשן'), onOff, S.smoke ? 0 : 1, i => { S.smoke = !i; });
   row(L('Sound', 'קול'), onOff, Snd.muted ? 1 : 0, i => { if (!!Snd.muted !== !!i) Snd.toggle(); });
   if (!touchUI) row(L('Key guide on screen', 'מדריך מקשים על המסך'), [L('Shown', 'מוצג'), L('Hidden', 'מוסתר')], S.legend ? 0 : 1, i => { S.legend = !i; });
@@ -249,9 +256,9 @@ function loop(now) {
   if (run) {
     if (!S.crashed) {
       if (!S.arc || S.land || S.ap.on) { A.sync = true; readAttitude(); updateControls(dt); for (let i = 0; i < 2 && !S.crashed; i++) physics(dt / 2); } else arcadeStep(dt);
-      if (!S.crashed && !S.onGround) {          // buildings and other aircraft are solid
+      if (!S.crashed && (!S.onGround || S.V > 4)) {          // buildings and other aircraft are solid, also for an aircraft rolling on the ground
         if (hitObstacle(S.pos.x, S.pos.y - GEAR_H * 0.5, S.pos.z, PL.chase[0] * 0.12)) crash(L('Flew into a building.', 'התנגשות בבניין'));
-        else for (const a of AIT) if (a.g.position.distanceToSquared(S.pos) < 900) { crash(L('Mid-air collision.', 'התנגשות באוויר')); break; } }
+        else if (!S.onGround) for (const a of AIT) if (a.g.position.distanceToSquared(S.pos) < 900) { crash(L('Mid-air collision.', 'התנגשות באוויר')); break; } }
       updateSystems(dt); readAttitude(); emitTrails(dt); if (frame % 20 === 0) { updatePlace(); updateStamps(); }
     }
     updateExplosion(dt); if (S.crashed && S.crashT > 0) { S.crashT -= dt; if (S.crashT <= 0) $('crash').style.display = 'flex'; }
@@ -269,7 +276,8 @@ function loop(now) {
   }
   ENV.uTime.value = TNOW; if (TR) TR.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * DEG / 2));
   if (run || !S.started) for (const s of clouds.children) { s.position.x += 6 * dt; if (s.position.x > X1 + 12000) s.position.x = X0 - 12000; }
-  for (const m of [...cityMeshes, ...LMK.meshes, ...SITE.meshes]) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
+  if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
+  for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
   renderer.render(scene, camera);
 }
@@ -289,26 +297,30 @@ function keepAwake() {
 document.addEventListener('visibilitychange', () => { if (S.started && document.visibilityState === 'visible') keepAwake();
   if (Snd.ctx) { if (document.hidden) Snd.ctx.suspend(); else if (S.started) Snd.ctx.resume(); } });          // no engine drone from a tab in the background
 
+// leaving the page in mid-flight asks first: Ctrl (power down) with W (climb) is the browser's close-tab shortcut, which a page cannot block
+window.addEventListener('beforeunload', e => { if (S.started && !S.paused && !S.crashed && !S.onGround) { e.preventDefault(); e.returnValue = ''; } });
+
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
   buildMenu(); buildFun(); setupPicker(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   // settings from the last visit
-  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke) S.smoke = true; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
+  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
   if (SAVE.first) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
   spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; setInterval(() => { if (S.started) persist(); }, 5000);
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = true; $('start').style.display = 'none'; $('hud').style.display = 'block';
     if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
-  $('menuB').addEventListener('click', e => { openMenu(); e.currentTarget.blur(); });
-  $('modeB').addEventListener('click', e => { OPEN.pause.add('lv'); openMenu(); e.currentTarget.blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
+  tapButton($('menuB'), () => { openMenu(); $('menuB').blur(); });
+  tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
-  $('again').addEventListener('click', () => action('KeyR'));
-  $('airborne').addEventListener('click', () => spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }));
+  const uncover = () => { if (S.paused) closeMenu(); if (PH.on) { PH.on = false; document.body.classList.remove('photo'); } };
+  $('again').addEventListener('click', () => { uncover(); spawn(S.lastSpawn || FREE[0]); });
+  $('airborne').addEventListener('click', () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); });
   requestAnimationFrame(loop);
 }
 if (typeof THREE === 'undefined') { $('fly').textContent = '!'; $('intro').textContent = document.documentElement.lang === 'he' ? 'לא הצלחנו לטעון את מנוע התלת-ממד. בדקו את החיבור לאינטרנט וטענו מחדש.' : 'Could not load the 3D engine. Check your connection and reload.'; $('sBody').textContent = ''; }
 else {      // decode the rasters first (settlements from GHSL, land cover and buildings from OpenStreetMap); everything else is built from them
   const load = src => new Promise((res, rej) => { const im = new Image(); im.onerror = () => rej(new Error('image')); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); res({ w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }); }; im.src = src; });
-  const failed = e => { console.error(e); $('fly').textContent = '!'; $('sBody').textContent = ''; $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
+  const failed = e => { console.error(e); try { localStorage.removeItem('ifs-save'); } catch (x) {}      /* a damaged save must not fail again after the reload */ $('fly').textContent = '!'; $('sBody').textContent = ''; $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
   Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; setTimeout(() => { try { init(); } catch (e) { failed(e); } }, 30); }).catch(failed); }

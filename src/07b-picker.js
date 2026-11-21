@@ -19,12 +19,12 @@ const PICK = { open: false, where: 'start', pt: null, name: null, alt: 1, hdg: 0
 const PICK_ALTS = [300, 1000, 2500], PICK_HDGS = [0, 90, 180, 270];
 /** Search key: no vowel points or punctuation, and English spellings folded together (Qiryat / Kiryat, Eilat / Elat, Tzfat / Zefat). */
 const pickNorm = s => s.toLowerCase().replace(/[\u0591-\u05C7]/g, '').replace(/[\u05F3\u05F4'"`\u2019]/g, '').replace(/[-\u2013\u05BE.,()]/g, ' ')
-  .replace(/q/g, 'k').replace(/ei/g, 'e').replace(/t[sz]/g, 'z').replace(/[kc]h/g, 'h').replace(/w/g, 'v').replace(/([a-z])\1/g, '$1').replace(/\s+/g, ' ').trim();
+  .replace(/q/g, 'k').replace(/ei/g, 'e').replace(/t[sz]/g, 'z').replace(/[kc]h/g, 'h').replace(/c/g, 'k').replace(/([a-z]{3})h\b/g, '$1').replace(/w/g, 'v').replace(/([a-z])\1/g, '$1').replace(/\s+/g, ' ').trim();
 /** A looser key for spelling variants: no vowels inside a word (Shemona / Shmona, Zefat / Tzfat), and no vav or yod (קרית / קריית). */
 const pickSkel = n => n.split(' ').map(w => w[0] + w.slice(1).replace(/[aeiouy\u05D5\u05D9]/g, '')).join(' ');
 function pickIndex() {
   if (PICK.idx) return PICK.idx;
-  PICK.idx = LOCS.map(l => ({ en: l[1], he: l[0], lon: l[2], lat: l[3], pop: l[4], site: false })).concat(PICK_SITES.map(p => ({ en: p[0], he: p[1], lon: p[2], lat: p[3], pop: 150, site: true })));
+  PICK.idx = LOCS.map(l => ({ en: l[1] || l[0], he: l[0], lon: l[2], lat: l[3], pop: l[4], site: false })).concat(PICK_SITES.map(p => ({ en: p[0], he: p[1], lon: p[2], lat: p[3], pop: 150, site: true })));
     for (const e of PICK.idx) { e.ne = pickNorm(e.en); e.nh = pickNorm(e.he); e.al = !e.site && PICK_ALIAS[e.he] ? PICK_ALIAS[e.he].split('|').map(pickNorm) : []; e.se = pickSkel(e.ne); e.sh = pickSkel(e.nh); }
   return PICK.idx;
 }
@@ -32,7 +32,7 @@ function pickIndex() {
 function pickSearch(q) {
   q = pickNorm(q); if (!q) return []; const qs = pickSkel(q);
   const score = (n, q) => n.startsWith(q) ? 0 : (' ' + n).includes(' ' + q) ? 1 : n.includes(q) ? 2 : 9, out = [];
-  for (const e of pickIndex()) { let sc = Math.min(score(e.ne, q), score(e.nh, q), ...e.al.map(a => score(a, q))); if (sc === 9 && qs.length > 1) sc = Math.min(score(e.se, qs), score(e.sh, qs)) + 3; if (sc < 9) out.push([sc, e]); }
+  for (const e of pickIndex()) { let sc = Math.min(score(e.ne, q), score(e.nh, q), ...e.al.map(a => score(a, q))); if (sc === 9 && qs.length > 2) { sc = Math.min(score(e.se, qs), score(e.sh, qs)); sc = sc < 2 ? sc + 3 : 9; }      /* the loose match must start a word */ if (sc < 9) out.push([sc, e]); }
   return out.sort((a, b) => a[0] - b[0] || b[1].pop - a[1].pop).slice(0, 8).map(a => a[1]);
 }
 /** The name of a point on the map: a site or town it is in or near, else its coordinates. */
@@ -64,8 +64,9 @@ function pickSize() {
 /** Start point for the chosen place: a little before it, facing it, so the place is just ahead; high enough for the ground on the way. */
 function pickDef() {
   const [x, z] = PICK.pt, h = PICK_HDGS[PICK.hdg], agl = PICK_ALTS[PICK.alt], d = dirOf(h), back = 2500 * hsAt(agl), sx = x - d.x * back, sz = z - d.z * back;
-  let g = -1e9; for (let i = 0; i <= 8; i++) { const gi = groundAt(sx + (x - sx) * i / 8, sz + (z - sz) * i / 8); g = Math.max(g, gi.h); }
-  return { label: L(PICK.name[0], PICK.name[1]), name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(g, -400) + agl, hdg: h, spd: 115, at: [x, z] };
+  let g = -1e9, ob = -Infinity; for (let i = 0; i <= 8; i++) { const gi = groundAt(sx + (x - sx) * i / 8, sz + (z - sz) * i / 8); g = Math.max(g, gi.h); }
+  for (let d2 = 0; d2 <= back + 1200; d2 += 100) ob = Math.max(ob, obstacleTop(sx + d.x * d2, sz + d.z * d2));          // towers and the Masada rock on the way in and just past the place
+  return { label: L(PICK.name[0], PICK.name[1]), name: PICK.name, pick: true, type: 'air', x: sx, z: sz, alt: Math.max(Math.max(g, -400) + agl, ob + 90), hdg: h, spd: 115, at: [x, z] };
 }
 function pickDraw() {
   if (!PICK.open) return; const c = pickC(), x = c.getContext('2d'), dpr = c.width / (c.clientWidth || 1), s = PICK.s, P = (wx, wz) => { const [ix, iy] = pickImgXY(wx, wz); return [(ix - PICK.ox) * s, (iy - PICK.oy) * s]; };
@@ -137,7 +138,7 @@ function setupPicker() {
     const k = e.site ? 0.25 : 0.12 + Math.sqrt(e.pop) / 120; pickFit(e.lon - k, e.lat - k, e.lon + k, e.lat + k); pickDraw(); };
   q.addEventListener('input', () => show(pickSearch(q.value)));
   q.addEventListener('keydown', e => { if (e.key === 'Enter') { const r = pickSearch(q.value); if (r.length) choose(r[0]); } else if (e.key === 'Escape') { if (!res.hidden) { res.hidden = true; e.stopPropagation(); } } });
-  document.addEventListener('keydown', e => { if (PICK.open && e.key === 'Escape') { closePicker(); e.stopPropagation(); } }, true);     // Esc closes the picker only, not the menu under it
+  document.addEventListener('keydown', e => { if (PICK.open && e.key === 'Escape') { if (!res.hidden) res.hidden = true; else closePicker(); e.stopPropagation(); } }, true);     // Esc closes the picker only, not the menu under it
   // map: drag to move, pinch or wheel to zoom, a tap (not a drag) chooses
   c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); PICK.ptr.set(e.pointerId, [e.offsetX, e.offsetY]); if (PICK.ptr.size === 1) { PICK.moved = false; PICK.down = [e.offsetX, e.offsetY]; } PICK.pinch = 0; res.hidden = true; });
   c.addEventListener('pointermove', e => { const p = PICK.ptr.get(e.pointerId); if (!p) return; const k = dpr();
