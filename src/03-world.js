@@ -73,7 +73,8 @@ function windowize(mat) {
         vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
         float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
-        diffuseColor.rgb *= mix(1.0, 0.40 + 0.22 * wh, win) * mix(0.86, 1.0, side);
+        float wfade = 1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w);          // far away the windows blend into an even tone instead of sparkling
+        diffuseColor.rgb *= mix(mix(1.0, 0.85, side), mix(1.0, 0.40 + 0.22 * wh, win), wfade) * mix(0.86, 1.0, side);
         if (vIn > 0.5) { float hy = vBp.y * vBs.y;                                   // instanced blocks: height above the (sunk) base in metres
           diffuseColor.rgb *= mix(0.72, 1.0, smoothstep(7.0, 17.0, hy));              // darker where the walls meet the ground
           diffuseColor.rgb *= mix(1.0, 0.86, side * step(0.88, fract(hy / 3.4)) * step(9.0, hy));   // a balcony shadow at every floor
@@ -315,7 +316,9 @@ function roadJunctions() {
 }
 function buildRoads() {
   // surfaces: a two-lane road, and a dual carriageway with a planted median for divided roads
-  const mk = (w, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = 64; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+  const mk = (w, draw) => { const c = document.createElement('canvas'), x = c.getContext('2d'); c.width = w * 4; c.height = 256; c.getContext('2d').scale(4, 4); draw(x);          /* four times the old resolution: the lines stay crisp close up */
+    for (let i = 0; i < 900; i++) { x.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.05)'; x.fillRect(Math.random() * w, Math.random() * 64, 0.5 + Math.random(), 0.5 + Math.random() * 2); }      // asphalt grain
+    const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
   // asphalt grey, light shoulders, white edge lines and dashes. The strips face up (their winding used to face down, so the lit
   // side was the underside and roads, rails and rivers looked black)
   const tex = { 1: mk(32, x => { x.fillStyle = '#958f7e'; x.fillRect(0, 0, 32, 64); x.fillStyle = '#6c6e71'; x.fillRect(4, 0, 24, 64); x.fillStyle = '#e8e6de'; x.fillRect(15, 0, 2, 34); x.fillRect(5, 0, 1, 64); x.fillRect(26, 0, 1, 64); }),

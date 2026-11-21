@@ -110,7 +110,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 function setupTouch() {
-  if (window.matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) { document.body.classList.add('touch', 'nopfd'); renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); resize(); }
+  if (window.matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window) { document.body.classList.add('touch', 'nopfd'); RES.pr = RES.fixed || Math.min(RES.max, 1.5); renderer.setPixelRatio(RES.pr); resize(); }
   const stick = $('stick'), knob = $('knob');
   const mv = e => { const r = stick.getBoundingClientRect(); let x = (e.clientX - r.left - r.width / 2) / (r.width / 2), y = (e.clientY - r.top - r.height / 2) / (r.height / 2); const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
     touch.x = x; touch.y = y; touch.on = true; knob.style.transform = `translate(${x * 37}px,${y * 37}px)`; };
@@ -193,7 +193,7 @@ function settingsRows(el, where, rer) {
 }
 const todName = i => SAVE.lang === 'he' ? tr(TOD[i].name.toLowerCase()) : TOD[i].name[0] + TOD[i].name.slice(1).toLowerCase();
 const KEYS = [['Climb / descend', 'טיפוס / ירידה', '↑ / ↓ · W / S'], ['Turn left / right', 'פנייה שמאלה / ימינה', '← / → · A / D'], ['Power up / down', 'הספק למעלה / למטה', 'Shift / Ctrl · = / −'], ['Set power directly', 'קביעת הספק ישירה', '0 – 9'],
-  ['Brakes', 'בלמים', 'B · Space'], ['Land automatically', 'נחיתה אוטומטית', 'L'], ['Menu and pause', 'תפריט והפסקה', 'Esc'], ['Change view', 'החלפת מבט', 'C'], ['Restart from the same point', 'התחלה מחדש מאותה נקודה', 'R'],
+  ['Brakes', 'בלמים', 'B · Space'], ['Land automatically', 'נחיתה אוטומטית', 'L'], ['Menu and pause', 'תפריט והפסקה', 'Esc'], ['Change view', 'החלפת מבט', 'C'], ['Look around', 'מבט מסביב', L('drag the view', 'גוררים את התמונה')], ['Restart from the same point', 'התחלה מחדש מאותה נקודה', 'R'],
   ['Day / sunset / night', 'יום / שקיעה / לילה', 'T'], ['Weather', 'מזג אוויר', 'Y'], ['Place names', 'שמות מקומות', 'N'], ['Photo mode', 'מצב צילום', 'O'], ['Simple / full instruments', 'מכשירים פשוטים / מלאים', 'I'],
   ['Key guide on screen', 'מדריך מקשים על המסך', 'K'], ['Autopilot', 'טייס אוטומטי', 'P'], ['Roll / loop', 'גלגול / לולאה', 'X / Z'], ['Smoke trail', 'שובל עשן', 'V'], ['Sound on / off', 'קול', 'M'], ['Next difficulty level', 'רמת הקושי הבאה', 'H'],
   ['Expert: gear, flaps, rudder', 'מקצועי: גלגלים, מדפים, הגה כיוון', 'G · F · Q / E']];
@@ -250,6 +250,7 @@ function buildMenu() {
 // ---------- 16. Main loop ----------
 let last = 0, frame = 0;
 function loop(now) {
+  if (last && S.started && !S.paused) autoRes(now - last);
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now; frame++;
   const run = S.started && !S.paused && !PH.on; if (run || !S.started) TNOW += dt;
@@ -303,7 +304,7 @@ window.addEventListener('beforeunload', e => { if (S.started && !S.paused && !S.
 // ---------- 17. Boot ----------
 function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects();
-  buildMenu(); buildFun(); setupPicker(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
+  buildMenu(); buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   // settings from the last visit
   if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
   if (SAVE.first) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)

@@ -2,7 +2,15 @@
 // ---------- 5. Three.js scene ----------
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+/** Render resolution follows the device and the frame rate: it starts at the screen's own pixel density (up to 2×) and steps down only while
+    frames run slow, back up when there is time to spare (`autoRes` in the main loop). `?res=1.5` in the address pins it. */
+const RES = { max: Math.min(window.devicePixelRatio || 1, 2), min: Math.min(window.devicePixelRatio || 1, 0.75), pr: 1, acc: 0, n: 0, hold: 0, cap: 9, fixed: +(new URLSearchParams(location.search).get('res')) || 0 };
+RES.pr = RES.fixed || Math.min(RES.max, 1.75); renderer.setPixelRatio(RES.pr);
+function autoRes(ms) {
+  if (RES.fixed || ms > 250 || document.hidden) return; RES.acc += ms; if (++RES.n < 45) return; const avg = RES.acc / RES.n; RES.acc = RES.n = 0; if (RES.hold > 0) RES.hold--;
+  let pr = RES.pr; if (avg > 27 && pr > RES.min) { pr = Math.max(RES.min, pr - 0.25); RES.cap = pr; RES.hold = 12; } else if (avg < 14.5 && pr < Math.min(RES.max, RES.cap + (RES.hold ? 0 : 0.25)) && !RES.hold) { pr = Math.min(RES.max, pr + 0.25); RES.hold = 4; }
+  if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); resize(); }
+}
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xb8d3ee, 0.000028);
 const camera = new THREE.PerspectiveCamera(60, 1, 1, 260000);
@@ -94,6 +102,7 @@ const TERRAIN_FS = `
     vec3 N=normalize(vec3(vN.x-g.x, vN.y, vN.z-g.y));
     float slope=1.0-N.y;
     vec3 col=vCol*(0.80+0.40*nA)*(1.0+(nE-0.5)*0.26*close);
+    { float c2=1.0-smoothstep(30.0,650.0,vDist); if(c2>0.01){ float nF=nz(P/3.1+0.19), nG=nz(P/0.9+0.61); col*=1.0+((nF-0.5)*0.30+(nG-0.5)*0.16*(1.0-smoothstep(10.0,160.0,vDist)))*c2*(0.5+0.5*rough); } }      // low and close: stones, tufts and furrows, so the ground stays sharp right under the aircraft
     // farmland
     col=mix(col, mix(texture2D(tFields,P/3000.0).rgb,col,0.22)*(0.80+0.30*nC), farm*0.85);
     // woodland and scrub clumps on green hills
@@ -105,11 +114,11 @@ const TERRAIN_FS = `
     col*=1.0-arid*0.2*smoothstep(0.45,0.8,nC);
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
     { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*55.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5);
-      float fine=1.0-smoothstep(900.0,4500.0,vDist); vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
+      float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
         if(lc<1.5){ float can=smoothstep(0.40,0.66,nz(P/16.0+0.21)*0.55+nD*0.45); col=mix(vec3(0.17,0.24,0.11),vec3(0.06,0.13,0.05),mix(0.55,can,fine))*(0.85+0.3*nC); urban=0.0; }
-        else if(lc<2.5){ vec2 r=fract(P/vec2(7.0,9.0)); float t=smoothstep(0.44,0.26,length(r-0.5)); col=mix(mix(soil,vec3(0.13,0.25,0.10),0.55),mix(soil,vec3(0.12,0.24,0.09),t),fine); urban=0.0; }
-        else if(lc<3.5){ float t=smoothstep(0.32,0.12,abs(fract(P.x/5.0+P.y/41.0)-0.5)); col=mix(mix(soil,vec3(0.26,0.34,0.14),0.45),mix(soil,vec3(0.24,0.33,0.12),t),fine); }
+        else if(lc<2.5){ vec2 r=fract(P/vec2(7.0,9.0)); float t=smoothstep(0.44,0.26,length(r-0.5)); col=mix(mix(soil,vec3(0.13,0.25,0.10),0.55),mix(soil,vec3(0.12,0.24,0.09),t),fineS); urban=0.0; }
+        else if(lc<3.5){ float t=smoothstep(0.32,0.12,abs(fract(P.x/5.0+P.y/41.0)-0.5)); col=mix(mix(soil,vec3(0.26,0.34,0.14),0.45),mix(soil,vec3(0.24,0.33,0.12),t),fineS); }
         else if(lc<4.5){ col=mix(texture2D(tFields,P/3000.0).rgb,col,0.15)*(0.85+0.25*nC); urban=0.0; }
         else if(lc<5.5){ col=vec3(0.28,0.44,0.19)*(0.85+0.3*nD); }
         else if(lc<6.5){ col=mix(vec3(0.54,0.51,0.37),vec3(0.29,0.35,0.19),smoothstep(0.48,0.74,nD))*(0.9+0.2*nC); }
@@ -119,8 +128,8 @@ const TERRAIN_FS = `
         else if(lc<10.5){ col=mix(vec3(0.20,0.33,0.23),vec3(0.18,0.30,0.36),smoothstep(0.5,0.7,nD)); }
         else if(lc<11.5){ urban=max(urban,0.7); }
         else if(lc<12.5){ vec2 q=fract((P-uOrg)/30.0); col=mix(vec3(0.62,0.62,0.60),vec3(0.40,0.41,0.42),step(0.88,max(q.x,q.y))*fine)*(0.9+0.15*nD); urban=0.0; }
-        else if(lc<13.5){ float t=step(0.5,fract(P.x/3.0+P.y/90.0)); col=mix(vec3(0.84,0.86,0.84),mix(vec3(0.90,0.92,0.90),vec3(0.70,0.73,0.72),t),fine); urban=0.0; }
-        else if(lc<14.5){ vec2 q=fract(P/vec2(4.0,6.5)); col=mix(vec3(0.16,0.19,0.27),mix(vec3(0.10,0.13,0.22),vec3(0.58,0.60,0.62),step(0.84,max(q.x,q.y))),fine); urban=0.0; }
+        else if(lc<13.5){ float t=step(0.5,fract(P.x/3.0+P.y/90.0)); col=mix(vec3(0.82,0.84,0.83),mix(vec3(0.89,0.91,0.89),vec3(0.77,0.80,0.79),t),fineG)*(0.93+0.14*nD); urban=0.0; }
+        else if(lc<14.5){ vec2 q=fract(P/vec2(4.0,6.5)); col=mix(vec3(0.16,0.19,0.27),mix(vec3(0.10,0.13,0.22),vec3(0.58,0.60,0.62),step(0.84,max(q.x,q.y))),fineS); urban=0.0; }
         else if(lc<15.5){ }
         else if(lc<16.5){ col=mix(vec3(0.64,0.63,0.59),vec3(0.24,0.33,0.19),smoothstep(0.52,0.70,nD)); }
         else { col=vec3(0.67,0.58,0.45)*(0.9+0.2*nC); }

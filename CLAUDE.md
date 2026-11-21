@@ -52,6 +52,18 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 | `src/07b-picker.js` | 12f | Start anywhere: the place picker (`openPicker`), a full-screen map (tap to choose, drag, pinch or wheel to zoom) with a search over `LOCS` and `PICK_SITES` (Hebrew or English, spelling variants folded by `pickNorm` / `pickSkel`, `PICK_ALIAS`); height and direction rows; starts a little before the place, facing it. The last choice is kept in `SAVE.pick` |
 | `src/08-app.js` | 13–17 | Audio (`Snd`), input (`action`), menus, main `loop`, boot (`init`) |
 
+## Look and resolution
+
+- Render resolution is dynamic (`RES`, `autoRes` in `src/02-scene-terrain.js`): it starts at the screen's pixel density (up to 1.75, touch 1.5), steps
+  down by 0.25 while frames average over 27 ms and back up (to at most 2×) under 14.5 ms. `?res=1` in the address pins it (use it for screenshots).
+- Free look (`LOOK`, `setupLook` in `src/06-flight.js`): dragging the view turns the head in the cockpit and wing views and swings the chase camera;
+  it eases back when released. The flight deck is set low (glare shield, slim posts) so the world fills most of the cockpit view.
+- The aircraft's ground shadow (`buildShadow`, updated in `updateCamera`): a blurred silhouette where the sun puts it, on the rendered mesh
+  (`triHeight`), fading by 900 m of height and at night.
+- Terrain shader: rows a few metres apart (orchards, vineyards, greenhouses, solar) fade out within about 1 km, or they shimmer; two extra
+  grain layers sharpen the ground within 650 m. Building windows blend to an even tone beyond about 2 km. Road textures are 4× (128/256 px wide).
+- In GLSL strings as in the JS around them: never put a `//` comment before code on the same line. It has swallowed code five times here.
+
 ## Canvas textures survive a GPU reset
 
 Android browsers can wipe 2D canvases after a GPU reset or while the tab sleeps, which used to leave a black minimap and invisible
@@ -103,8 +115,8 @@ Re-run these numbers after changing `PLANES` (the analytical part is a few lines
   rollouts are realistic (airliner: lift-off after about 1.1 km and 26 s, touchdown at about 133 kt, stops in about 700 m). The slowest speed
   `arcVmin()` follows the automatic flaps. After landing with the power at idle the brakes come on by themselves. The stick steers the flight path directly, the lever sets speed,
   release flies straight and level, there is an automatic flare near the ground. Holding the stick down low slows to landing speed and floats
-  until slow, so that alone lands it. Nothing ends the flight in Easy: water or a too-fast touchdown skips back into the air, and `crash()` in Easy is
-  a bump with a message and a return to 300 m above the spot. Each aircraft has a ceiling (`aCeil`), and it cannot climb at idle (`gmax` follows the lever).
+  until slow, so that alone lands it. Easy does crash (the owner's decision): water, a hillside, a steep hit, buildings, other aircraft. Only a
+  too-fast touchdown skips back into the air with a message. Each aircraft has a ceiling (`aCeil`), and it cannot climb at idle (`gmax` follows the lever).
 - 1 Medium (`S.assist`): real physics with flight-path hold, automatic gear and flaps, stall and terrain protection.
 - 2 Expert: real physics, rate command with flight-path hold when the stick is released, manual gear and flaps.
 - Autoland (`S.land`) and the autopilot (`S.ap.on`) always run on the physics path, also from Easy mode.

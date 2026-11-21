@@ -496,10 +496,11 @@ function arcadeStep(dt) {
     if (S.pos.y <= floor) {            // the ground is forgiving: touch down gently anywhere; otherwise skim or bounce, never crash
       S.pos.y = floor; S.trick = null; G2 = 0;
       const gw = g.water, rise = g.h - groundAt(S.pos.x - Math.sin(A.psi) * 30, S.pos.z + Math.cos(A.psi) * 30).h;
+      if (gw) return crash(L('The aircraft hit the water.', 'המטוס פגע במים'));
       if (rise > 9) return crash(L('Flew into a hillside.', 'התנגשות בצלע הר'));
       if (A.gam < -0.3) return crash(L('Hit the ground too steeply. Come down gently to land.', 'פגיעה תלולה מדי בקרקע. כדי לנחות יורדים בעדינות'));
-      // water, or still too fast: it skips back into the air instead of crashing, and says why
-      if (gw || A.v > PL.vs * 1.6) { S.pos.y = floor + 1.5; A.gam = 0.07; A.v *= 0.97; S.shake = 0.3; A.out = false; arcSay(...(gw ? ['Splash! That is water: land on the ground', 'ספלאש! זה מים: נוחתים על היבשה'] : ['Too fast to land: hold the stick down and it slows by itself', 'מהר מדי לנחיתה: מחזיקים את המוט למטה והמטוס מאט לבד'])); }
+      // still too fast: it skips back into the air instead of crashing, and says why
+      if (A.v > PL.vs * 1.6) { S.pos.y = floor + 1.5; A.gam = 0.07; A.v *= 0.97; S.shake = 0.3; A.out = false; arcSay('Too fast to land: hold the stick down and it slows by itself', 'מהר מדי לנחיתה: מחזיקים את המוט למטה והמטוס מאט לבד'); }
       else { S.onGround = true; A.gam = 0; S.landed = true; S.thr = 0; S.shake = 0.25; Snd.chime(700, 0.25); toast(L('Landed!', 'נחתנו!')); }
     }
   }

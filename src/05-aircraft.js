@@ -120,19 +120,19 @@ function buildAircraft() {
     M.g.visible = false; AC.root.add(M.g); AC.models[key] = M;
   }
   // ---- flight deck (shown only in cockpit view; framing is hidden under bubble canopies) ----
-  const trim = lam(0x30353b), dk = lam(0x15181c);
+  const trim = lam(0x4a5058), dk = lam(0x23272c);           // lighter than black, so the panel reads as a panel; and set low, so the world fills most of the view
   const dadd = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || AC.deck).add(m); return m; };
-  dadd(new THREE.BoxGeometry(3.4, 0.1, 0.9), dk, 0, 0.84, -16.3).rotation.x = 0.08;                   // glare shield
-  dadd(new THREE.PlaneGeometry(3.3, 0.72), trim, 0, 0.47, -16.45).rotation.x = -0.2;                  // main panel
+  dadd(new THREE.BoxGeometry(3.4, 0.08, 0.9), dk, 0, 0.62, -16.3).rotation.x = 0.08;                   // glare shield
+  dadd(new THREE.PlaneGeometry(3.3, 0.72), trim, 0, 0.25, -16.45).rotation.x = -0.2;                  // main panel
   AC.pfdTex = new THREE.CanvasTexture(document.getElementById('pfd')); AC.mapTex = new THREE.CanvasTexture(document.getElementById('map'));
-  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.47, -16.43).rotation.x = -0.2; };
+  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.25, -16.43).rotation.x = -0.2; };
   scr(0.7, 0.48, -0.62, AC.pfdTex); scr(0.29, 0.53, 0.02, AC.mapTex); scr(0.7, 0.48, 0.66, AC.pfdTex);
-  dadd(new THREE.BoxGeometry(1.0, 0.5, 1.2), trim, 0, 0.05, -15.9);                                   // pedestal
-  for (const s of [-1, 1]) { dadd(new THREE.BoxGeometry(0.11, 1.5, 0.11), trim, s * 1.2, 1.5, -16.6, AC.frame).rotation.z = -s * 0.28; dadd(new THREE.BoxGeometry(0.12, 2.6, 3), trim, s * 1.72, 1.0, -15.4, AC.frame); }
-  dadd(new THREE.BoxGeometry(3.6, 0.3, 1.0), trim, 0, 1.72, -16.2, AC.frame);
-  AC.stick = new THREE.Group(); AC.stick.position.set(-1.0, 0.45, -15.75); AC.deck.add(AC.stick);
+  dadd(new THREE.BoxGeometry(1.0, 0.5, 1.2), trim, 0, -0.17, -15.9);                                   // pedestal
+  for (const s of [-1, 1]) { dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, s * 1.38, 1.42, -16.6, AC.frame).rotation.z = -s * 0.1; dadd(new THREE.BoxGeometry(0.08, 0.5, 3), trim, s * 1.72, 0.3, -15.4, AC.frame); dadd(new THREE.BoxGeometry(0.07, 2.2, 0.09), trim, s * 1.72, 1.4, -15.3, AC.frame); }       // slim posts, a low sill and open side windows
+  dadd(new THREE.BoxGeometry(3.6, 0.16, 1.0), trim, 0, 2.2, -16.2, AC.frame);
+  AC.stick = new THREE.Group(); AC.stick.position.set(-1.0, 0.23, -15.75); AC.deck.add(AC.stick);
   dadd(new THREE.CylinderGeometry(0.025, 0.035, 0.26, 8), dk, 0, 0.13, 0, AC.stick); dadd(new THREE.SphereGeometry(0.045, 8, 6), dk, 0, 0.27, 0, AC.stick);
-  AC.thr = new THREE.Group(); AC.thr.position.set(0, 0.3, -15.75); AC.deck.add(AC.thr); dadd(new THREE.BoxGeometry(0.22, 0.2, 0.06), dk, 0, 0.12, 0, AC.thr);
+  AC.thr = new THREE.Group(); AC.thr.position.set(0, 0.08, -15.75); AC.deck.add(AC.thr); dadd(new THREE.BoxGeometry(0.22, 0.2, 0.06), dk, 0, 0.12, 0, AC.thr);
   AC.deck.add(AC.frame); AC.root.add(AC.deck); AC.deck.visible = false; scene.add(AC.root);
 }
 /** Switch aircraft: load its flight model numbers and show its 3D model. */
