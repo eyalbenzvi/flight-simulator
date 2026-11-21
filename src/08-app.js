@@ -181,6 +181,9 @@ function settingsRows(el, where, rer) {
   row(L('Time of day', 'שעה ביום'), TOD.map((t, i) => todName(i)), S.tod, i => { S.tod = i; applyTOD(i); });
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
+  row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
+  row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
+  row(L('Height units', 'יחידות גובה'), [L('feet', 'רגל'), L('metres', 'מטר')], SAVE.uAlt | 0, i => { SAVE.uAlt = i; });
   row(L('Place names', 'שמות מקומות'), [L('Shown', 'מוצגים'), L('Hidden', 'מוסתרים')], S.names ? 0 : 1, i => { S.names = !i; });
   row(L('Instruments', 'מכשירים'), [L('Simple', 'פשוטים'), L('Full', 'מלאים')], document.body.classList.contains('nopfd') ? 0 : 1, i => { document.body.classList.toggle('nopfd', !i); SAVE.pfd = !!i; });
   row(L('Smoke trail', 'שובל עשן'), onOff, S.smoke ? 0 : 1, i => { S.smoke = !i; });

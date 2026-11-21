@@ -43,6 +43,7 @@ body.touch #modeB{left:calc(10px + var(--sl));top:calc(60px + var(--st));height:
 #mission b{color:var(--sand);font-weight:600}
 #strip b{font-weight:600;font-size:17px} #strip span{color:var(--dim);margin:0 9px 0 2px;font-size:12px}
 body.nopfd #strip{display:block} body.nopfd #pfd{display:none}
+#strip b.agl{color:var(--sand)}
 #hint{color:var(--sand);font-size:14px;line-height:1.25;text-shadow:0 1px 2px #000;background:rgba(8,13,19,.62);padding:3px 10px;border-radius:12px;width:fit-content;margin-left:auto;margin-right:auto} #hint:empty{display:none}
 #place{font-size:12px;opacity:.8;text-shadow:0 1px 2px #000,0 0 8px rgba(0,0,0,.9)}
 #map{position:absolute;right:calc(10px + var(--sr));top:calc(10px + var(--st));height:min(40vh,280px);border-radius:6px;border:1px solid var(--line);cursor:pointer}
@@ -2437,7 +2438,12 @@ function ilsOf(rw, toTouchdown) {
 const LAND_RANGE = 40000;                 // automatic landing can start this far from the runway (real metres)
 const AP_HE = { LLBG: 'נתב״ג', LLHA: 'חיפה', LLER: 'רמון', LLIB: 'ראש פינה', LLMZ: 'מצדה', LLBS: 'באר שבע' };
 const apName = ap => L(ap.name, AP_HE[ap.code] || ap.name);
-const kmTxt = m => (m / 1000).toFixed(m < 9950 ? 1 : 0) + L(' km', ' ק״מ');
+/** Units the player chose (settings): speed kt / km/h / mph, distance km / miles / nautical miles, height ft / m. The PFD stays in kt and ft, as in an aircraft. */
+const U_SPD = [[1.94384, 'kt', 'קשר'], [3.6, 'km/h', 'קמ״ש'], [2.23694, 'mph', 'מייל לשעה']], U_DIST = [[1000, ' km', ' ק״מ'], [1609.344, ' mi', ' מייל'], [1852, ' NM', ' מייל ימי']], U_ALT = [[3.28084, 'ft', 'רגל'], [1, 'm', 'מ׳']];
+const uSpd = () => U_SPD[SAVE.uSpd | 0], uAlt = () => U_ALT[SAVE.uAlt | 0];
+const spdNum = v => Math.round(v * uSpd()[0]), spdTxt = v => spdNum(v) + ' ' + L(uSpd()[1], uSpd()[2]);          // v in m/s
+const altNum = (m, step) => { const k = uAlt()[0], st = step || (k > 1 ? 10 : 5); return Math.round(m * k / st) * st; }, altTxt = (m, step) => altNum(m, step).toLocaleString('en') + ' ' + L(uAlt()[1], uAlt()[2]);
+const kmTxt = m => { const u = U_DIST[SAVE.uDist | 0], v = m / u[0]; return v.toFixed(v < 9.95 ? 1 : 0) + L(u[1], u[2]); };
 const dirTxt = brg => { const i = Math.round(brg / 45) % 8; return L(['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][i], ['צפונה', 'לצפון-מזרח', 'מזרחה', 'לדרום-מזרח', 'דרומה', 'לדרום-מערב', 'מערבה', 'לצפון-מערב'][i]); };
 const relArrow = rel => '↑↗→↘↓↙←↖'[Math.round((((rel % 360) + 360) % 360) / 45) % 8];
 /** Where an automatic landing would go: the nearest runway with an instrument approach, its distance and bearing, and whether it is in range. */
@@ -2539,7 +2545,7 @@ function drawPFD() {
   // --- readouts ---
   P.font = '13px ' + FONT; P.textBaseline = 'middle'; P.textAlign = 'left'; P.fillStyle = '#55d6ff'; P.fillText('HDG ' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°', 8, 262);
   P.fillStyle = '#e4edf3'; P.fillText('GS ' + Math.round(Math.hypot(S.vel.x, S.vel.z) * KT), 8, 282);
-  P.textAlign = 'right'; P.fillStyle = S.ra * FT < 2500 ? '#ffb84a' : '#8a9fb0'; P.fillText('RA ' + (S.ra * FT < 2500 ? Math.max(0, Math.round(S.ra * FT / 10) * 10) : '----'), 432, 262);
+  P.textAlign = 'right'; P.fillStyle = S.ra * FT < 2500 ? '#ffb84a' : '#8a9fb0'; P.fillText('AGL ' + Math.max(0, Math.round(S.ra * FT / 10) * 10).toLocaleString('en'), 432, 262);          // height above the ground, always
   P.fillStyle = '#e4edf3'; P.fillText('VS ' + Math.round(vs / 50) * 50, 432, 282);
   P.textAlign = 'left'; P.fillStyle = '#8a9fb0'; P.font = '11px ' + FONT; P.fillText('KT', 10, 12); P.fillText('FT', 312, 12); P.fillText('FPM×1000', 384, 12);
   { const lbl = S.land ? 'AUTOLAND' : S.ap.on ? 'AP  ALT  HDG  SPD' : S.arc ? 'EASY' : S.assist ? 'ASSISTED' : 'MANUAL'; P.fillStyle = S.land ? '#ff66ee' : '#40f58c'; P.textAlign = 'center'; P.font = '12px ' + FONT; P.fillText(lbl, cx, 12); }
@@ -2675,7 +2681,7 @@ function hintText() {
     return '';
   }
   if (S.onGround) {
-    if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : L('Full power. Raise the nose at ' + Math.round(S.vs0 * 1.15 * KT) + ' kt', 'הספק מלא. מרימים את האף ב-' + Math.round(S.vs0 * 1.15 * KT) + ' קשר');
+    if (S.thr > 0.5) return S.assist ? L('Full power. It lifts off by itself', 'הספק מלא. המטוס ממריא לבד') : L('Full power. Raise the nose at ', 'הספק מלא. מרימים את האף ב-') + spdTxt(S.vs0 * 1.15);
     if (S.landed) return S.assist ? '' : (T ? L('Hold Brake to stop', 'מחזיקים "בלם" כדי לעצור') : L('Hold B or Space to brake', 'מחזיקים B או רווח כדי לבלום'));
     return T ? L('Slide the power lever up to take off', 'מעלים את ידית ההספק כדי להמריא') : L('Hold Shift, or press 9, for take-off power', 'מחזיקים Shift, או לוחצים 9, להספק המראה');
   }
@@ -2686,8 +2692,8 @@ function hintText() {
     return '';                 // otherwise nothing: the instruments already show height and climb
   }
   if (S.gear && !PL.fixedGear && S.ra > 250 && S.V > S.vs0 * 1.5) return T ? L('The gear is still down: tap Gear', 'הגלגלים עדיין למטה: לוחצים "גלגלים"') : L('The gear is still down: press G', 'הגלגלים עדיין למטה: לוחצים G');
-  if (S.gear && FLAPS.length > 1 && S.flapIdx === 0 && S.ra < 400 && S.vel.y < -1) return T ? L('Landing? Tap Flaps for landing flaps', 'נוחתים? לוחצים "מדפים"') : L('Landing? Press F for landing flaps, and fly ' + Math.round(S.vs0 * 1.3 * KT) + ' kt', 'נוחתים? לוחצים F למדפים, וטסים ב-' + Math.round(S.vs0 * 1.3 * KT) + ' קשר');
-  if (S.gear && S.ra < 300 && S.vel.y < -1 && !S.onGround) return S.ra < 12 ? L('Flare: raise the nose gently, power to idle', 'הצפה: מרימים בעדינות את האף, הספק לסרק') : L('Approach speed ' + Math.round(S.vs0 * 1.3 * KT) + ' kt', 'מהירות גישה ' + Math.round(S.vs0 * 1.3 * KT) + ' קשר');
+  if (S.gear && FLAPS.length > 1 && S.flapIdx === 0 && S.ra < 400 && S.vel.y < -1) return T ? L('Landing? Tap Flaps for landing flaps', 'נוחתים? לוחצים "מדפים"') : L('Landing? Press F for landing flaps, and fly ', 'נוחתים? לוחצים F למדפים, וטסים ב-') + spdTxt(S.vs0 * 1.3);
+  if (S.gear && S.ra < 300 && S.vel.y < -1 && !S.onGround) return S.ra < 12 ? L('Flare: raise the nose gently, power to idle', 'הצפה: מרימים בעדינות את האף, הספק לסרק') : L('Approach speed ', 'מהירות גישה ') + spdTxt(S.vs0 * 1.3);
   return '';
 }
 /** The key guide shows for the first 45 s of a flight, then gets out of the way; "Always" in the settings (or the K key) pins it. */
@@ -2712,11 +2718,12 @@ function drawSys() {
     $('thrFill').style.width = Math.abs(t) * 100 + '%'; $('thrFill').style.background = t < 0 ? 'var(--amber)' : 'var(--cyan)';
     const AU = S.assist || S.land ? L(' · AUTO', ' · אוטו׳') : ''; $('sFlap').textContent = FLAPS.length < 2 ? L('NONE', 'אין') : Math.round(S.flapDeg) + '°' + (Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 ? ' → ' + FLAPS[S.flapIdx] + '°' : '') + AU;
     const gp = S.gearPos, ge = $('sGear'); ge.textContent = (PL.fixedGear ? L('FIXED', 'קבועים') : gp > 0.98 ? L('▼ DOWN', '▼ למטה') : gp < 0.02 ? L('▲ UP', '▲ למעלה') : L('MOVING', 'בתנועה')) + (PL.fixedGear ? '' : AU); ge.className = gp > 0.98 ? 'ok' : gp < 0.02 ? '' : 'warnc';
-    const ae = $('sAp'); ae.textContent = S.land ? L('LANDING', 'נחיתה') : S.ap.on ? Math.round(S.ap.alt * FT / 10) * 10 + ' ft / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : L('OFF', 'כבוי'); ae.className = S.ap.on || S.land ? 'mg' : '';
+    const ae = $('sAp'); ae.textContent = S.land ? L('LANDING', 'נחיתה') : S.ap.on ? altTxt(S.ap.alt) + ' / ' + String(Math.round(S.ap.hdg) % 360).padStart(3, '0') + '°' : L('OFF', 'כבוי'); ae.className = S.ap.on || S.land ? 'mg' : '';
     const cfg = !S.assist || !!S.land || (!S.onGround && S.ra < 500) || Math.abs(S.flapDeg - FLAPS[S.flapIdx]) > 0.5 || (gp > 0.02 && gp < 0.98);          // gear and flaps rows: in Expert, low, or while they move
     $('rFlap').hidden = !cfg || FLAPS.length < 2; $('rGear').hidden = !cfg || !!PL.fixedGear; $('rAp').hidden = !(S.ap.on || S.land);
   }
-  if (document.body.classList.contains('nopfd')) $('strip').innerHTML = '<b>' + Math.round(S.V * KT) + '</b><span>kt</span><b>' + (Math.round(S.pos.y * FT / 10) * 10).toLocaleString('en') + '</b><span>ft</span><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b>';
+  if (document.body.classList.contains('nopfd')) $('strip').innerHTML = '<b>' + spdNum(S.V) + '</b><span>' + uSpd()[1] + '</span><b>' + altNum(S.pos.y).toLocaleString('en') + '</b><span>' + uAlt()[1] + '</span>' +
+    '<b class="agl">' + altNum(Math.max(S.ra, 0)).toLocaleString('en') + '</b><span>' + uAlt()[1] + ' ' + L('above ground', 'מעל הקרקע') + '</span><b>' + String(Math.round(S.hdg) % 360).padStart(3, '0') + '°</b>';
   $('hint').textContent = hintText(); $('place').textContent = S.place ? L('Over ' + S.place, 'מעל ' + S.placeHe) : '';
   if (!touchUI) { const sig = '' + S.mode + SAVE.lang + (SAVE.inv ? 'i' : 'n') + (legendOn() ? 1 : 0); if (sig !== S.legSig) { S.legSig = sig; drawLegend(); } }
   const al = $('alert'), blink = (TNOW * 3 % 1) < 0.6;
@@ -2737,7 +2744,7 @@ function drawSys() {
 const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he' }; try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
   if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
-  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; } catch (e) { /* no storage: defaults */ } return d; })();
+  for (const k of ['tod', 'wx', 'cam']) if (o[k] >= 0 && o[k] <= 2) d[k] = o[k] | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
 function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
   const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
@@ -3100,7 +3107,7 @@ function pickPanel() {
   const rows = document.createElement('div'); el.appendChild(rows);
   const row = (label, opts, cur, set) => { const r = document.createElement('div'), sp = document.createElement('span'), g = document.createElement('div'); r.className = 'seg'; sp.textContent = label; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
     opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { set(i); pickPanel(); pickDraw(); }); g.appendChild(b); }); r.append(sp, g); rows.appendChild(r); };
-  row(L('Height above ground', 'גובה מעל הקרקע'), [L('Low · 300 m', 'נמוך · 300 מ׳'), L('Medium · 1,000 m', 'בינוני · 1,000 מ׳'), L('High · 2,500 m', 'גבוה · 2,500 מ׳')], PICK.alt, i => { PICK.alt = i; });
+  row(L('Height above ground', 'גובה מעל הקרקע'), [L('Low', 'נמוך'), L('Medium', 'בינוני'), L('High', 'גבוה')].map((t, i) => t + ' · ' + altTxt(PICK_ALTS[i], 100)), PICK.alt, i => { PICK.alt = i; });
   row(L('Flying', 'כיוון טיסה'), [L('North', 'צפונה'), L('East', 'מזרחה'), L('South', 'דרומה'), L('West', 'מערבה')], PICK.hdg, i => { PICK.hdg = i; });
   const go = document.createElement('button'); go.className = 'go'; go.textContent = L('START HERE', 'התחלה כאן'); go.disabled = !PICK.pt; go.addEventListener('click', pickGo); el.appendChild(go);
 }
@@ -3112,7 +3119,7 @@ function openPicker(where, rer) {
   PICK.open = true; PICK.where = where; PICK.rer = rer; const ov = $('pick'); ov.style.display = 'flex'; ov.dir = SAVE.lang === 'he' ? 'rtl' : 'ltr';
   $('pickT').textContent = L('Choose a place', 'בחירת מקום'); $('pickClose').setAttribute('aria-label', L('Close', 'סגירה'));
   const q = $('pickQ'); q.placeholder = L('Search a town or site, e.g. Masada', 'חיפוש ישוב או אתר, למשל: מצדה'); q.value = ''; $('pickRes').textContent = ''; $('pickRes').hidden = true;
-  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה'); $('pickHint').textContent += ' · © OpenStreetMap';
+  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה');
   const sv = SAVE.pick; if (!PICK.pt && sv && sv.at) { PICK.pt = sv.at; PICK.name = sv.name; PICK.alt = sv.alt | 0; PICK.hdg = sv.hdg | 0; }
   pickPanel();                 // the bottom bar first: it sets how much room the map has (sizing the map before it squashed the picture and shifted every tap)
   pickC().width = 0; pickSize();
@@ -3330,6 +3337,9 @@ function settingsRows(el, where, rer) {
   row(L('Time of day', 'שעה ביום'), TOD.map((t, i) => todName(i)), S.tod, i => { S.tod = i; applyTOD(i); });
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
+  row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
+  row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
+  row(L('Height units', 'יחידות גובה'), [L('feet', 'רגל'), L('metres', 'מטר')], SAVE.uAlt | 0, i => { SAVE.uAlt = i; });
   row(L('Place names', 'שמות מקומות'), [L('Shown', 'מוצגים'), L('Hidden', 'מוסתרים')], S.names ? 0 : 1, i => { S.names = !i; });
   row(L('Instruments', 'מכשירים'), [L('Simple', 'פשוטים'), L('Full', 'מלאים')], document.body.classList.contains('nopfd') ? 0 : 1, i => { document.body.classList.toggle('nopfd', !i); SAVE.pfd = !!i; });
   row(L('Smoke trail', 'שובל עשן'), onOff, S.smoke ? 0 : 1, i => { S.smoke = !i; });

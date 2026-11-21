@@ -83,6 +83,10 @@ the map image changes (checked every 3 s). A canvas texture created after start-
 - The screen is kept on while flying (`keepAwake`: the Screen Wake Lock API, or a tiny muted video where it is missing).
 - Touch targets are at least 44 px; icon buttons get localized `aria-label`s in `applyLang`, which also sets `<html lang>`.
 - Every user-facing string is bilingual (`L('English', 'עברית')`, or `TRD` for data labels). Aviation instruments (PFD, ft, kt) stay as they are.
+- Units are the player's choice (settings; `SAVE.uSpd`, `uDist`, `uAlt`): speed kt / km/h / mph, distance km / miles / nautical miles, height
+  ft / m. Everything outside the PFD goes through `spdTxt`, `kmTxt`, `altTxt` (`src/07-hud-and-modes.js`); never print a raw unit. The speed strip
+  shows speed, altitude, height above the ground (`b.agl`) and heading; the PFD shows `AGL` at every height.
+- No credits or attribution lines anywhere in the game (the owner's decision); the data sources are credited in `README.md`.
 - Takeoffs: one per airport; `rev: true` starts from the far end of the runway, towards open ground (Haifa, Rosh Pina, Beer Sheva).
 - HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
 - Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.

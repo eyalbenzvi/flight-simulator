@@ -106,7 +106,7 @@ function pickPanel() {
   const rows = document.createElement('div'); el.appendChild(rows);
   const row = (label, opts, cur, set) => { const r = document.createElement('div'), sp = document.createElement('span'), g = document.createElement('div'); r.className = 'seg'; sp.textContent = label; g.setAttribute('role', 'group'); g.setAttribute('aria-label', label);
     opts.forEach((o, i) => { const b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', String(i === cur)); b.addEventListener('click', () => { set(i); pickPanel(); pickDraw(); }); g.appendChild(b); }); r.append(sp, g); rows.appendChild(r); };
-  row(L('Height above ground', 'גובה מעל הקרקע'), [L('Low · 300 m', 'נמוך · 300 מ׳'), L('Medium · 1,000 m', 'בינוני · 1,000 מ׳'), L('High · 2,500 m', 'גבוה · 2,500 מ׳')], PICK.alt, i => { PICK.alt = i; });
+  row(L('Height above ground', 'גובה מעל הקרקע'), [L('Low', 'נמוך'), L('Medium', 'בינוני'), L('High', 'גבוה')].map((t, i) => t + ' · ' + altTxt(PICK_ALTS[i], 100)), PICK.alt, i => { PICK.alt = i; });
   row(L('Flying', 'כיוון טיסה'), [L('North', 'צפונה'), L('East', 'מזרחה'), L('South', 'דרומה'), L('West', 'מערבה')], PICK.hdg, i => { PICK.hdg = i; });
   const go = document.createElement('button'); go.className = 'go'; go.textContent = L('START HERE', 'התחלה כאן'); go.disabled = !PICK.pt; go.addEventListener('click', pickGo); el.appendChild(go);
 }
@@ -118,7 +118,7 @@ function openPicker(where, rer) {
   PICK.open = true; PICK.where = where; PICK.rer = rer; const ov = $('pick'); ov.style.display = 'flex'; ov.dir = SAVE.lang === 'he' ? 'rtl' : 'ltr';
   $('pickT').textContent = L('Choose a place', 'בחירת מקום'); $('pickClose').setAttribute('aria-label', L('Close', 'סגירה'));
   const q = $('pickQ'); q.placeholder = L('Search a town or site, e.g. Masada', 'חיפוש ישוב או אתר, למשל: מצדה'); q.value = ''; $('pickRes').textContent = ''; $('pickRes').hidden = true;
-  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה'); $('pickHint').textContent += ' · © OpenStreetMap';
+  $('pickHint').textContent = document.body.classList.contains('touch') ? L('Tap to choose · two fingers to zoom', 'הקשה לבחירה · שתי אצבעות לזום') : L('Click to choose · scroll to zoom · drag to move', 'לחיצה לבחירה · גלגלת לזום · גרירה להזזה');
   const sv = SAVE.pick; if (!PICK.pt && sv && sv.at) { PICK.pt = sv.at; PICK.name = sv.name; PICK.alt = sv.alt | 0; PICK.hdg = sv.hdg | 0; }
   pickPanel();                 // the bottom bar first: it sets how much room the map has (sizing the map before it squashed the picture and shifted every tap)
   pickC().width = 0; pickSize();
