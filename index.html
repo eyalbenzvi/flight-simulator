@@ -237,6 +237,11 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   body.night #strip, body.night #sys, body.night #map:not(.big), body.night #pfd { filter: brightness(.8) saturate(.92); transition: filter .8s var(--ease); }
   /* the key guide shows keys as keycaps */
   #legend b { justify-self: start; min-width: 24px; text-align: center; padding: 1px 7px; border-radius: 6px; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.24); border-bottom-width: 2px; font-size: .88em; color: #fff; }
+  /* while the world is built behind the choice screen: the dawn sky behind the sheet, a running line under the title, and a FLY button that waits if pressed early */
+  body.building #start { background: linear-gradient(#0b1622 0, #1d3a5f 55%, #e9a35b 88%, #f3d08a 100%); }
+  body.building #rule { animation: ruleRun .6s linear infinite; }
+  #fly.busy { animation: flyWait 1s ease-in-out infinite; } @keyframes flyWait { 50% { opacity: .55; } }
+  .pickB:disabled { opacity: .5; }
 </style>
 </head>
 <body>
@@ -294,11 +299,11 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   </div>
 </div>
 <script>
-/* Shown while the scripts load and the world is built (a few seconds on a phone): the title, a loading line and a spinner, in the saved language */
+/* Shown only while the scripts themselves load: the title and a spinner, in the saved language. The choice screen follows at once; the world is built behind it */
 (function () { var he = true; try { he = (JSON.parse(localStorage.getItem('ifs-save') || '{}').lang || 'he') === 'he'; } catch (e) {}
   var q = function (s) { return document.querySelector(s); }; document.documentElement.lang = he ? 'he' : 'en'; q('#start .card').dir = he ? 'rtl' : 'ltr';
   q('#start h1').textContent = he ? 'סימולטור טיסה מעל ישראל' : 'ISRAEL FLIGHT SIMULATOR';
-  q('#intro').textContent = he ? 'בונים את המפה של ישראל: ישובים, כבישים ואתרים. זה לוקח כמה שניות.' : 'Building the map of Israel: towns, roads and sites. This takes a few seconds.';
+  q('#intro').textContent = '';
   q('#sBody').innerHTML = '<div class="ldSpin" role="progressbar" aria-label="' + (he ? 'טוען' : 'Loading') + '"></div>';
   q('#fly').textContent = he ? 'טוען…' : 'Loading…'; })();
 </script>

@@ -162,8 +162,8 @@ const OPEN = { start: new Set(['pl', 'lv']), pause: new Set(['pl', 'lv']) };
 const startName = (d, short) => d.pick ? L(d.name[0], d.name[1]) : d.type === 'ground' && short ? apName(AIRPORTS[d.rw.ap]) : tr(d.label.replace('Approach: ', ''));
 function renderPanel(where) {
   const body = $(where === 'start' ? 'sBody' : 'mBody'), touchUI = document.body.classList.contains('touch'), cur = where === 'start' ? (START || FREE[0]) : S.lastSpawn, rer = () => renderPanel(where);
-  const go = d => where === 'start' ? () => { START = d; spawn(d); $('toast').style.display = 'none'; rer(); } : () => { closeMenu(); spawn(d); };
-  const pickPlane = k => { selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); spawn(S.lastSpawn || FREE[0]); } };
+  const go = d => where === 'start' ? () => { START = d; if (WORLD.ready) { spawn(d); $('toast').style.display = 'none'; } rer(); } : () => { closeMenu(); spawn(d); };
+  const pickPlane = k => { if (!WORLD.ready) { PL = PLANES[k] || PL; SAVE.plane = PL.key; persist(); return rer(); }          /* the models are not built yet: the choice is kept and applied when they are */ selectPlane(k); if (where === 'start') { spawn(START || FREE[0]); $('toast').style.display = 'none'; rer(); } else { closeMenu(); spawn(S.lastSpawn || FREE[0]); } };
   const starts = (list, short) => el => gridButtons(el, list.map(d => [startName(d, short), '', go(d), d === cur]));
   const secs = [
     ['pl', L('Aircraft', 'מטוס'), tr(PL.name), el => planeCards(el, pickPlane)],
@@ -184,6 +184,7 @@ function renderPanel(where) {
 function pickButton(el, where, cur, rer) {
   const b = document.createElement('button'), on = !!(cur && cur.pick); b.className = 'pickB' + (on ? ' on' : ''); b.textContent = '📍 ' + (on ? startName(cur) : L('Choose any place on the map', 'בחירת מקום כלשהו על המפה'));
   const s = document.createElement('small'); s.textContent = on ? L('Choose another place', 'בחירת מקום אחר') : L('Search a town or site, or tap the map', 'חיפוש ישוב או אתר, או הקשה על המפה'); b.appendChild(s);
+  b.disabled = !WORLD.ready;          /* the picker draws on the baked map */
   b.addEventListener('click', () => openPicker(where, rer)); el.insertBefore(b, el.firstChild);
 }
 /** Settings as rows of option buttons: every choice visible, the current one marked (aria-pressed). */
@@ -344,28 +345,44 @@ function savedFlight() { try { const f = JSON.parse(localStorage.getItem('ifs-fl
   return { type: 'air', label: 'Continue the last flight', x: f.x, z: f.z, alt: Math.max(f.y, groundAt(f.x, f.z).h + 150), hdg: f.hdg, spd: clamp(f.v / PLANES[f.plane].vc, 0.6, 1.6) * 120, plane: f.plane }; } catch (e) { return null; } }
 
 // ---------- 17. Boot ----------
+/** The world behind the choice screen: `ready` once it is built, `wantFly` when FLY was pressed before that (the flight then starts by itself). */
+const WORLD = { ready: false, wantFly: false };
+const worldFailed = e => { console.error(e); try { localStorage.removeItem('ifs-save'); } catch (x) {}      /* a damaged save must not fail again after the reload */ $('fly').textContent = '!'; $('fly').disabled = true; $('sBody').textContent = ''; document.body.classList.remove('building');
+  $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
+function startFlight() {
+  const fly = $('fly'); if (!WORLD.ready) { WORLD.wantFly = true; fly.classList.add('busy'); Snd.init(); return; }          // pressed while the map is still being built: it starts as soon as it is there
+  Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = S.cam !== 1;          /* in the chase view the camera glides in from where the start screen's orbit left it */ $('start').style.display = 'none'; $('hud').style.display = 'block';
+  if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4);
+}
+/** Step 1, as soon as the scripts are in: the choice screen. Nothing here needs the world. */
 function init() {
-  buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects(); buildExtras();
-  buildMenu(); buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
-  // settings from the last visit
-  if (SAVE.gfx) applyGfx(SAVE.gfx);
-  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
-  { const rf = savedFlight(); if (rf) { selectPlane(rf.plane); START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
+  buildMenu(); PL = PLANES[SAVE.plane] || PLANES.airliner; setMode(SAVE.mode);
+  { const rf = savedFlight(); if (rf) { PL = PLANES[rf.plane] || PL; START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
   if (SAVE.first && !START) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
-  shootPlanes(); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; document.body.classList.add('ready'); guardBack(); setInterval(() => { if (S.started) { persist(); saveFlight(); } }, 5000);
-  const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; applyLang(); $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
-  fly.addEventListener('click', () => { Snd.init(); if (Snd.ctx && Snd.ctx.state === 'suspended') Snd.ctx.resume(); S.started = true; keepAwake(); camSnap = S.cam !== 1;          /* in the chase view the camera glides in from where the start screen's orbit left it */ $('start').style.display = 'none'; $('hud').style.display = 'block';
-    if (S.mode === 1 && S.onGround) toast(L('Push the power to full. The ' + PL.name.toLowerCase() + ' takes off by itself', 'מעלים את ההספק עד הסוף. ה' + tr(PL.name) + ' ממריא לבד'), 4); });
+  const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; document.body.classList.add('ready', 'building'); applyLang();
+  $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
+  fly.addEventListener('click', startFlight);
   tapButton($('menuB'), () => { openMenu(); $('menuB').blur(); });
   tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
   const uncover = () => { if (S.paused) closeMenu(); if (PH.on) { PH.on = false; document.body.classList.remove('photo'); } };
   $('again').addEventListener('click', () => { uncover(); spawn(S.lastSpawn || FREE[0]); });
   $('airborne').addEventListener('click', () => { uncover(); spawn({ type: 'air', x: S.pos.x, z: S.pos.z, agl: 600, hdg: S.hdg, spd: 120, label: L('Back in the air', 'חזרה לאוויר'), keep: true }); });
-  requestAnimationFrame(loop);
+}
+/** Step 2, behind the choice screen: the world, one builder at a time with a breath between them, so the screen keeps answering taps. */
+async function buildWorld() {
+  const breath = () => new Promise(r => setTimeout(r, 0)), hold = +(new URLSearchParams(location.search).get('hold')) || 0; if (hold) await new Promise(r => setTimeout(r, hold));
+  for (const f of [buildHeights, buildTerrain, buildWater, buildAirports, buildScatter, buildCities, buildLandmarks, buildRoads, buildDetails, buildIsrael, buildCityLandmarks, buildSites, buildRivers, buildBoom, buildLabels, bakeMap, buildSkyObjects, buildAircraft, buildGameObjects, buildExtras]) { f(); await breath(); }
+  buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(PL.key); setMode(S.mode); setupCanvasGuard(); await breath();
+  // settings from the last visit
+  if (SAVE.gfx) applyGfx(SAVE.gfx);
+  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
+  shootPlanes(); await breath(); selectPlane(PL.key); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; WORLD.ready = true; document.body.classList.remove('building'); guardBack(); setInterval(() => { if (S.started) { persist(); saveFlight(); } }, 5000);
+  renderPanel('start'); requestAnimationFrame(loop);
+  if (WORLD.wantFly) { $('fly').classList.remove('busy'); startFlight(); }
 }
 if (typeof THREE === 'undefined') { $('fly').textContent = '!'; $('intro').textContent = document.documentElement.lang === 'he' ? 'לא הצלחנו לטעון את מנוע התלת-ממד. בדקו את החיבור לאינטרנט וטענו מחדש.' : 'Could not load the 3D engine. Check your connection and reload.'; $('sBody').textContent = ''; }
-else {      // decode the rasters first (settlements from GHSL, land cover and buildings from OpenStreetMap); everything else is built from them
+else {      // the choice screen first; meanwhile the rasters are decoded (settlements from GHSL, land cover and buildings from OpenStreetMap) and the world is built from them
   const load = src => new Promise((res, rej) => { const im = new Image(); im.onerror = () => rej(new Error('image')); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); res({ w: im.width, h: im.height, d: x.getImageData(0, 0, im.width, im.height).data }); }; im.src = src; });
-  const failed = e => { console.error(e); try { localStorage.removeItem('ifs-save'); } catch (x) {}      /* a damaged save must not fail again after the reload */ $('fly').textContent = '!'; $('sBody').textContent = ''; $('intro').textContent = document.documentElement.lang === 'he' ? 'משהו השתבש בזמן בניית המפה. נסו לטעון את הדף מחדש.' : 'Something went wrong while building the map. Please reload the page.'; };
-  Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; setTimeout(() => { try { init(); } catch (e) { failed(e); } }, 30); }).catch(failed); }
+  try { init(); } catch (e) { worldFailed(e); }
+  Promise.all([load(BLD_PNG), load(LC_PNG), load(BO_PNG)]).then(([b, l, o]) => { BLD = b; LCR = l; BOR = o; return buildWorld(); }).catch(worldFailed); }

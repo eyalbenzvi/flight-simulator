@@ -10,7 +10,7 @@ async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(args=['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']); errors = []
         pg = await b.new_page(viewport={'width': 900, 'height': 560}); pg.on('pageerror', lambda e: errors.append(str(e)[:300]))
-        await pg.goto(page_file.as_uri()); await pg.wait_for_function("!document.getElementById('fly').disabled", timeout=180000)
+        await pg.goto(page_file.as_uri()); await pg.wait_for_function("WORLD.ready", timeout=180000)
         print('loaded:', await pg.evaluate("() => ({ grid: [NX, NZ], localities: LOCS.length, meshes: cityMeshes.length, buildings: cityMeshes.reduce((a, m) => a + m.count, 0), roads: roadPaths.length })"), flush=True)
         await pg.evaluate("() => document.getElementById('fly').click()")
         for mode, name in ((0, 'easy'), (1, 'medium'), (2, 'expert')):
