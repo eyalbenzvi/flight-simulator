@@ -271,6 +271,10 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   #aim.bomb { border-radius: 4px; transform-origin: center; border-style: dashed; } #aim.gun::after { content: ""; position: absolute; left: 11px; top: 11px; width: 2px; height: 2px; background: rgba(255, 233, 160, .95); }
   #aimLock { border: 2px solid #ff4b3a; width: 34px; height: 34px; margin: -3px; }
   #cFire { border-color: #ff7a1a !important; color: #ffb37a !important; min-width: 84px; } #cFire:active { background: rgba(255, 122, 26, .35) !important; }
+  /* aiming help: a mark on every practice target in view (tap one to choose it), the aiming mark turning red when the shot will hit */
+  .tmk { position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: none; box-sizing: border-box; pointer-events: auto; touch-action: none; border: 2px solid rgba(255, 122, 26, .9); border-radius: 50%; border-left-color: transparent; border-right-color: transparent; }
+  .tmk::after { content: ""; position: absolute; inset: -12px; } .tmk.pk { border-color: #ff4b3a; border-width: 3px; }
+  #aim.hot { border-color: #ff4b3a; color: #ff8a7a; box-shadow: 0 0 0 3px rgba(255, 75, 58, .35); } #aim.auto { border-style: solid; animation: flyWait .6s ease-in-out infinite; }
 </style>
 </head>
 <body>

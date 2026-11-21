@@ -204,7 +204,7 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   fire key only says where the nearest range is. This is a design rule, not a limitation: nothing in the rest of the world (towns, buildings, vehicles,
   ships, other aircraft, balloons) can be shot at or damaged. Do not widen it without the owner asking.
 - Everywhere, behind a child lock (the owner asked for it): the settings row "Weapons" has "Firing ranges only" (the default) and "Anywhere". Turning
-  "Anywhere" on asks a grown-up's question first (`wpnGate`: a multiplication, through `prompt`); turning it off asks nothing. It is kept in `SAVE.wpnAll`.
+  "Anywhere" on asks for the owner's code first (`wpnGate`: the code is `1234`, the owner set it, through `prompt`); turning it off asks nothing. It is kept in `SAVE.wpnAll`.
   Even then the world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
 - At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
   A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
@@ -213,6 +213,10 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   `#aimLock` on a drone the missile has locked; orange dashed rings on the minimap. Keys: Enter fires, U changes weapon; controller: right shoulder
   fires, Select changes weapon. Ammunition comes back on any new start and after landing. Two starts in "start in the air" lead to the ranges
   (`armed: true` exchanges an unarmed aircraft for the fighter).
+- Aiming (the owner found free aiming impractical, keep these): up to six orange marks (`.tmk`) stand on the targets in view and a tap on one picks it
+  (`WPN.pick`); otherwise the target nearest the aiming mark is locked by itself (`WPN.lock`). The gun fires at the lead point (`wpnLead`) while the lock
+  is within 16 degrees of the nose and 2.2 km (`#aim.hot`), else straight ahead. Fire with a ground lock arms the bombs (`WPN.auto`) and they are let go
+  by themselves when the predicted impact reaches the target; guided bombs steer to the lock. Tested in the page: gun hits up to 11 degrees off the nose.
 - Motion is in map space like the aircraft (ground speed × `hsAt`), so the aiming mark and the bomb agree. `updateWeapons` gets `sdt` (fast forward applies).
 
 ## Start-up
