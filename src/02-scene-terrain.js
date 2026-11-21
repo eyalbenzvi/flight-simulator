@@ -6,8 +6,14 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicD
     frames run slow, back up when there is time to spare (`autoRes` in the main loop). `?res=1.5` in the address pins it. */
 const RES = { max: Math.min(window.devicePixelRatio || 1, 2), min: Math.min(window.devicePixelRatio || 1, 0.75), pr: 1, acc: 0, n: 0, hold: 0, cap: 9, slow: 0, fixed: +(new URLSearchParams(location.search).get('res')) || 0 };
 RES.pr = RES.fixed || Math.min(RES.max, 1.75); renderer.setPixelRatio(RES.pr);
+/** The player's graphics choice (settings): 0 automatic (resolution follows the frame rate), 1 fast (one screen pixel per pixel at most, no post pass),
+    2 best (the screen's full density, pinned). */
+function applyGfx(g) {
+  RES.user = g | 0; POST.on = POST.url && g !== 1; const pr = RES.fixed || (g === 1 ? Math.min(1, RES.max) : g === 2 ? RES.max : Math.min(RES.max, 1.75));
+  if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); resize(); }
+}
 function autoRes(ms) {
-  if (RES.fixed || ms > 250 || document.hidden) return; RES.acc += ms; if (++RES.n < 45) return; const avg = RES.acc / RES.n; RES.acc = RES.n = 0; if (RES.hold > 0) RES.hold--;
+  if (RES.fixed || RES.user || ms > 250 || document.hidden) return; RES.acc += ms; if (++RES.n < 45) return; const avg = RES.acc / RES.n; RES.acc = RES.n = 0; if (RES.hold > 0) RES.hold--;
   let pr = RES.pr; if (avg > 30 && pr <= RES.min && POST.on && ++RES.slow > 3) POST.on = false;
   if (avg > 27 && pr > RES.min) { pr = Math.max(RES.min, pr - 0.25); RES.cap = pr; RES.hold = 12; } else if (avg < 14.5 && pr < Math.min(RES.max, RES.cap + (RES.hold ? 0 : 0.25)) && !RES.hold) { pr = Math.min(RES.max, pr + 0.25); RES.hold = 4; }
   if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); resize(); }
@@ -40,7 +46,7 @@ function resize() {
 /** Post pass: the frame is drawn into a (multisampled) target, its bright parts are blurred at a quarter and an eighth of the size and added back
     (bloom: lamps, the sun on water and glass, the afterburner glow), with a light sharpen. Off with `?post=0`, and switched off by itself on a
     device that stays slow at the lowest resolution. */
-const POST = { on: new URLSearchParams(location.search).get('post') !== '0', ok: false, k: 1 };
+const POST = { on: new URLSearchParams(location.search).get('post') !== '0', ok: false, k: 1 }; POST.url = POST.on;
 function postSetup() {
   try {
     const gl2 = renderer.capabilities.isWebGL2, mk = (ms) => { const t = ms && gl2 ? new THREE.WebGLMultisampleRenderTarget(4, 4, { depthBuffer: true }) : new THREE.WebGLRenderTarget(4, 4, { depthBuffer: !!ms }); t.texture.minFilter = t.texture.magFilter = THREE.LinearFilter; t.texture.generateMipmaps = false; return t; };

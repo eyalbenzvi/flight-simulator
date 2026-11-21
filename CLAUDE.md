@@ -50,6 +50,7 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 | `src/06-flight.js` | 10, 11 | State `S`, `spawn`, flight-law helpers (`pitchFor`, `rollFor`), `updateControls` (autoland, autopilot, assisted and manual laws), `physics`, `updateSystems`, cameras |
 | `src/07-hud-and-modes.js` | 12, 12b, 12d, 12e | PFD, minimap, hints, key guide; settings (`SAVE`), smoke trails, air traffic, weather, photo mode; Easy mode (`arcadeStep`), translations (`L`, `TRD`, `applyLang`); obstacle hash, explosion, level buttons |
 | `src/07b-picker.js` | 12f | Start anywhere: the place picker (`openPicker`), a full-screen map (tap to choose, drag, pinch or wheel to zoom) with a search over `LOCS` and `PICK_SITES` (Hebrew or English, spelling variants folded by `pickNorm` / `pickSkel`, `PICK_ALIAS`); height and direction rows; starts a little before the place, facing it. The last choice is kept in `SAVE.pick` |
+| `src/07c-extras.js` | 12g | Game controller (`padRead`), 3D cars near the camera, motorway lamps, tower cranes, power lines, the lightning bolt, puffs (touchdown smoke, wingtip vapour), night lamps (minarets, stadiums, obstruction lights), `buildOldCity`, the aircraft's self-shadow map; `buildExtras` (from `init`) and `updateExtras` (from `loop`) |
 | `src/08-app.js` | 13–17 | Audio (`Snd`), input (`action`), menus, main `loop`, boot (`init`) |
 
 ## Look and resolution
@@ -109,6 +110,23 @@ no bundler, no framework. Everything shares one global scope, so the load order 
   stack with no letter-spacing, menus as a side sheet (a bottom sheet on an upright phone) so the world shows, aircraft cards with pictures rendered at
   start-up (`shootPlanes`), a one-line title with the aircraft glyph, a dawn loading screen (`body:not(.ready)`), entry animations, one message slot
   (`body.toasting` hides the hint), the readout strip in cells, a redesigned stick and power lever, `body.paused` / `body.crashed` hiding the HUD.
+
+- Round four (the proposals that had been left out):
+  - Post pass (`POST`, `renderFrame` in `src/02-scene-terrain.js`): the frame goes to a multisampled target, bright parts are blurred at 1/4 and 1/8 size and
+    added back, with a light sharpen. `POST.k` is 0.28 by day and 1 at night (white paint in the sun must not glow). `?post=0` turns it off, and it turns
+    itself off on a device that stays slow at the lowest resolution. Screenshots of aircraft cards (`shootPlanes`) render directly, not through it.
+  - Graphics setting (`applyGfx`, `SAVE.gfx`): automatic, fast (1 pixel per pixel, no post pass), best (full density, pinned).
+  - Time that passes (`TODX`, `todAt`, `todTick` in `src/04-sky.js`, the fourth "time of day"): afternoon, sunset, dusk, night, dawn, about eleven minutes
+    round. `TODC` is the set of values in force (use it, not `TOD[S.tod]`). Terrain shadows for each step are baked a few rows per frame (`bakeTerrainRows`).
+  - The aircraft shadows itself through one small shadow map that follows it (larger screens only; `?shadow=0` turns it off). Nothing else casts into it.
+  - Lone city blocks turn to face the nearest road (`roadDirAt`); blocks that share a cell stay on the lattice. Jerusalem's Old City has its real wall
+    outline (`OLDCITY`, `inOldCity`) and a dense fabric of small stone houses (`buildOldCity`); generic blocks and modern sites keep out of it.
+  - Terrain shader: the sun flashes off solar fields and greenhouses (`lcG`), ground is wet and mirrors the sky in a storm (`uWet`), Hermon's snow lies
+    lower on north slopes. Freighters have a shaped hull, containers and a foam wake; Tel Aviv's breakwaters are rock mounds.
+  - Cars of the traffic within 650 m of a low camera are drawn as small 3D cars on the right-hand lane (the light dots ride 3.8 m over the ground, the road
+    surface 2.2 to 3 m: take heights from the dots, not from `triHeight`).
+  - A game controller works with nothing on screen: left stick, triggers or right stick for power, A view, B brake, X land, Y gear, LB flaps, Start menu.
+  - At night the instruments dim (`body.night`); the key guide shows keycaps.
 
 ## Canvas textures survive a GPU reset
 

@@ -233,6 +233,10 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
 @media (orientation:landscape){ body.touch:not(.nopfd) #ctx{flex-direction:column;flex-wrap:wrap-reverse;max-height:calc(100vh - 190px);right:calc(14px + var(--sr));bottom:calc(178px + var(--sb))} body.touch:not(.nopfd) #pfd{width:min(30vw,270px)} }
 #crash{background:radial-gradient(rgba(4,7,11,.25) 30%, rgba(4,7,11,.82))} #crash h2{color:var(--amber)} body.crashed #hud > *{opacity:0}
 @media (prefers-reduced-motion: reduce){ *, *::before, *::after{animation:none!important;transition:none!important} }
+  /* at night the instruments dim a little, like a real panel, so the lit world outside stays the brightest thing on screen */
+  body.night #strip, body.night #sys, body.night #map:not(.big), body.night #pfd { filter: brightness(.8) saturate(.92); transition: filter .8s var(--ease); }
+  /* the key guide shows keys as keycaps */
+  #legend b { justify-self: start; min-width: 24px; text-align: center; padding: 1px 7px; border-radius: 6px; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.24); border-bottom-width: 2px; font-size: .88em; color: #fff; }
 </style>
 </head>
 <body>

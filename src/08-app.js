@@ -197,6 +197,7 @@ function settingsRows(el, where, rer) {
   row(L('Time of day', 'שעה ביום'), [0, 1, 2, 3].map(todName), S.tod, i => { S.tod = i; applyTOD(i); });
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
+  row(L('Graphics', 'גרפיקה'), [L('Automatic', 'אוטומטי'), L('Fast', 'מהיר'), L('Best', 'מרבי')], SAVE.gfx | 0, i => { SAVE.gfx = i; applyGfx(i); });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
   row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
   row(L('Height units', 'יחידות גובה'), [L('feet', 'רגל'), L('metres', 'מטר')], SAVE.uAlt | 0, i => { SAVE.uAlt = i; });
@@ -347,6 +348,7 @@ function init() {
   buildHeights(); buildTerrain(); buildWater(); buildAirports(); buildScatter(); buildCities(); buildLandmarks(); buildRoads(); buildDetails(); buildIsrael(); buildCityLandmarks(); buildSites(); buildRivers(); buildBoom(); buildLabels(); bakeMap(); buildSkyObjects(); buildAircraft(); buildGameObjects(); buildExtras();
   buildMenu(); buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(SAVE.plane); setMode(SAVE.mode); setupCanvasGuard();
   // settings from the last visit
+  if (SAVE.gfx) applyGfx(SAVE.gfx);
   if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
   { const rf = savedFlight(); if (rf) { selectPlane(rf.plane); START = rf; AIRSTARTS.unshift(rf); } }          // a flight that was cut off (the page closed or reloaded) is offered first
   if (SAVE.first && !START) START = FREE[1];             // a first visit starts in the air over the Tel Aviv coast: flying at once, with the city ahead (a take-off takes half a minute and ends over the sea)
