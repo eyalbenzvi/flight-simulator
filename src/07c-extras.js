@@ -59,7 +59,7 @@ function buildExtras() {
     const jib = mergeGeo([[new THREE.BoxGeometry(1.2, 1.4, 50).translate(0, 0.7, -17), ...Y], [new THREE.BoxGeometry(2.4, 2.2, 4).translate(0, 0.2, 7), ...G2], [new THREE.BoxGeometry(1.6, 7, 1.6).translate(0, 3.5, 0), ...Y], [new THREE.BoxGeometry(2, 2.2, 2.4).translate(1.6, -1.2, -1), 0.9, 0.9, 0.88]]);
     const mast = mergeGeo([parts[0]]), mat = new THREE.MeshLambertMaterial({ vertexColors: true }), list = [];
     if (LCR) for (let j = 2; j < LCR.h - 2 && list.length < 260; j += 2) for (let i = 2; i < LCR.w - 2; i += 2) { if (LCR.d[(j * LCR.w + i) * 4] !== LCN.construction) continue; const h = hash2(i, j); if (h > 0.5) continue;
-      const x = X0 + (i + 0.5) * 60 + (h - 0.25) * 60, z = Z0 + (j + 0.5) * 60 + (hash2(j, i) - 0.5) * 30, g = groundAt(x, z); if (g.h < 1 || nearRoad(x, z, 4) || obstBox(x, z, 2.5, 2.5) || airfieldAt(x, z, 400)) continue; list.push([x, triHeight(x, z), z, 34 + hash2(i + 7, j) * 26, hash2(i, j + 9) * 6.283]); }
+      const x = X0 + (i + 0.5) * 60 + (h - 0.25) * 60, z = Z0 + (j + 0.5) * 60 + (hash2(j, i) - 0.5) * 30, g = groundAt(x, z); if (g.h < 1 || wetAt(x, z, 20) || nearRoad(x, z, 4) || obstBox(x, z, 2.5, 2.5) || airfieldAt(x, z, 400)) continue; list.push([x, triHeight(x, z), z, 34 + hash2(i + 7, j) * 26, hash2(i, j + 9) * 6.283]); }
     if (list.length) { const a = new THREE.InstancedMesh(mast, mat, list.length), b = new THREE.InstancedMesh(jib, mat, list.length), o = new THREE.Object3D();
       list.forEach(([x, y, z, h, r], k) => { o.position.set(x, y - 1, z); o.rotation.set(0, r, 0); o.scale.set(1, h + 1, 1); o.updateMatrix(); a.setMatrixAt(k, o.matrix); o.position.set(x, y + h, z); o.scale.set(1, 1, 1); o.updateMatrix(); b.setMatrixAt(k, o.matrix); addObst(x, z, 2, 2, 0, y, y + h + 7); red.push(x, y + h + 8, z); });
       for (const m of [a, b]) { m.frustumCulled = false; m.userData = { x: 0, z: 0, far: 1e9 }; scene.add(m); } XT.cranes = [a, b]; XT.craneList = list; } }
@@ -72,7 +72,7 @@ function buildExtras() {
     const py = [], W = [];
     for (const rt of routes) { const pts = splinePath(rt, 330); let prev = null;
       for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[Math.min(i + 1, pts.length - 1)], o = pts[Math.max(i - 1, 0)], g = groundAt(p[0], p[1]);
-        if (g.h < 1.5 || nearRoad(p[0], p[1], 7) || obstBox(p[0], p[1], 6, 6) || airfieldAt(p[0], p[1], 900)) continue;
+        if (g.h < 1.5 || wetAt(p[0], p[1], 20) || nearRoad(p[0], p[1], 7) || obstBox(p[0], p[1], 6, 6) || airfieldAt(p[0], p[1], 900)) continue;
         const rot = Math.atan2(q[0] - o[0], q[1] - o[1]), cur = { x: p[0], y: triHeight(p[0], p[1]) - 0.5, z: p[1], rot }; py.push(cur);
         if (prev && Math.hypot(cur.x - prev.x, cur.z - prev.z) < 800) for (const [ox, oy] of [[-11.5, 29.4], [11.5, 29.4], [-8.5, 36.4], [8.5, 36.4], [0, 43.4]]) { let lx = 0, ly = 0, lz = 0;
           for (let k = 0; k <= 6; k++) { const f = k / 6, c1 = Math.cos(prev.rot), s1 = Math.sin(prev.rot), c2 = Math.cos(cur.rot), s2 = Math.sin(cur.rot), ax = prev.x + ox * c1, az = prev.z - ox * s1, bx = cur.x + ox * c2, bz = cur.z - ox * s2;

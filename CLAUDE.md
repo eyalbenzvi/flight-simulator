@@ -255,6 +255,16 @@ Runways are at real scale while the map around them is compressed 4:1, so `ap.R`
 touching down counts as on the field) covers several real towns. `airfieldAt(x, z, pad)` is the airfield proper (runways with overruns,
 parallel taxiway, apron): buildings, roads, rails and trees keep off that, not off the circle.
 
+## Water
+
+- Rivers are the ones that flow all year, taken from OpenStreetMap by name (`RIVER_NAMES` in `tools/osm2world.py` → `RIVERS`: Jordan, Yarkon, Kishon, Yarmouk,
+  Dan, Snir, Alexander, Taninim, Hadera, Na'aman and those across the borders), drawn at their real width (10 or 16 m of water, 7 m of bank each side). Dry
+  stream beds tagged as rivers (Sorek, Lakhish, Ayalon, Shikma, the Arava) are not drawn; seven desert beds are still drawn by hand as pale gravel.
+  `riverLines()` (in `src/03-world.js`) feeds both the meshes (`buildRivers`) and the road index, so `nearRoad` also keeps everything off rivers and beds.
+- Lakes, reservoirs and ponds are land-cover class 9; the tool leaves out seasonal and intermittent water and anything under 45,000 m². `wetAt(x, z, r)` is
+  true in the sea, on a lake of the terrain or on class 9: city blocks, village houses, sites, trees, cranes and pylons check it. The hand-drawn fish-pond
+  grids are gone (the real ponds are in the land cover); the Dead Sea and Eilat pans remain and skip any spot where something stands.
+
 ## Keeping roads clear
 
 `nearRoad(x, z, r)` (in `src/03-world.js`) is true when a round object of radius `r` would touch a road or railway. It uses an index of the

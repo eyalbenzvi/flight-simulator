@@ -163,7 +163,7 @@ function buildCities() {
     else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
     if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || wetAt(x, z, 34) || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;          /* not in the sea, and not on a mapped lake or reservoir either */
     const y = heightAt(x, z);
     if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
     else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
@@ -188,7 +188,7 @@ function buildCities() {
   // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
   for (const l of LOCS) { const x = lon2x(l[2]), z = lat2z(l[3]), i0 = Math.floor((x - X0) / 60), j0 = Math.floor((z - Z0) / 60); let any = false;
     for (let dj = -4; dj <= 4 && !any; dj++) for (let di = -4; di <= 4; di++) if (bldAt(i0 + di, j0 + dj)) { any = true; break; }
-    if (any || groundAt(x, z).water || airfieldAt(x, z, 60)) continue;
+    if (any || wetAt(x, z, 40) || airfieldAt(x, z, 60)) continue;
     const R = rng(Math.round(l[2] * 9973 + l[3] * 7919)), n = clamp(Math.round(6 + l[4] * 4), 6, 22);
     for (let k = 0; k < n; k++) { const a = k * 2.39996 + R() * 0.4, r = 22 + 15 * Math.sqrt(k) + R() * 6, hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r; if (nearRoad(hx, hz, 10)) continue;
       push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 11 + R() * 6, 8 + R() * 3, 10 + R() * 5, Math.floor(R() * 4) * 0.785, 0.93 + R() * 0.07]); } }
@@ -288,6 +288,26 @@ let ROADLINES = null;
 /** Every road as a dense polyline in world metres (points at most 45 m apart): the OpenStreetMap network in Israel and Palestine
     (src/roads.js, from tools/osm2roads.py), plus the hand-drawn roads in ROADS that run mostly beyond it (Jordan, Lebanon, Sinai). */
 let RAILLINES = null;
+/** Water courses as world polylines: the rivers that flow all year, from OpenStreetMap (`RIVERS`; `hw` is half the width of the water), and the dry
+    desert stream beds drawn by hand (Besor, Zin, Paran, the Arava stream, Qelt, Arugot, the Be'er Sheva stream; `dry`). Built once: the meshes and the
+    index that keeps buildings, sites and trees off them use the same lines. */
+let RIVERLINES = null;
+function riverLines() {
+  if (RIVERLINES) return RIVERLINES; RIVERLINES = [];
+  for (const e of (typeof RIVERS === 'undefined' ? [] : RIVERS)) { const D = []; let lo = e[1], la = e[2], px = 0, pz = 0;
+    for (let i = 1; i < e.length; i += 2) { if (i > 1) { lo += e[i]; la += e[i + 1]; } const x = lon2x(lo / 1e4), z = lat2z(la / 1e4); if (x < X0 || x > X1 || z < Z0 || z > Z1) { if (D.length > 1) RIVERLINES.push({ D: D.slice(), hw: e[0] ? 8 : 5 }); D.length = 0; continue; }
+      if (D.length) { const n = Math.ceil(Math.hypot(x - px, z - pz) / 40); for (let k = 1; k < n; k++) D.push([px + (x - px) * k / n, pz + (z - pz) * k / n]); }
+      D.push([x, z]); px = x; pz = z; }
+    if (D.length > 1) RIVERLINES.push({ D, hw: e[0] ? 8 : 5 }); }
+  for (const pts of [[[34.7, 31.2], [34.55, 31.28], [34.42, 31.44]], [[34.8, 30.83], [34.95, 30.88], [35.15, 30.92], [35.33, 30.93]], [[34.75, 30.15], [34.95, 30.35], [35.15, 30.42], [35.22, 30.5]], [[35.1, 30.0], [35.2, 30.45], [35.32, 30.85]], [[35.3, 31.84], [35.4, 31.845], [35.47, 31.84]], [[35.25, 31.5], [35.33, 31.465], [35.385, 31.455]], [[35.0, 31.22], [34.82, 31.235], [34.7, 31.2]]])
+    RIVERLINES.push({ D: splinePath(pts, 40), hw: 14, dry: true });
+  return RIVERLINES;
+}
+/** True on water: the sea and the lakes of the terrain, and the lakes, reservoirs and ponds of the land cover (class 9), at the point or within `r` of it. */
+function wetAt(x, z, r) {
+  if (groundAt(x, z).water || lcAt(x, z) === 9) return true; if (!r) return false;
+  for (const [a, b] of [[r, 0], [-r, 0], [0, r], [0, -r]]) if (lcAt(x + a, z + b) === 9 || groundAt(x + a, z + b).water) return true; return false;
+}
 /** Railway lines from OpenStreetMap (RAILS), as world polylines with points at most 45 m apart. */
 function railLines() {
   if (RAILLINES) return RAILLINES; RAILLINES = [];
@@ -319,6 +339,7 @@ function roadIndex() {
       const k = cx * 100003 + cz; let a = ROADIDX.get(k); if (!a) ROADIDX.set(k, a = []); a.push(seg); } } };
   for (const r of roadLines()) add(r.D, roadHW(r.cls, r.dual));
   for (const D of railLines()) add(D, 5);
+  for (const r of riverLines()) add(r.D, r.hw + (r.dry ? 2 : 9));          // rivers and stream beds with their banks: nothing is built or planted on them
 }
 /** True when a round object of radius r (metres) centred at x, z would touch a road or railway, with a 4 m verge. */
 function nearRoad(x, z, r) {
@@ -456,7 +477,7 @@ function updateScatter() {
       const stoneV = (lon > 35.03 && lon < 35.45 && lat > 31.32 && lat < 32.55) || (lon < 34.52 && lat < 31.6) || lon > 35.72 || (lat > 32.75 && lat < 32.98 && lon > 35.15 && lon < 35.42) || arid > 0.55;
       const vd = Math.hypot(gx - (vx * 14 + 7), gz - (vz * 14 + 7)), vill = false && urban < 0.2 && (stoneV ? arid < 0.8 && farm < 0.9 : farm > 0.35) && hash2(vx * 5.1 + 2, vz * 3.7 + 5) < (stoneV ? 0.2 : 0.27) && vd < 4.4;
       if (vill) {
-        const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 14) || nearRoad(x, z, 14)) continue; const y = triHeight(x, z);
+        const g = groundAt(x, z); if (g.water || lcAt(x, z) === 9 || airfieldAt(x, z, 14) || nearRoad(x, z, 14)) continue; const y = triHeight(x, z);
         if (vd < 0.6) { p.set(x, y, z); q.set(0, 0, 0, 1); if (stoneV && nm < 40) { sc.set(40, 40, 40); m4.compose(p, q, sc); mm.setMatrixAt(nm++, m4); } else if (!stoneV && nw < 40) { sc.set(11, 24, 11); m4.compose(p, q, sc); wm.setMatrixAt(nw++, m4); } continue; }
         if (h > (stoneV ? 0.7 : 0.55)) continue;
         e.set(0, Math.floor(hash2(vx, vz) * 4) * 0.4 + (stoneV ? h * 3 : 0), 0); q.setFromEuler(e); p.set(x, y - 1, z);
@@ -467,7 +488,7 @@ function updateScatter() {
       // where OpenStreetMap knows the land cover, it decides: pines in forests, round crowns in orchards, parks and towns, shrubs in scrub, nothing on sand, water, industry
       const lc = lcAt(x, z), LP = [0, 0.9, 0.8, 0.12, 0.03, 0.5, 0.18, 0, 0.01, 0, 0.12, 0.22, 0, 0, 0, 0.04, 0.3, 0.02][lc];
       const pr = lc ? LP : wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr) continue;
-      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6) || (urban > 0.05 || lc === 11 || lc === 12 ? obstBox(x, z, 3, 3) : false)) continue;
+      const g = groundAt(x, z); if (g.water || lcAt(x, z) === 9 || airfieldAt(x, z, 6) || nearRoad(x, z, 6) || (urban > 0.05 || lc === 11 || lc === 12 ? obstBox(x, z, 3, 3) : false)) continue;
       const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = lc ? lc === 6 : arid > 0.6, pine = lc ? lc === 1 || (lc === 16 && k < 0.6) : !shrub && clump > 0.9;
       if (pine) { if (nt >= 3200) continue; const ht = (10 + k * 10) * fade, wd = (5 + k * 3) * fade; p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
         tm.setColorAt(nt++, col.setRGB(0.09 + k * 0.06, 0.20 + k * 0.10, 0.08 + k * 0.04)); continue; }
@@ -487,14 +508,12 @@ function buildDetails() {
   // --- ponds: Dead Sea evaporation pans, fish ponds, salt pans, greenhouses ---
   const P = [], C = [], I = [], col = new THREE.Color();
   const ponds = (lon, lat, cols, rows, w, d, pal, rot) => { const cx = lon2x(lon), cz = lat2z(lat), R = rng(Math.round(lon * 977 + lat * 131)), ca = Math.cos(rot), sa = Math.sin(rot);
-    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || airfieldAt(x, z, Math.hypot(w, d) / 2) || nearRoad(x, z, Math.hypot(w, d) / 2)) continue;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) { const lx = (i - (cols - 1) / 2) * (w + 28), lz = (j - (rows - 1) / 2) * (d + 28), x = cx + lx * ca - lz * sa, z = cz + lx * sa + lz * ca, g = groundAt(x, z); if (g.water || airfieldAt(x, z, Math.hypot(w, d) / 2) || nearRoad(x, z, Math.hypot(w, d) / 2) || obstBox(x, z, w / 2, d / 2)) continue;
       const y = triHeight(x, z) + 2.5, k = P.length / 3; col.setHex(pal[(R() * pal.length) | 0]);
       for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) { const ox = sx * w / 2, oz = sz * d / 2; P.push(x + ox * ca - oz * sa, y, z + ox * sa + oz * ca); C.push(col.r, col.g, col.b); }
       I.push(k, k + 1, k + 2, k + 2, k + 1, k + 3); } };
   ponds(35.415, 31.16, 5, 13, 330, 520, [0x3fc7c0, 0x7fded2, 0xbfe9e0, 0xe9efe8, 0x2aa7b0], 0.18);          // Dead Sea Works
-  ponds(35.545, 32.505, 5, 6, 170, 240, [0x35607a, 0x3f7186, 0x4a6f5e, 0x2d566e], 0.1);                      // Beit She'an valley fish ponds
-  ponds(35.60, 33.075, 4, 6, 170, 230, [0x35607a, 0x416f7c, 0x4f7a5c], 0);                                   // Hula valley
-  ponds(34.925, 32.555, 2, 6, 150, 210, [0x35607a, 0x3f7186, 0x4a6f5e], 0.12);                               // Carmel coast fish ponds
+  // (the fish ponds of the Beit She'an valley, the Hula and the Carmel coast are in the land cover, where they really are: the hand-drawn grids are gone)
   ponds(34.985, 29.60, 3, 5, 150, 230, [0xe7d9d2, 0xd8a9a4, 0xf0ece6, 0xc98f93], 0.2);                      // Eilat salt pans
   for (const [lo, la] of [[35.07, 29.93], [35.19, 30.62], [35.33, 30.93], [34.44, 31.31], [35.50, 32.03]]) ponds(lo, la, 6, 5, 60, 150, [0xf2f4f2, 0xe4e8e6, 0xd8dedc], 0.3);   // greenhouse clusters
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); pg.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); pg.setIndex(I); pg.computeVertexNormals();
@@ -708,20 +727,17 @@ function updateTrains(dt) {
 
 /** Streams draped on the terrain: perennial rivers in blue over a green bank, desert wadis as pale gravel beds. */
 function buildRivers() {
-  const mk = (list, hw, yo, color) => { const P = [], N = [], I = [];
-    for (const pts of list) { const D = splinePath(pts, 40); let prev = -1;
+  // a strip per water course: for a river a green bank and the water on it, at its real width; for a dry stream bed pale gravel. Where a line runs
+  // into the sea or a lake it stops; roads are laid higher, so a road that crosses reads as a bridge
+  const mk = (pick, wid, yo, color) => { const P = [], N = [], I = [];
+    for (const r of riverLines()) { if (!pick(r)) continue; const D = r.D, hw = wid(r); let prev = -1;
       for (let i = 0; i < D.length; i++) { const a = D[Math.max(i - 1, 0)], b = D[Math.min(i + 1, D.length - 1)], [px, pz] = D[i], tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / tl, nz = (b[0] - a[0]) / tl, g = groundAt(px, pz);
-        if (g.water || g.field) { prev = -1; continue; } const k = P.length / 3;
+        if (g.water || g.field || airfieldAt(px, pz, hw)) { prev = -1; continue; } const k = P.length / 3;
         for (const s of [-1, 1]) { const vx = px + nx * hw * s, vz = pz + nz * hw * s; P.push(vx, Math.max(triHeight(vx, vz), triHeight(px, pz)) + yo, vz); N.push(0, 1, 0); }
         if (prev >= 0) I.push(prev, prev + 1, k, prev + 1, k + 1, k); prev = k; } }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex(I);
+    if (!I.length) return; const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setIndex(I);
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide })); m.frustumCulled = false; m.matrixAutoUpdate = false; scene.add(m); };
-  // Yarkon, Kishon, Alexander, Taninim, Hadera, upper Jordan, Dan, Yarmouk, Harod, Sorek, Lakhish
-  const rivers = [[[34.92, 32.105], [34.86, 32.10], [34.82, 32.098], [34.775, 32.098]], [[35.2, 32.62], [35.12, 32.70], [35.07, 32.76], [35.075, 32.80]], [[35.0, 32.33], [34.93, 32.37], [34.87, 32.395]], [[35.0, 32.54], [34.93, 32.545], [34.9, 32.54]], [[35.02, 32.42], [34.94, 32.46], [34.89, 32.465]],
-    [[35.62, 33.22], [35.61, 33.10], [35.62, 32.98], [35.61, 32.905]], [[35.655, 33.245], [35.62, 33.22]], [[35.85, 32.72], [35.70, 32.69], [35.59, 32.655]], [[35.33, 32.56], [35.45, 32.52], [35.55, 32.49]], [[34.88, 31.85], [34.78, 31.90], [34.71, 31.94]], [[34.8, 31.70], [34.70, 31.78], [34.645, 31.82]]];
-  // Besor, Zin, Paran, the Arava stream, Qelt, Arugot, Be'er Sheva stream
-  const wadis = [[[34.7, 31.2], [34.55, 31.28], [34.42, 31.44]], [[34.8, 30.83], [34.95, 30.88], [35.15, 30.92], [35.33, 30.93]], [[34.75, 30.15], [34.95, 30.35], [35.15, 30.42], [35.22, 30.5]], [[35.1, 30.0], [35.2, 30.45], [35.32, 30.85]], [[35.3, 31.84], [35.4, 31.845], [35.47, 31.84]], [[35.25, 31.5], [35.33, 31.465], [35.385, 31.455]], [[35.0, 31.22], [34.82, 31.235], [34.7, 31.2]]];
-  mk(rivers, 46, 1.1, 0x4a6034); mk(rivers, 15, 1.6, 0x3d6f7c); mk(wadis, 32, 1.2, 0xdccba4);
+  mk(r => !r.dry, r => r.hw + 7, 1.1, 0x4a6034); mk(r => !r.dry, r => r.hw, 1.6, 0x3d6f7c); mk(r => r.dry, r => r.hw, 1.2, 0xdccba4);
   // Ramat Gan's Diamond Exchange tower, the tallest thing on the Tel Aviv skyline for years
   const tx = lon2x(34.803), tz = lat2z(32.084), tw = new THREE.Mesh(new THREE.CylinderGeometry(22, 22, 235, 20), windowize(new THREE.MeshPhongMaterial({ color: 0x9fb4c4, shininess: 100 }))); tw.position.set(tx, heightAt(tx, tz) + 117, tz); scene.add(tw);
 }

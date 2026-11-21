@@ -28,7 +28,7 @@ function planSites() {
     if (nearRoad(px, pz, r * 0.85)) { let ok = false;
       for (let k = 1; k <= 4 && !ok; k++) for (let a = 0; a < 8; a++) { const d = k * Math.max(r * 0.5, 8), qx = x + Math.cos(a * 0.785) * d, qz = z + Math.sin(a * 0.785) * d; if (!nearRoad(qx, qz, r * 0.85)) { px = qx; pz = qz; ok = true; break; } }
       if (!ok) continue; }
-    if (groundAt(px, pz).water || airfieldAt(px, pz, r)) continue;
+    if (wetAt(px, pz, kind === 'lighthouse' ? 0 : Math.min(r, 40)) || airfieldAt(px, pz, r)) continue;          // not in the sea, a lake or a reservoir
     if (kind !== 'mosque' && kind !== 'church' && kind !== 'minaret' && kind !== 'belltower' && kind !== 'fortress' && kind !== 'ruins' && kind !== 'monument' && inOldCity(px, pz)) continue;
     if ((kind === 'tall' || kind === 'mall' || kind === 'hospital' || kind === 'plant') && inOldCity(px, pz)) continue;          // no modern blocks inside the Old City walls (it is drawn larger than its place on the map)
     SITE.list.push({ kind, x: px, z: pz, h: s[3], L, W, rot: s[6] * DEG, r });
