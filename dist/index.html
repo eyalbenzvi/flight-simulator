@@ -1640,26 +1640,29 @@ const GEO_LABELS = [['הר חרמון', 'Mount Hermon', 35.86, 33.42, 500], ['ה
   ['הגלבוע', 'Mount Gilboa', 35.41, 32.47, 400], ['הנגב', 'The Negev', 34.75, 30.95, 600], ['הירדן', 'Jordan River', 35.555, 32.25, 300], ['ראש הנקרה', 'Rosh HaNikra', 35.105, 33.09, 250], ['הרודיון', 'Herodium', 35.241, 31.666, 350]];
 const LABELS = [];
 function buildLabels() {
-  const mk = (he, en, lon, lat, up, far, gold) => { const c = document.createElement('canvas'); c.width = 256; c.height = 80; const x = c.getContext('2d'); x.textAlign = 'center'; x.lineJoin = 'round'; x.strokeStyle = 'rgba(0,0,0,.85)';
+  const mk = (he, en, lon, lat, up, far, gold, pop) => { const c = document.createElement('canvas'); c.width = 256; c.height = 80; const x = c.getContext('2d'); x.textAlign = 'center'; x.lineJoin = 'round'; x.strokeStyle = 'rgba(0,0,0,.85)';
     // quiet names: a soft shadow instead of a heavy black outline, so they do not shout over the picture
     x.shadowColor = 'rgba(8,16,34,.75)'; x.shadowBlur = 7; x.shadowOffsetY = 1; x.strokeStyle = 'rgba(8,16,34,.35)';
     x.font = '600 31px Arial, "Arial Hebrew", "Noto Sans Hebrew", sans-serif'; x.lineWidth = 2; x.strokeText(he, 128, 36); x.fillStyle = gold ? 'rgba(255,215,106,.95)' : 'rgba(255,255,255,.93)'; x.fillText(he, 128, 36); x.fillText(he, 128, 36);
     x.font = '15px Arial, sans-serif'; x.lineWidth = 1.5; x.fillStyle = gold ? 'rgba(243,226,174,.75)' : 'rgba(223,232,238,.72)'; x.fillText(en, 128, 62); x.fillText(en, 128, 62);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: Object.assign(new THREE.CanvasTexture(c), { generateMipmaps: false, minFilter: THREE.LinearFilter }), transparent: true, depthWrite: false, fog: false, sizeAttenuation: false })), px = lon2x(lon), pz = lat2z(lat);
-    s.scale.set(0.2, 0.0625, 1); s.position.set(px, groundAt(px, pz).h + up, pz); s.visible = false; scene.add(s); LABELS.push({ s, far }); };
-  // A name shows only near its town: 2.5 km of game world (10 km of real ground, the map is compressed 4:1) for a small town, up to 10 km for the biggest cities.
-  for (const l of LOCS) if (l[4] >= 25) mk(l[0], l[1], l[2], l[3], 260 + Math.sqrt(l[4]) * 20, clamp(2500 + l[4] * 9, 2500, 10000));
+    s.scale.set(0.2, 0.0625, 1); s.position.set(px, groundAt(px, pz).h + up, pz); s.visible = false; scene.add(s); LABELS.push({ s, far, pop: pop || 100 }); };
+  // Names in the sky: only towns of 80,000 people and more, seen from far (6 to 20 km of game world, which is 24 to 80 km of real ground: the map is compressed 4:1).
+  for (const l of LOCS) if (l[4] >= 80) mk(l[0], l[1], l[2], l[3], 300 + Math.sqrt(l[4]) * 22, clamp(6000 + l[4] * 30, 8000, 20000), false, l[4]);
 }
+/** Which names show: at most four, the towns that lie ahead along the direction of flight (within 65 degrees of it; the town right below counts too),
+    the nearest and most nearly straight ahead first. A name that would overlap one already shown, or sit under the readouts, is left out. */
 function updateLabels() {
-  const on = S.names && S.started && !PH.on;
+  const on = S.names && S.started && !PH.on && TNOW - (S.spawnT || 0) >= 1.5 && Math.abs(S.bank) < 0.8;          // none in the first moments of a flight or in a steep turn
   const pm = camera.projectionMatrix.elements, hw = 0.2 * pm[0] / 2 + 0.01, hh = 0.0625 * pm[5] / 2 + 0.01, shown = [], cand = [];
-  for (const l of LABELS) { const d = camera.position.distanceTo(l.s.position); l.s.visible = false; if (on && d < l.far && d > 400) cand.push([d, l]); }
-  cand.sort((a, b) => a[0] - b[0]);                    // nearest first: a farther name that would overlap a nearer one on screen is hidden
-  for (const [d, l] of cand) { const p = tmpV.copy(l.s.position).project(camera); if (p.z > 1 || Math.abs(p.x) > 1.2 || Math.abs(p.y) > 1.2) continue;
-    if (shown.length >= 4 || TNOW - (S.spawnT || 0) < 1.5 || Math.abs(S.bank) > 0.8) break;                 // at most four names, none in the first moments of a flight or in a steep turn
+  const vh = Math.hypot(S.vel.x, S.vel.z), fx = vh > 3 ? S.vel.x / vh : Math.sin(S.hdg * DEG), fz = vh > 3 ? S.vel.z / vh : -Math.cos(S.hdg * DEG);
+  for (const l of LABELS) { l.s.visible = false; if (!on) continue; const dx = l.s.position.x - S.pos.x, dz = l.s.position.z - S.pos.z, d = Math.hypot(dx, dz); if (d > l.far) continue;
+    const off = d < 2500 ? 0 : Math.acos(clamp((dx * fx + dz * fz) / d, -1, 1)); if (off > 65 * DEG) continue; cand.push([d * (1 + 1.6 * (off / (65 * DEG)) ** 2) / (0.6 + Math.min(l.pop, 500) / 250), l, d]); }          /* a big city comes before a smaller neighbour whose name would cover it */
+  cand.sort((a, b) => a[0] - b[0]);
+  for (const [, l, d] of cand) { if (shown.length >= 4) break; const p = tmpV.copy(l.s.position).project(camera); if (p.z > 1 || Math.abs(p.x) > 1.05 || Math.abs(p.y) > 1.05) continue;
     if (Math.abs(p.x) < 0.45 && p.y > 0.62) continue;                                                        // not under the readouts at the top
     if (shown.some(q => Math.abs(q.x - p.x) < 2 * hw && Math.abs(q.y - p.y) < 2 * hh)) continue; shown.push({ x: p.x, y: p.y });
-    l.s.visible = true; l.s.material.opacity = clamp((l.far - d) / (l.far * 0.4), 0, 1) * 0.92; }
+    l.s.visible = true; l.s.material.opacity = clamp((l.far - d) / (l.far * 0.12), 0, 1) * 0.95; }
 }
 const RAIL = { paths: [], trains: [], mesh: null };
 // the coast line from Nahariya to Beer Sheva, and the fast line up to Jerusalem
