@@ -128,6 +128,13 @@ no bundler, no framework. Everything shares one global scope, so the load order 
   - A game controller works with nothing on screen: left stick, triggers or right stick for power, A view, B brake, X land, Y gear, LB flaps, Start menu.
   - At night the instruments dim (`body.night`); the key guide shows keycaps.
 
+## Start-up
+
+`init()` (in `src/08-app.js`) runs as soon as the scripts are in and only builds the choice screen: nothing in it may need the world. `buildWorld()` then
+builds the world one builder at a time with a breath between them, behind that screen (`body.building`: dawn sky, a running line under the title). Before
+`WORLD.ready` a choice on the screen is only kept (`PL`, `START`); FLY pressed early sets `WORLD.wantFly` and the flight starts when the world is there.
+`?hold=3000` delays the build, for testing that state. Test scripts wait for `WORLD.ready`, not for the FLY button.
+
 ## Canvas textures survive a GPU reset
 
 Android browsers can wipe 2D canvases after a GPU reset or while the tab sleeps, which used to leave a black minimap and invisible
@@ -178,6 +185,16 @@ load factor in Expert. Validated against real types (sea level unless stated):
 | bizjet | 106 kt | 356 kt | M0.76 | 5,200 fpm | 47,600 ft | 3 | ~45°/s | mid-size jet: ~100 kt, VMO ~320 kt, M0.8, 45,000 ft |
 | fighter | 118 kt | M1.07 | M1.49 | 44,600 fpm | 64,800 ft | 9 | ~250°/s | F-16C: ~125 kt, M1.2 low, M2 high, 50,000 fpm, 9 g |
 | stunt | 58 kt | 187 kt | – | 2,600 fpm | 21,000 ft | 10 | ~330°/s | Extra 300: 55 kt, 185 kt, 3,200 fpm, 16,000 ft, ±10 g |
+| concorde | 135 kt (no flaps) | 540 kt | M1.43; M2.04 at 15–18 km | 17,000 fpm | 59,400 ft | 2.5 | ~30°/s | Concorde: lands at 162 kt, M2.04, 60,000 ft |
+| stealth | 114 kt (no flaps) | 538 kt | M0.90 | 8,200 fpm | 44,000 ft | 6 | ~125°/s | F-117: lands at about 150 kt, M0.92, 45,000 ft, 6 g |
+| bomber | 138 kt (106 kt full flap) | 424 kt | M0.86 | 5,300 fpm | 45,600 ft | 2 | ~17°/s | B-52H: 390 kt IAS, M0.86, 6,270 fpm, 50,000 ft, 2 g |
+
+The three added types: `concorde` (155 t, a nose that droops with the gear `M.droop`, four reheat flames, `wave` = its own supersonic drag, `mmo` = Mach limit,
+a negative `lapse` and `rhoExp` 0.55 for intakes that gain thrust with speed and height; thrust lapse is clamped to 0.35–1.2), `stealth` (an F-117 built only
+of flat facets from a vertex table `V`, DoubleSide so it takes no self-shadow; subsonic, no afterburner, no flaps), `bomber` (a B-52: eight engines in four
+pods, wings that droop on the ground and bow up with lift through the fourth and fifth entries of `M.wings`, outrigger wheels `M.outrig`). The analytical
+check lives in the scratch script the numbers came from; redo it after changing them. A fast, flapless approach captures the final only when nearer the
+centreline (the cone in `updateControls` narrows with speed).
 
 Re-run these numbers after changing `PLANES` (the analytical part is a few lines over `isa`, `waveDrag` and the polar).
 
@@ -256,6 +273,12 @@ name that would overlap a nearer one on screen is hidden.
 - `LCR` / `lcAt(x, z)`: one land-cover class per 60 m cell (`LCN`: forest, orchard, vineyard, fields, parks, scrub, sand, rock, water,
   wetland, residential, industrial, greenhouses, solar, military, cemetery, construction). The terrain shader samples it (`tLC`) and
   paints each class; small ponds, basins and parks are left out by the tool (they would be 240 m blots). Trees follow it in `updateScatter`.
+- Sites: besides towers, mosques, churches and the like, `tools/osm2world.py` now emits schools, hotels, railway stations, football pitches, courts, public
+  pools, fuel stations, supermarkets, civic halls (town hall, community centre, library, theatre, museum, police, fire), monuments, barns and cowsheds,
+  warehouses, sewage works, and buildings tagged 25 m and taller (`MINA` holds the smallest footprints). About 24,000 are placed (it was about 7,000);
+  each kind has a model in `siteModels` and a `far` distance in `buildSites` (small things only draw near). Synagogues from 450 m² are shown.
+- A cell with OpenStreetMap buildings but no satellite pixel is built from two buildings and 1.2% cover, four buildings, or 3% cover (it used to take
+  eight buildings or 5%), so small villages and farmyards stand where they are mapped.
 - `BOR`: per cell the building cover, dominant OSM building class and tallest tagged height. `buildCities` combines it with the GHSL raster:
   industrial → flat sheds (`flat`), greenhouses → rows of tunnels, apartments vs houses as mapped, dense cells get 2–3 blocks, tagged heights
   replace the average, and cells with OSM buildings but no GHSL pixel (newer neighbourhoods) are built. Buildings of 40 m+ are sites.

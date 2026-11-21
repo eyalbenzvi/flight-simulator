@@ -20,7 +20,7 @@ function buildExtras() {
   // --- the aircraft shadows itself (wing on fuselage, tail on wing): one small shadow map that follows it; larger screens only ---
   if (HIRES && new URLSearchParams(location.search).get('shadow') !== '0') { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; sun.castShadow = true; const c = sun.shadow.camera; c.left = c.bottom = -42; c.right = c.top = 42; c.near = 850; c.far = 1150; c.updateProjectionMatrix();
     sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
-    for (const k in AC.models) AC.models[k].g.traverse(o => { const m = o.material; if (o.isMesh && m && !m.transparent && (m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial)) { o.castShadow = true; o.receiveShadow = true; } }); }
+    for (const k in AC.models) AC.models[k].g.traverse(o => { const m = o.material; if (o.isMesh && m && !m.transparent && m.side !== THREE.DoubleSide && (m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial)) { o.castShadow = true; o.receiveShadow = true; } }); }
   // --- cars: a small body and cabin, drawn for the cars of the traffic that are near the camera ---
   { const g = mergeGeo([[new THREE.BoxGeometry(1.85, 0.7, 4.4).translate(0, 0.62, 0), 1, 1, 1], [new THREE.BoxGeometry(1.6, 0.55, 2.3).translate(0, 1.22, 0.25), 0.16, 0.2, 0.25],
       [new THREE.BoxGeometry(1.9, 0.3, 0.3).translate(0, 0.5, -2.12), 0.3, 0.3, 0.32], [new THREE.CylinderGeometry(0.34, 0.34, 1.95, 8).rotateZ(Math.PI / 2).translate(0, 0.34, 1.4), 0.07, 0.07, 0.08], [new THREE.CylinderGeometry(0.34, 0.34, 1.95, 8).rotateZ(Math.PI / 2).translate(0, 0.34, -1.4), 0.07, 0.07, 0.08]]);

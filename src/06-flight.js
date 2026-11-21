@@ -20,7 +20,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
   for (let i = 0; i < 4; i++) {          // thrust is tilted up by the angle of attack: it carries part of the weight and only its cosine pushes (it matters for the fighter on approach)
     const al = (CL - CL0 - 0.03 * flapDeg) / CLA; CD = CD0 + KIND * CL * CL + (gear && !PL.fixedGear ? 0.02 : 0) + 0.0015 * flapDeg; T = (qd * SW * CD + MASS * G * Math.sin(gamma)) / Math.max(Math.cos(al), 0.5);
     CL = (MASS * G * Math.cos(gamma) - T * Math.sin(al)) / (qd * SW); }
-  return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
+  return { thr: clamp(T / (TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * V, 0.35, 1.2)), 0, 1), alpha: (CL - CL0 - 0.03 * flapDeg) / CLA };
 }
 function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
@@ -97,7 +97,7 @@ function updateControls(dt) {
       const il = ilsOf(rw, true);
       if (S.landPh === 'rollout') { S.thr = 0; rt = rollFor(0); pt = clamp((0.03 - S.pitch) * 1.6 / PL.pitch, -1, 1); }     // a bounce after touching down: hold it level and let it settle
       // capture the final approach once lined up inside the approach cone; if blown off it, fly back round to the approach
-      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < il.along * 0.1 + 80 && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';
+      else if (S.landPh !== 'final' && il && il.along > 400 && Math.abs(il.cross) < (il.along * 0.1 + 80) * clamp(Math.pow(68 / Math.max(S.V, 1), 2), 0.3, 1) && Math.abs(wrap180(rw.hdg - S.hdg)) < 35 && il.gs < 5) S.landPh = 'final';          /* a fast approach (no flaps: Concorde, the stealth jet) has less time to close on the centreline, so it must be nearer to it when the final begins */
       // close in and far too high, too fast, or not over the runway: go round and come back down the approach (and give up after a few tries rather than circle for ever)
       if (S.landPh === 'final' && il && S.ra > 25 && ((il.along > 300 && il.along < 1600 && (il.gs > 7 || (il.along < 500 && S.V > 1.7 * S.vs0))) || (il.along > 60 && il.along < 350 && Math.abs(il.cross) > Math.max(rw.w * 0.5, 18)))) {
         S.landPh = 'intercept'; S.landJoin = false; S.landTries = (S.landTries || 0) + 1;
@@ -200,7 +200,7 @@ function updateControls(dt) {
 function waveDrag(M) {
   const mc = PL.mcr || 0.8; if (M <= mc) return 0;
   if (!PL.sonic) return 2.4 * (M - mc) * (M - mc) + 0.4 * Math.max(0, M - mc - 0.08) ** 2 * 10;
-  return 0.032 * Math.min(1, (M - mc) / 0.15) * (M > 1.2 ? 1.2 / M : 1);
+  return (PL.wave || 0.032) * Math.min(1, (M - mc) / 0.15) * (M > 1.2 ? 1.2 / M : 1) + (PL.mmo ? Math.max(0, M - PL.mmo) * 0.25 : 0);
 }
 function physics(dt) {
   fwd.set(0, 0, -1).applyQuaternion(S.q); up.set(0, 1, 0).applyQuaternion(S.q); right.set(1, 0, 0).applyQuaternion(S.q);
@@ -223,7 +223,7 @@ function physics(dt) {
   // --- thrust: engines spool, thrust lapses with speed and altitude ---
   { const sp = PL.spool || 0.4; S.n1 += clamp((S.noEngine ? 0 : S.thr >= 0 ? Math.max(S.thr, S.boost) : S.thr) - S.n1, -sp * dt, sp * dt); }     // engines take seconds to spool
   if (S.turb > 0 && !S.onGround) { const tb = S.turb * MASS; F.x += (Math.random() - 0.5) * tb * 5; F.y += (Math.random() - 0.5) * tb * 9; F.z += (Math.random() - 0.5) * tb * 5; S.rr += (Math.random() - 0.5) * S.turb * 0.05; S.pr += (Math.random() - 0.5) * S.turb * 0.015; }   // storm turbulence
-  let T = S.n1 * TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * V) * (S.trick && S.trick.type === 'loop' ? 1.6 : 1);
+  let T = S.n1 * TMAX * Math.pow(rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * V, 0.35, 1.2) * (S.trick && S.trick.type === 'loop' ? 1.6 : 1);
   if (S.n1 < 0 && u < 1) T = 0;
   F.addScaledVector(fwd, T); S.nLoad = Lf / (MASS * G);
   // --- rotation: rate command scaled by control authority ---
@@ -324,7 +324,9 @@ let SHADOW = null, SHADOW_TEX = null, LPOOL = null, ENVRT = null;
 function buildShadow() {
   // one silhouette per aircraft type (nose up the canvas): [fuselage half-width, half-length, wing outline, tailplane outline]
   const SH = { airliner: [11, 96, [[0, -30], [108, 14], [108, 30], [0, 12]], [[0, 62], [40, 88], [40, 98], [0, 88]]], bizjet: [12, 92, [[0, -18], [106, 30], [106, 44], [0, 34]], [[0, 70], [44, 88], [44, 98], [0, 92]]],
-    fighter: [13, 100, [[0, -40], [16, -8], [74, 44], [74, 58], [0, 52]], [[0, 62], [44, 86], [44, 96], [0, 90]]], stunt: [13, 78, [[0, -30], [112, -22], [112, 6], [0, 10]], [[0, 56], [42, 60], [42, 76], [0, 76]]] };
+    fighter: [13, 100, [[0, -40], [16, -8], [74, 44], [74, 58], [0, 52]], [[0, 62], [44, 86], [44, 96], [0, 90]]],
+    concorde: [6, 122, [[0, -75], [8, -52], [17, 2], [35, 57], [52, 84], [52, 90], [0, 98]], [[0, 0], [0, 0]]], stealth: [8, 40, [[0, -119], [71, 70], [70, 84], [25, 55], [18, 87], [0, 95]], [[0, 0], [0, 0]]],
+    bomber: [7, 104, [[0, -24], [121, 57], [121, 71], [45, 37], [0, 20]], [[0, 74], [34, 93], [34, 101], [0, 103]]], stunt: [13, 78, [[0, -30], [112, -22], [112, 6], [0, 10]], [[0, 56], [42, 60], [42, 76], [0, 76]]] };
   SHADOW_TEX = {}; let t = null;
   for (const k in SH) { const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'), [fw, fl, wing, tail] = SH[k]; x.translate(128, 128); x.filter = 'blur(6px)'; x.fillStyle = '#000';
     x.beginPath(); x.ellipse(0, 0, fw, fl, 0, 0, 7); x.fill();
@@ -411,7 +413,9 @@ function updateCamera(dt) {
     const nt = ENV.uLights.value; LPOOL.visible = on && nt > 0.3 && S.ra < 160 && !S.crashed;
     if (LPOOL.visible) { const d = 30 + S.ra * 1.6, lx = S.pos.x + fwd.x * d, lz = S.pos.z + fwd.z * d, gl = groundAt(lx, lz), r = 34 + S.ra * 0.9; LPOOL.position.set(lx, Math.max(gl.h, triHeight(lx, lz)) + (gl.field ? 0.4 : 3.7), lz); LPOOL.scale.set(r, r * 2.2, 1); LPOOL.rotation.set(-Math.PI / 2, 0, -S.hdg * DEG); LPOOL.material.opacity = 0.5 * nt * clamp(1 - S.ra / 160, 0, 1); } }
   else if (LPOOL) LPOOL.visible = false;
-  if (M.wings) for (const [wg, sg, dih] of M.wings) wg.rotation.z = sg * (dih + 0.022 * clamp(S.nLoad - 1, -1.5, 2.5) * (S.onGround ? -0.6 : 1));      // the wings bend with the load
+  if (M.wings) for (const [wg, sg, dih, fk, air] of M.wings) wg.rotation.z = sg * (dih + (air || 0) * clamp(S.nLoad, 0, 1.6) + 0.022 * (air ? 0 : 1) * (fk || 1) * clamp(S.nLoad - 1, -1.5, 2.5) * (S.onGround ? -0.6 : 1));
+  if (M.droop) M.droop.rotation.x += (-0.22 * S.gearPos - M.droop.rotation.x) * Math.min(1, 1.5 * dt);          /* the nose comes down with the gear */
+  if (M.outrig) for (const o of M.outrig) o.visible = S.gearPos > 0.5;      // the wings bend with the load
   // animated parts
   M.elev.forEach(e => e.rotation.x = -ctl.pitch * 0.4); if (M.rud) M.rud.rotation.y = ctl.yaw * 0.45;
   if (M.ail.length) { M.ail[0].rotation.x = ctl.roll * 0.4; M.ail[1].rotation.x = -ctl.roll * 0.4; }
@@ -422,6 +426,6 @@ function updateCamera(dt) {
   if (M.fans) for (const f of M.fans) f.rotation.z += (3 + 34 * Math.abs(S.n1)) * dt;
   if (M.wheels && S.onGround) for (const [w, r] of M.wheels) w.rotation.x -= S.V / r * dt;
   if (M.spoil) { const up = S.brake || (S.onGround && S.landed && S.V > 8) ? 0.75 : 0; for (const sp of M.spoil) sp.rotation.x += (-up - sp.rotation.x) * Math.min(1, 6 * dt); }      // spoilers rise on the brake and after touchdown
-  if (M.burner) { const ab = clamp((S.n1 - 0.85) / 0.15, 0, 1); M.burner.visible = ab > 0.02; M.burner.scale.set(1, 1, ab * (0.9 + 0.07 * Math.sin(TNOW * 47) + 0.05 * Math.sin(TNOW * 83))); M.burner.position.z = 7.7 + 2.75 * M.burner.scale.z; if (M.nozzle) M.nozzle.material.color.setRGB(0.06 + ab * 0.94, 0.03 + ab * 0.55, 0.02 + ab * 0.2); }       /* a steady flame with a slight pulse, and a glowing nozzle */
+  if (M.burner) { const ab = clamp((S.n1 - 0.85) / 0.15, 0, 1); M.burner.visible = ab > 0.02; M.burner.scale.set(1, 1, ab * (0.9 + 0.07 * Math.sin(TNOW * 47) + 0.05 * Math.sin(TNOW * 83))); M.burner.position.z = (M.burnerZ || 7.7) + (M.burnerL || 2.75) * M.burner.scale.z; if (M.nozzle) M.nozzle.material.color.setRGB(0.06 + ab * 0.94, 0.03 + ab * 0.55, 0.02 + ab * 0.2); }       /* a steady flame with a slight pulse, and a glowing nozzle */
   AC.stick.rotation.x = -ctl.pitch * 0.3; AC.stick.rotation.z = -ctl.roll * 0.3; AC.thr.position.z = -15.75 - S.thr * 0.18;
 }

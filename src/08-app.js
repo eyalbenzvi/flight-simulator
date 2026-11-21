@@ -24,7 +24,7 @@ const Snd = { ctx: null, muted: false,
     this.warnO = osc('square', 1300); this.warnG = gain(0); const wf = filt('lowpass', 2600, 0.7); this.warnO.connect(wf); wf.connect(this.warnG); this.warnG.connect(this.master);
   },
   update() {
-    const c = this.ctx; if (!c) return; const t = c.currentTime, n = Math.abs(S.n1), inside = S.cam === 0 ? 0.7 : 1, dead = S.crashed || S.paused ? 0 : 1, pr = PL.prop, lv = PL.key === 'fighter' ? 1.5 : pr ? 0.25 : PL.key === 'bizjet' ? 0.8 : 1;
+    const c = this.ctx; if (!c) return; const t = c.currentTime, n = Math.abs(S.n1), inside = S.cam === 0 ? 0.7 : 1, dead = S.crashed || S.paused ? 0 : 1, pr = PL.prop, lv = PL.sound || (PL.key === 'fighter' ? 1.5 : pr ? 0.25 : PL.key === 'bizjet' ? 0.8 : 1);
     const set = (p, v) => p.setTargetAtTime(v, t, 0.08);
     set(this.roarG.gain, (0.06 + 0.5 * n * n) * inside * dead * lv); set(this.roarF.frequency, 180 + 1500 * n + S.V * 2);
     set(this.whG.gain, (pr ? 0.06 + 0.2 * n : 0.012 + 0.05 * n) * inside * dead);     // propeller: a low buzz instead of a fan whine
@@ -53,7 +53,7 @@ function startTrick(type) {
   if (!PL.tricks) return toast(L('The ' + PL.name.toLowerCase() + ' is not built for aerobatics. Try the fighter or the aerobatic plane', tr(PL.name) + ' לא בנוי לפעלולים. נסו את מטוס הקרב או את מטוס הפעלולים'), 4);
   if (S.trick || S.land || S.crashed) return;
   if (S.onGround || S.ra < (type === 'loop' ? Math.max(450, S.V * S.V / (G * 2.5)) : 150)) return toast(       /* a fast loop is a big one: it needs the height */L('Climb higher first', 'קודם מטפסים גבוה יותר'));
-  if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
+  if (type === 'loop' && S.V < S.vs0 * (PL.key === 'fighter' || PL.key === 'stealth' ? 2.6 : 1.7)) return toast(L('Need more speed for a loop', 'ללולאה צריך יותר מהירות'));
   S.ap.on = false; S.trick = { type, ang: 0, t: 0, dir: (keys.KeyA || keys.ArrowLeft || touch.x < -0.3) ? -1 : 1 };
 }
 let moreT = 0;

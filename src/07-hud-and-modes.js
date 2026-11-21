@@ -436,16 +436,19 @@ Object.assign(PLANES.airliner, { aTurn: 0.30, aPitch: 0.30, aG: 20, aBank: 35, a
 Object.assign(PLANES.bizjet, { aTurn: 0.40, aPitch: 0.40, aG: 26, aBank: 45, aVmax: 170, aCeil: 14000 });
 Object.assign(PLANES.fighter, { aTurn: 0.80, aPitch: 0.90, aG: 70, aBank: 75, aVmax: 340, aCeil: 19500 });
 Object.assign(PLANES.stunt, { aTurn: 0.95, aPitch: 1.05, aG: 45, aBank: 72, aVmax: 92, aCeil: 6000 });
+Object.assign(PLANES.concorde, { aTurn: 0.28, aPitch: 0.30, aG: 22, aBank: 38, aVmax: 600, aCeil: 18300 });
+Object.assign(PLANES.stealth, { aTurn: 0.60, aPitch: 0.60, aG: 45, aBank: 65, aVmax: 285, aCeil: 13200 });
+Object.assign(PLANES.bomber, { aTurn: 0.24, aPitch: 0.25, aG: 16, aBank: 30, aVmax: 250, aCeil: 14000 });
 /** Easy mode speed changes follow the type's real thrust and drag, and gravity on a climb or a descent: no fixed rates. */
 function arcadeAccel(v, gam, ground) {
   const at = isa(S.pos.y), q = 0.5 * at.rho * v * v, W = PL.mass * G, cl = ground ? 0.3 : Math.min(W * Math.cos(gam) / Math.max(q * PL.S, 1), 2);
-  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * Math.max(0.35, 1 - PL.lapse * v);
+  const D = q * PL.S * (PL.cd0 + PL.k * cl * cl + (ground || (S.gear && !PL.fixedGear) ? 0.02 : 0) + 0.0015 * S.flapDeg) + (ground ? 0.015 * W : 0), T = PL.T * Math.pow(at.rho / 1.225, PL.rhoExp || 0.7) * clamp(1 - PL.lapse * v, 0.35, 1.2);
   // up may be negative (a climb the engines cannot sustain loses speed); gmax is the steepest climb the thrust can hold at this speed
   return { up: (T - D) / PL.mass - G * Math.sin(gam), dn: Math.max(0.3, D / PL.mass + G * Math.sin(gam)), gmax: Math.asin(clamp((T * S.thr - D) / W, -0.1, 1)) };       // gmax follows the lever: at idle it cannot climb
 }
 const A = { psi: 0, gam: 0, phi: 0, turn: 0, v: 0, sync: true, msgT: 0 };
 const L = (en, he) => SAVE.lang === 'he' ? he : en;
-const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down far too fast.': 'נגיעה בקרקע במהירות גבוהה מדי', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים',
+const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down far too fast.': 'נגיעה בקרקע במהירות גבוהה מדי', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים', 'Concorde': 'קונקורד', 'Stealth jet': 'חמקן', 'Heavy bomber': 'מפציץ כבד', 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high': 'מטוס נוסעים על-קולי. פעמיים מהירות הקול בקצה החלל, נוחת מהר עם האף למעלה', 'Black, faceted, invisible to radar. Fast and low, no afterburner': 'שחור, זוויתי ובלתי נראה למכ״ם. מהיר ונמוך, בלי מבער', 'Eight engines and enormous wings. Slow to turn, flies for ever': 'שמונה מנועים וכנפיים ענקיות. פונה לאט, טס בלי סוף',
   'Twin-jet for 150 passengers. Steady and forgiving, slow to turn': 'סילון גדול ל-150 נוסעים. יציב וסלחני, פונה לאט', 'Sleek T-tail jet. Quick, agile, lands short': 'סילון קטן ומהיר. זריז ונוחת בקלות',
   'Afterburner, Mach 1.5, rolls and loops. Hold on': 'מבער, מהירות על-קולית, גלגולים ולולאות. תחזיקו חזק', 'Light propeller plane with show smoke. Slow, nimble, lands anywhere': 'מטוס מדחף קל עם עשן. איטי, זריז ונוחת בכל מקום',
   'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת',
