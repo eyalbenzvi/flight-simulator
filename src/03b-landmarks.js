@@ -101,7 +101,7 @@ function reserveGround(x, z, r) {
   for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const kk = (Math.floor(x / 1000) + a) + ':' + (Math.floor(z / 1000) + b); let l = LMK.clear.get(kk); if (!l) LMK.clear.set(kk, l = []); l.push([x, z, r]); }
 }
 /** True where a landmark stands, so buildCities leaves the block empty. */
-function landmarkAt(x, z) { const l = LMK.clear.get(Math.floor(x / 1000) + ':' + Math.floor(z / 1000)); return !!l && l.some(([lx, lz, r]) => Math.hypot(x - lx, z - lz) < r); }
+function landmarkAt(x, z, pad) { const l = LMK.clear.get(Math.floor(x / 1000) + ':' + Math.floor(z / 1000)); return !!l && l.some(([lx, lz, r]) => Math.hypot(x - lx, z - lz) < r + (pad || 0)); }       // pad: half the size of what is being placed, so its edge keeps clear too
 
 /** Collects transformed primitives with a colour each into three merged meshes (plain, windowed, shiny) for one city. */
 class LmkBuilder {

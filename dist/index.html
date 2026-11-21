@@ -1024,9 +1024,11 @@ function windowize(mat) {
           diffuseColor.rgb *= mix(1.0, 0.86, side * step(0.88, fract(hy / 3.4)) * step(9.0, hy));   // a balcony shadow at every floor
           diffuseColor.rgb *= mix(1.0, 1.13, side * step(vBs.y - 1.4, hy)); }        // the light parapet along the roof
         if (side < 0.5 && vBn.y > 0.5) {   // flat roofs carry solar water heaters: a white tank and a dark panel per flat
-          vec2 rc = vec2(vBp.x * vBs.x, vBp.z * vBs.z) / 5.0, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.78, rh);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.26), has * step(abs(rf.x - 0.5), 0.36) * step(abs(rf.y - 0.3), 0.16));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), has * step(length(rf - vec2(0.5, 0.66)), 0.17)); }
+          vec2 rm = vec2(vBp.x * vBs.x, vBp.z * vBs.z), re = vec2(vBs.x, vBs.z) * 0.5 - abs(rm); float edge = min(re.x, re.y), rfade = 1.0 - smoothstep(180.0, 520.0, 1.0 / gl_FragCoord.w);
+          diffuseColor.rgb *= 0.90; diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.16, smoothstep(1.3, 0.9, edge));                 // a darker deck inside a light parapet
+          vec2 rc = rm / 7.5 + 0.5, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.62, rh) * step(3.0, edge) * rfade;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.27), has * smoothstep(0.30, 0.26, abs(rf.x - 0.5)) * smoothstep(0.15, 0.12, abs(rf.y - 0.34)));   // a solar panel
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96), has * smoothstep(0.13, 0.10, length(rf - vec2(0.5, 0.66)))); }                                            // and its white tank, seen only from near
         totalEmissiveRadiance += vec3(1.0, 0.80, 0.50) * uLights * win * step(0.58, wh) * 0.9; }`);
   };
   return mat;
@@ -1069,20 +1071,23 @@ function buildCities() {
     else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
     if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z)) continue;
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;
     const y = heightAt(x, z);
     if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
     else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
-      for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+      for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f || obstBox(f[0], f[1], bw * f[2] / 2, bd * f[2] / 2)) continue;
         const by = heightAt(f[0], f[1]); push(flat, f[0], f[1], [f[0], by - 4, f[1], bw * f[2], ht + 4, bd * f[2], 0, IND[((s3 + k * 0.37) * IND.length | 0) % IND.length]]); addObst(f[0], f[1], bw * f[2], bd * f[2], 0, by - 4, by + ht); } }
     else if (st === 6) {                                                                                      // greenhouse tunnels in rows
       const rot = s3 < 0.5 ? 0 : 1.5708; for (let k = -1; k <= 1; k++) { const gx = x + (rot ? k * 17 : 0), gz = z + (rot ? 0 : k * 17); if (nearRoad(gx, gz, 26)) continue;
         push(flat, gx, gz, [gx, heightAt(gx, gz) - 1, gz, 52, 5, 12, rot, 0xe4e9e6]); } }
     else { const n = st === 1 ? (cov > 0.42 ? 3 : cov > 0.28 ? 2 : 1) : 1, kk = n === 1 ? 1 : n === 2 ? 0.74 : 0.62, pal = PAL[st] || PAL[1];
       for (let k = 0; k < n; k++) {                                                                           // dense cells: two or three blocks
-        const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
-        const ox = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 1 : 0.3), oz = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 0.3 : 1), f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
-        const by = heightAt(f[0], f[1]), w2 = bw * f[2], d2 = bd * f[2], h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
+        let bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
+        // two or three blocks stand side by side along one axis, each within its own slot of the 60 m cell (they used to be staggered on a diagonal and ran through each other)
+        const alongX = s3 < 0.5, slot = 54 / n; if (n > 1) { if (alongX) bw = Math.min(bw, slot - 4); else bd = Math.min(bd, slot - 4); }
+        const ox = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+        let w2 = bw * f[2], d2 = bd * f[2]; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) { w2 *= 0.7; d2 *= 0.7; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) continue; }       // something stands there already: a smaller block, or none
+        const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
         push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, 0, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, 0, by - 8, by + h2); } }
     if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
@@ -1356,7 +1361,7 @@ function updateScatter() {
       // where OpenStreetMap knows the land cover, it decides: pines in forests, round crowns in orchards, parks and towns, shrubs in scrub, nothing on sand, water, industry
       const lc = lcAt(x, z), LP = [0, 0.9, 0.8, 0.12, 0.03, 0.5, 0.18, 0, 0.01, 0, 0.12, 0.22, 0, 0, 0, 0.04, 0.3, 0.02][lc];
       const pr = lc ? LP : wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr) continue;
-      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6)) continue;
+      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6) || (urban > 0.05 || lc === 11 || lc === 12 ? obstBox(x, z, 3, 3) : false)) continue;
       const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = lc ? lc === 6 : arid > 0.6, pine = lc ? lc === 1 || (lc === 16 && k < 0.6) : !shrub && clump > 0.9;
       if (pine) { if (nt >= 3200) continue; const ht = (10 + k * 10) * fade, wd = (5 + k * 3) * fade; p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
         tm.setColorAt(nt++, col.setRGB(0.09 + k * 0.06, 0.20 + k * 0.10, 0.08 + k * 0.04)); continue; }
@@ -1517,7 +1522,7 @@ function buildIsrael() {
   const ARAB = new Set(['Nazareth', 'Acre', 'Umm al-Fahm', 'Sakhnin', 'Shefa-Amr', 'Rahat', 'Jericho', 'Bethlehem', 'Hebron', 'Ramallah', 'Nablus', 'Jenin', 'Tulkarm', 'Qalqilya', 'Gaza', 'Khan Yunis', 'Rafah', 'Aqaba', 'Amman', 'Irbid', 'Madaba', 'Karak', 'Tyre', 'Quneitra']);
   const mins = [], domes = [];
   for (const c of CITIES) { if (!ARAB.has(c.name)) continue; const n = clamp(Math.round(c.n / 22), 2, 12), cx = lon2x(c.lon), cz = lat2z(c.lat);
-    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 22) || nearRoad(x, z, 22)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
+    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 22) || nearRoad(x, z, 22) || landmarkAt(x, z, 12) || obstBox(x, z, 3, 3)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   // Jaffa and East Jerusalem get a few too
   for (const [lo, la] of [[34.752, 32.052], [34.755, 32.049], [35.236, 31.781], [35.228, 31.787], [35.242, 31.775]]) { const x = lon2x(lo), z = lat2z(la), g = groundAt(x, z); if (!g.water) { mins.push([x, g.h, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   inst(GEO.minaret, mins, [42, 42, 42]);
@@ -1698,7 +1703,7 @@ function reserveGround(x, z, r) {
   for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const kk = (Math.floor(x / 1000) + a) + ':' + (Math.floor(z / 1000) + b); let l = LMK.clear.get(kk); if (!l) LMK.clear.set(kk, l = []); l.push([x, z, r]); }
 }
 /** True where a landmark stands, so buildCities leaves the block empty. */
-function landmarkAt(x, z) { const l = LMK.clear.get(Math.floor(x / 1000) + ':' + Math.floor(z / 1000)); return !!l && l.some(([lx, lz, r]) => Math.hypot(x - lx, z - lz) < r); }
+function landmarkAt(x, z, pad) { const l = LMK.clear.get(Math.floor(x / 1000) + ':' + Math.floor(z / 1000)); return !!l && l.some(([lx, lz, r]) => Math.hypot(x - lx, z - lz) < r + (pad || 0)); }       // pad: half the size of what is being placed, so its edge keeps clear too
 
 /** Collects transformed primitives with a colour each into three merged meshes (plain, windowed, shiny) for one city. */
 class LmkBuilder {
@@ -2391,11 +2396,13 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
+        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
     }
-    const vmin = S.vs0 * 1.2;                                                    // stall protection: lower the nose, add power
-    if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
+    const vmin = S.vs0 * 1.2, idle = S.thr < 0.08;                               // stall protection: lower the nose, add power
+    // the power lever closed means no power: the protection does not open the engines behind the pilot's back. The aircraft keeps its speed by gliding down
+    if (idle && S.V < vmin + 6) { S.holdAlt = null; gT = Math.min(gT, -0.035 - Math.max(vmin + 3 - S.V, 0) * 0.014); S.boost = 0; S.prot = L('Power is off: gliding down. Raise the power to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים הספק כדי להמשיך לטוס'); }
+    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
     pt = pitchFor(gT, S.V < vmin && S.ra > 20);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
@@ -2604,9 +2611,11 @@ function updateCamera(dt) {
     const w = window.innerWidth, h = window.innerHeight, tch = document.body.classList.contains('touch'), want = S.cam !== 1 ? 0 : tch ? (h > w ? 0.10 * h : 0) : document.body.classList.contains('nopfd') ? 0 : 0.07 * h;
     CAMX.vo += (want - CAMX.vo) * Math.min(1, 3 * Math.max(dt, 0.016)); if (Math.abs(CAMX.vo) > 0.5) camera.setViewOffset(w, h, 0, CAMX.vo, w, h); else if (camera.view) camera.clearViewOffset(); }
   S.shake *= Math.exp(-4 * dt);
-  const amp = (S.stallWarn ? 0.35 : 0) + (M.burner && S.n1 > 0.9 ? 0.06 : 0) + S.shake;
-  if (amp > 0.005 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
-    camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(amp * 0.012 * Math.sin(t * 43)); }
+  // shake: a touchdown bump and the stall buffet. The afterburner only trembles a little, and not at all from inside: in the cockpit the panel is a metre from the eye,
+  // so centimetres of camera movement made the whole picture jump for as long as the burner was lit
+  const amp = ((S.stallWarn ? 0.16 : 0) + (M.burner && S.n1 > 0.9 ? 0.012 : 0) + S.shake) * (S.cam === 1 ? 1 : 0.12);
+  if (amp > 0.004 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
+    camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(Math.min(amp, 0.5) * 0.006 * Math.sin(t * 43)); }
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
   sun.position.copy(S.pos).addScaledVector(sunDir, 1000); sun.target.position.copy(S.pos); sun.target.updateMatrixWorld();
   // the aircraft's shadow on the ground: where the sun puts it, softer and fainter with height, gone at night
@@ -3123,9 +3132,10 @@ function arcadeStep(dt) {
     const gm = PL.aG * DEG, back = PL.aPitch * 0.45 * dt;
     if (Math.abs(ud) > 0.05 && !(S.trick && ud < 0)) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 450) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
     if (ud < -0.05) A.out = false;
-    { const cap = Math.max(ac.gmax, 0); if (A.v < vMin * 1.06 && A.gam > cap) { A.gam = Math.max(cap, A.gam - 1.5 * dt); if (ud > 0.1 && S.thr < 0.3) arcSay('To climb, push the speed lever up', 'כדי לטפס מעלים את ידית המהירות'); } }         // too slow to keep climbing: the nose lowers to what the engines can hold, whatever the stick says
+    { const off = S.thr < 0.05, cap = off ? Math.min(ac.gmax, -0.045) : Math.max(ac.gmax, 0);          // the lever closed all the way: no power, so it glides down (and lands where it comes down)
+      if (A.v < vMin * 1.06 && A.gam > cap) { A.gam = Math.max(cap, A.gam - 1.5 * dt); if (off) arcSay('Power is off: gliding down. Push the lever up to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים את הידית כדי להמשיך לטוס'); else if (ud > 0.1 && S.thr < 0.3) arcSay('To climb, push the speed lever up', 'כדי לטפס מעלים את ידית המהירות'); } }         // too slow to keep climbing: the nose lowers to what the engines can hold, whatever the stick says
     { const top = gm * clamp((PL.aCeil - S.pos.y) / 1500, 0, 1); if (A.gam > top) { A.gam = Math.max(top, A.gam - 1.5 * dt); if (top < 0.01 && ud > 0.1) arcSay('This is as high as it goes', 'זה הכי גבוה שאפשר'); } }      // the ceiling
-    if (!S.trick && S.ra < 260 + A.v) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
+    if (!S.trick && S.ra < 260 + A.v && S.thr >= 0.05) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
       for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12 && !(landing && (gh - here) / (A.v * t * hsAt(S.ra)) < 0.2)) need = Math.max(need,       /* coming down to land, gently rising ground is somewhere to land, not something to climb over */ (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
@@ -3175,6 +3185,13 @@ function applyLang() {
 // ---------- 12e. Collisions with buildings, and the explosion ----------
 const OBST = new Map(), EXP = { parts: [], t: -1 };
 /** Register a box obstacle (centre x,z, width, depth, rotation, base and top height) in a 128 m spatial hash. */
+/** True when an upright box of half-sizes hw, hd centred at x, z would cut into something already standing there (with a 1.5 m gap). Buildings are
+    tested against it before they are placed, so blocks do not run through each other, and trees do not grow through walls. */
+function obstBox(x, z, hw, hd) {
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = OBST.get((Math.floor(x / 128) + a) * 100003 + Math.floor(z / 128) + b); if (!c) continue;
+    for (const o of c) { const r = Math.max(o[2], o[3]), lx = o[5] ? r : o[2], lz = o[5] ? r : o[3]; if (Math.abs(x - o[0]) < hw + lx + 1.5 && Math.abs(z - o[1]) < hd + lz + 1.5) return true; } }
+  return false;
+}
 function addObst(x, z, w, d, rot, y0, y1) {
   const o = [x, z, w / 2, d / 2, Math.cos(rot), Math.sin(rot), y0, y1], r = Math.hypot(w, d) / 2;
   for (let gx = Math.floor((x - r) / 128); gx <= Math.floor((x + r) / 128); gx++) for (let gz = Math.floor((z - r) / 128); gz <= Math.floor((z + r) / 128); gz++) { const k = gx * 100003 + gz; let a = OBST.get(k); if (!a) OBST.set(k, a = []); a.push(o); }

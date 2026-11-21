@@ -492,9 +492,10 @@ function arcadeStep(dt) {
     const gm = PL.aG * DEG, back = PL.aPitch * 0.45 * dt;
     if (Math.abs(ud) > 0.05 && !(S.trick && ud < 0)) A.gam = clamp(A.gam + ud * PL.aPitch * dt, -gm, gm); else { if (A.out && S.ra > 450) A.out = false; A.gam += clamp((A.out ? 0.16 : 0) - A.gam, -back, back); }          // let go: it levels off by itself (after take-off it first climbs clear of the ground)
     if (ud < -0.05) A.out = false;
-    { const cap = Math.max(ac.gmax, 0); if (A.v < vMin * 1.06 && A.gam > cap) { A.gam = Math.max(cap, A.gam - 1.5 * dt); if (ud > 0.1 && S.thr < 0.3) arcSay('To climb, push the speed lever up', 'כדי לטפס מעלים את ידית המהירות'); } }         // too slow to keep climbing: the nose lowers to what the engines can hold, whatever the stick says
+    { const off = S.thr < 0.05, cap = off ? Math.min(ac.gmax, -0.045) : Math.max(ac.gmax, 0);          // the lever closed all the way: no power, so it glides down (and lands where it comes down)
+      if (A.v < vMin * 1.06 && A.gam > cap) { A.gam = Math.max(cap, A.gam - 1.5 * dt); if (off) arcSay('Power is off: gliding down. Push the lever up to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים את הידית כדי להמשיך לטוס'); else if (ud > 0.1 && S.thr < 0.3) arcSay('To climb, push the speed lever up', 'כדי לטפס מעלים את ידית המהירות'); } }         // too slow to keep climbing: the nose lowers to what the engines can hold, whatever the stick says
     { const top = gm * clamp((PL.aCeil - S.pos.y) / 1500, 0, 1); if (A.gam > top) { A.gam = Math.max(top, A.gam - 1.5 * dt); if (top < 0.01 && ud > 0.1) arcSay('This is as high as it goes', 'זה הכי גבוה שאפשר'); } }      // the ceiling
-    if (!S.trick && S.ra < 260 + A.v) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
+    if (!S.trick && S.ra < 260 + A.v && S.thr >= 0.05) {           // terrain ahead: when the ground rises in front, climb over it by itself (flat ground can still be landed on)
       const here = groundAt(S.pos.x, S.pos.z).h; let need = -1;
       for (const t of [2, 4, 7, 11, 16]) { const gx = S.pos.x + Math.sin(A.psi) * A.v * t * hsAt(S.ra), gz = S.pos.z - Math.cos(A.psi) * A.v * t * hsAt(S.ra), gh = groundAt(gx, gz).h; if (gh > here + 12 && !(landing && (gh - here) / (A.v * t * hsAt(S.ra)) < 0.2)) need = Math.max(need,       /* coming down to land, gently rising ground is somewhere to land, not something to climb over */ (gh + (A.v > 250 ? 100 : 70) - S.pos.y) / (A.v * t)); }
       if (need > A.gam) A.gam = Math.min(need, PL.aG * DEG); }
@@ -544,6 +545,13 @@ function applyLang() {
 // ---------- 12e. Collisions with buildings, and the explosion ----------
 const OBST = new Map(), EXP = { parts: [], t: -1 };
 /** Register a box obstacle (centre x,z, width, depth, rotation, base and top height) in a 128 m spatial hash. */
+/** True when an upright box of half-sizes hw, hd centred at x, z would cut into something already standing there (with a 1.5 m gap). Buildings are
+    tested against it before they are placed, so blocks do not run through each other, and trees do not grow through walls. */
+function obstBox(x, z, hw, hd) {
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const c = OBST.get((Math.floor(x / 128) + a) * 100003 + Math.floor(z / 128) + b); if (!c) continue;
+    for (const o of c) { const r = Math.max(o[2], o[3]), lx = o[5] ? r : o[2], lz = o[5] ? r : o[3]; if (Math.abs(x - o[0]) < hw + lx + 1.5 && Math.abs(z - o[1]) < hd + lz + 1.5) return true; } }
+  return false;
+}
 function addObst(x, z, w, d, rot, y0, y1) {
   const o = [x, z, w / 2, d / 2, Math.cos(rot), Math.sin(rot), y0, y1], r = Math.hypot(w, d) / 2;
   for (let gx = Math.floor((x - r) / 128); gx <= Math.floor((x + r) / 128); gx++) for (let gz = Math.floor((z - r) / 128); gz <= Math.floor((z + r) / 128); gz++) { const k = gx * 100003 + gz; let a = OBST.get(k); if (!a) OBST.set(k, a = []); a.push(o); }

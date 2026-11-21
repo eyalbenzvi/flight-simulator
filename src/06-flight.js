@@ -166,11 +166,13 @@ function updateControls(dt) {
         for (const [t, a] of [[1.5, 0.12], [3, 0.25], [6, 0.5], [10, 0.8]]) { const d = hv * t, ca = Math.cos(a * sg), sa = Math.sin(a * sg); gReq = Math.max(gReq, (groundAt(S.pos.x + (ux * ca - uz * sa) * d, S.pos.z + (ux * sa + uz * ca) * d).h - base) / d); } }
       if (gT < gReq) {
         gT = Math.min(gReq, Math.max(14, PL.up) * DEG); if (gReq > 0.03) rt = rollFor(lr * Math.min(PL.bank, 25) * DEG);   /* climbing away from terrain: flatten the turn */ if (Math.abs(climb) <= 0.1) S.holdAlt = null;
-        if (gReq > 4 * DEG) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
+        if (gReq > 4 * DEG && S.thr >= 0.08) { S.boost = 1; S.prot = L('Terrain ahead: climbing', 'קרקע לפנים: מטפסים'); } else if (climb < -0.1 && S.ra < 90) S.prot = L('Height protection: this level lands at airports only (L lands for you)', 'הגנת גובה: ברמה הזו נוחתים רק בשדה תעופה (L נוחת בשבילכם)');
       }
     }
-    const vmin = S.vs0 * 1.2;                                                    // stall protection: lower the nose, add power
-    if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
+    const vmin = S.vs0 * 1.2, idle = S.thr < 0.08;                               // stall protection: lower the nose, add power
+    // the power lever closed means no power: the protection does not open the engines behind the pilot's back. The aircraft keeps its speed by gliding down
+    if (idle && S.V < vmin + 6) { S.holdAlt = null; gT = Math.min(gT, -0.035 - Math.max(vmin + 3 - S.V, 0) * 0.014); S.boost = 0; S.prot = L('Power is off: gliding down. Raise the power to fly on', 'ההספק סגור: המטוס גולש למטה. מעלים הספק כדי להמשיך לטוס'); }
+    else if (S.V < vmin && S.ra > 20) { gT = Math.min(gT, 0.02) - (vmin - S.V) * 0.012; S.boost = clamp((vmin + 4 - S.V) * 0.12, 0, 1); if (!S.prot) S.prot = L('Too slow: adding power', 'איטי מדי: מוסיפים הספק'); }
     pt = pitchFor(gT, S.V < vmin && S.ra > 20);
   } else if (S.assist) {
     // ---- EASY MODE on the ground: centreline keeping, automatic rotation, autobrake after landing ----
@@ -379,9 +381,11 @@ function updateCamera(dt) {
     const w = window.innerWidth, h = window.innerHeight, tch = document.body.classList.contains('touch'), want = S.cam !== 1 ? 0 : tch ? (h > w ? 0.10 * h : 0) : document.body.classList.contains('nopfd') ? 0 : 0.07 * h;
     CAMX.vo += (want - CAMX.vo) * Math.min(1, 3 * Math.max(dt, 0.016)); if (Math.abs(CAMX.vo) > 0.5) camera.setViewOffset(w, h, 0, CAMX.vo, w, h); else if (camera.view) camera.clearViewOffset(); }
   S.shake *= Math.exp(-4 * dt);
-  const amp = (S.stallWarn ? 0.35 : 0) + (M.burner && S.n1 > 0.9 ? 0.06 : 0) + S.shake;
-  if (amp > 0.005 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
-    camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(amp * 0.012 * Math.sin(t * 43)); }
+  // shake: a touchdown bump and the stall buffet. The afterburner only trembles a little, and not at all from inside: in the cockpit the panel is a metre from the eye,
+  // so centimetres of camera movement made the whole picture jump for as long as the burner was lit
+  const amp = ((S.stallWarn ? 0.16 : 0) + (M.burner && S.n1 > 0.9 ? 0.012 : 0) + S.shake) * (S.cam === 1 ? 1 : 0.12);
+  if (amp > 0.004 && !S.paused) { const t = TNOW, a = amp * 0.5;          // buffet: two summed sines per axis, and a slight roll wobble
+    camera.position.x += a * (Math.sin(t * 69) + Math.sin(t * 107 + 1.3)); camera.position.y += a * (Math.sin(t * 73 + 2.1) + Math.sin(t * 113 + 0.4)); camera.position.z += a * (Math.sin(t * 61 + 4.0) + Math.sin(t * 97 + 2.7)); camera.rotateZ(Math.min(amp, 0.5) * 0.006 * Math.sin(t * 43)); }
   sky.position.copy(camera.position); if (glare) glare.position.copy(camera.position).addScaledVector(sunDir, 180000);
   sun.position.copy(S.pos).addScaledVector(sunDir, 1000); sun.target.position.copy(S.pos); sun.target.updateMatrixWorld();
   // the aircraft's shadow on the ground: where the sun puts it, softer and fainter with height, gone at night

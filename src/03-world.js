@@ -85,9 +85,11 @@ function windowize(mat) {
           diffuseColor.rgb *= mix(1.0, 0.86, side * step(0.88, fract(hy / 3.4)) * step(9.0, hy));   // a balcony shadow at every floor
           diffuseColor.rgb *= mix(1.0, 1.13, side * step(vBs.y - 1.4, hy)); }        // the light parapet along the roof
         if (side < 0.5 && vBn.y > 0.5) {   // flat roofs carry solar water heaters: a white tank and a dark panel per flat
-          vec2 rc = vec2(vBp.x * vBs.x, vBp.z * vBs.z) / 5.0, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.78, rh);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.12, 0.16, 0.26), has * step(abs(rf.x - 0.5), 0.36) * step(abs(rf.y - 0.3), 0.16));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), has * step(length(rf - vec2(0.5, 0.66)), 0.17)); }
+          vec2 rm = vec2(vBp.x * vBs.x, vBp.z * vBs.z), re = vec2(vBs.x, vBs.z) * 0.5 - abs(rm); float edge = min(re.x, re.y), rfade = 1.0 - smoothstep(180.0, 520.0, 1.0 / gl_FragCoord.w);
+          diffuseColor.rgb *= 0.90; diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.16, smoothstep(1.3, 0.9, edge));                 // a darker deck inside a light parapet
+          vec2 rc = rm / 7.5 + 0.5, rf = fract(rc); float rh = fract(sin(dot(floor(rc) + vBid * 37.0, vec2(41.3, 17.7))) * 9431.7), has = step(0.62, rh) * step(3.0, edge) * rfade;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.17, 0.27), has * smoothstep(0.30, 0.26, abs(rf.x - 0.5)) * smoothstep(0.15, 0.12, abs(rf.y - 0.34)));   // a solar panel
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96), has * smoothstep(0.13, 0.10, length(rf - vec2(0.5, 0.66)))); }                                            // and its white tank, seen only from near
         totalEmissiveRadiance += vec3(1.0, 0.80, 0.50) * uLights * win * step(0.58, wh) * 0.9; }`);
   };
   return mat;
@@ -130,20 +132,23 @@ function buildCities() {
     else { const sn = styleNear(i, j); st = bc === 1 ? (sn === 2 ? 2 : 3) : bc === 2 || bc === 4 || bc === 5 ? (sn === 2 ? 2 : 1) : sn || (cov > 0.2 ? 1 : 3); }
     if (!ht) ht = st === 3 ? 7 : st === 5 ? 9 + s2 * 5 : st === 6 ? 5 : st === 2 ? 7 + cov * 14 : 10 + cov * 30;
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
-    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z)) continue;
+    const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 9, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 9, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;
     const y = heightAt(x, z);
     if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = sd * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, Math.floor(s3 * 4) * 0.785, 0.93 + s2 * 0.07]); } }
     else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
-      for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+      for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f || obstBox(f[0], f[1], bw * f[2] / 2, bd * f[2] / 2)) continue;
         const by = heightAt(f[0], f[1]); push(flat, f[0], f[1], [f[0], by - 4, f[1], bw * f[2], ht + 4, bd * f[2], 0, IND[((s3 + k * 0.37) * IND.length | 0) % IND.length]]); addObst(f[0], f[1], bw * f[2], bd * f[2], 0, by - 4, by + ht); } }
     else if (st === 6) {                                                                                      // greenhouse tunnels in rows
       const rot = s3 < 0.5 ? 0 : 1.5708; for (let k = -1; k <= 1; k++) { const gx = x + (rot ? k * 17 : 0), gz = z + (rot ? 0 : k * 17); if (nearRoad(gx, gz, 26)) continue;
         push(flat, gx, gz, [gx, heightAt(gx, gz) - 1, gz, 52, 5, 12, rot, 0xe4e9e6]); } }
     else { const n = st === 1 ? (cov > 0.42 ? 3 : cov > 0.28 ? 2 : 1) : 1, kk = n === 1 ? 1 : n === 2 ? 0.74 : 0.62, pal = PAL[st] || PAL[1];
       for (let k = 0; k < n; k++) {                                                                           // dense cells: two or three blocks
-        const bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
-        const ox = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 1 : 0.3), oz = n === 1 ? 0 : (k - (n - 1) / 2) * 19 * (s3 < 0.5 ? 0.3 : 1), f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
-        const by = heightAt(f[0], f[1]), w2 = bw * f[2], d2 = bd * f[2], h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
+        let bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
+        // two or three blocks stand side by side along one axis, each within its own slot of the 60 m cell (they used to be staggered on a diagonal and ran through each other)
+        const alongX = s3 < 0.5, slot = 54 / n; if (n > 1) { if (alongX) bw = Math.min(bw, slot - 4); else bd = Math.min(bd, slot - 4); }
+        const ox = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+        let w2 = bw * f[2], d2 = bd * f[2]; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) { w2 *= 0.7; d2 *= 0.7; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) continue; }       // something stands there already: a smaller block, or none
+        const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
         push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, 0, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, 0, by - 8, by + h2); } }
     if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
@@ -417,7 +422,7 @@ function updateScatter() {
       // where OpenStreetMap knows the land cover, it decides: pines in forests, round crowns in orchards, parks and towns, shrubs in scrub, nothing on sand, water, industry
       const lc = lcAt(x, z), LP = [0, 0.9, 0.8, 0.12, 0.03, 0.5, 0.18, 0, 0.01, 0, 0.12, 0.22, 0, 0, 0, 0.04, 0.3, 0.02][lc];
       const pr = lc ? LP : wood * 0.6 * clump + farm * 0.05 + arid * 0.025 + urban * 0.16; if (h > pr) continue;
-      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6)) continue;
+      const g = groundAt(x, z); if (g.water || airfieldAt(x, z, 6) || nearRoad(x, z, 6) || (urban > 0.05 || lc === 11 || lc === 12 ? obstBox(x, z, 3, 3) : false)) continue;
       const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = lc ? lc === 6 : arid > 0.6, pine = lc ? lc === 1 || (lc === 16 && k < 0.6) : !shrub && clump > 0.9;
       if (pine) { if (nt >= 3200) continue; const ht = (10 + k * 10) * fade, wd = (5 + k * 3) * fade; p.set(x, triHeight(x, z) - 0.5, z); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
         tm.setColorAt(nt++, col.setRGB(0.09 + k * 0.06, 0.20 + k * 0.10, 0.08 + k * 0.04)); continue; }
@@ -578,7 +583,7 @@ function buildIsrael() {
   const ARAB = new Set(['Nazareth', 'Acre', 'Umm al-Fahm', 'Sakhnin', 'Shefa-Amr', 'Rahat', 'Jericho', 'Bethlehem', 'Hebron', 'Ramallah', 'Nablus', 'Jenin', 'Tulkarm', 'Qalqilya', 'Gaza', 'Khan Yunis', 'Rafah', 'Aqaba', 'Amman', 'Irbid', 'Madaba', 'Karak', 'Tyre', 'Quneitra']);
   const mins = [], domes = [];
   for (const c of CITIES) { if (!ARAB.has(c.name)) continue; const n = clamp(Math.round(c.n / 22), 2, 12), cx = lon2x(c.lon), cz = lat2z(c.lat);
-    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 22) || nearRoad(x, z, 22)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
+    for (let i = 0; i < n; i++) { const a = R() * 6.283, r = c.r * 0.8 * Math.sqrt(R()), x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r, g = groundAt(x, z); if (g.water || airfieldAt(x, z, 22) || nearRoad(x, z, 22) || landmarkAt(x, z, 12) || obstBox(x, z, 3, 3)) continue; mins.push([x, g.h - 2, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   // Jaffa and East Jerusalem get a few too
   for (const [lo, la] of [[34.752, 32.052], [34.755, 32.049], [35.236, 31.781], [35.228, 31.787], [35.242, 31.775]]) { const x = lon2x(lo), z = lat2z(la), g = groundAt(x, z); if (!g.water) { mins.push([x, g.h, z]); domes.push([x + 12, g.h + 9, z + 6]); } }
   inst(GEO.minaret, mins, [42, 42, 42]);
