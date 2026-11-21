@@ -137,8 +137,7 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - Rewards with nothing added to the screen: stars, a fanfare and a buzz for a landing (`fanfare`, `buzz` in `src/07-hud-and-modes.js`; Easy too), one short
   message for a low pass, a pass between towers or skimming the sea (`updateExtras`, at most every 20 s), a vapour cone, a view kick and a buzz at Mach 1
   and again at Mach 2, the Mach number in the strip above 0.6.
-- Ring courses (`COURSES`, `courseFor`, `updateCourse` in `src/07c-extras.js`; the "Challenges" menu section, shown once the world is built): rings in the
-  world, the next one green; the time is one message at the end; best times in `SAVE.best`. `spawn` calls `courseFor(def)`, which also puts the rings away.
+- There are no challenges: the ring courses and their menu section were removed at the owner's request (do not bring them back).
 - Starts: "Tel Aviv at night" and "Storm over Haifa" carry `tod` / `wx` (applied by `spawn`); "Surprise me" (`surpriseButton`) draws a place, an aircraft
   and a time of day.
 - Interface: the aircraft are one row to swipe through (`.grid.planes`), cards are close-ups at an angle per type (`shootPlanes`); a first visit reads

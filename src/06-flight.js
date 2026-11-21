@@ -28,7 +28,7 @@ function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
-  courseFor(def); S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
+  S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
     const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
     const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;

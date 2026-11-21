@@ -196,7 +196,6 @@ function renderPanel(where) {
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
     ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); surpriseButton(el, where, rer); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
-    ...(WORLD.ready ? [['ch', L('Challenges', 'אתגרים'), cur && cur.course !== undefined ? startName(cur) : '', el => gridButtons(el, courseStarts().map(d => [startName(d), courseBest(d.course) ? L('Best ', 'שיא ') + courseBest(d.course) : L('Fly through the rings', 'טסים דרך הטבעות'), go(d), d === cur]))]] : []),
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
   const open = OPEN[where]; body.textContent = '';

@@ -2838,7 +2838,7 @@ function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather
-  courseFor(def); S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
+  S.apprHold = def.type === 'approach'; S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
     const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
     const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;
@@ -3593,7 +3593,7 @@ function drawSys() {
 const SAVE = (() => { const d = { plane: 'airliner', inv: false, mode: 0, lang: 'he', uSpd: 1, uAlt: 1 };          /* a first visit reads km/h and metres (a child's units); knots and feet are a choice in the settings, and the flight instruments keep them */ try { const o = JSON.parse(localStorage.getItem('ifs-save') || '{}'); if (o.plane) d.plane = o.plane; d.inv = !!o.inv; if ([0, 1, 2].includes(o.mode)) d.mode = o.mode; if (!PLANES[d.plane]) d.plane = 'airliner'; if (o.lang === 'en') d.lang = 'en'; { const p = o.pick; if (p && Array.isArray(p.at) && Array.isArray(p.name) && isFinite(p.at[0]) && isFinite(p.at[1]) && typeof p.at[0] === 'number' && typeof p.at[1] === 'number' && p.at[0] >= X0 && p.at[0] <= X1 && p.at[1] >= Z0 && p.at[1] <= Z1 && typeof p.name[0] === 'string' && typeof p.name[1] === 'string' && [0, 1, 2].includes(p.alt) && [0, 1, 2, 3].includes(p.hdg)) d.pick = p; }
   if (typeof o.pfd === 'boolean') d.pfd = o.pfd;
   d.first = !o.plane;                    // nothing saved yet: a first visit
-  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= (k === 'tod' ? 3 : 2)) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.gfx)) d.gfx = o.gfx; if (o.best && typeof o.best === 'object') { d.best = {}; for (const k of [0, 1, 2]) if (o.best[k] > 5 && o.best[k] < 3600) d.best[k] = +o.best[k]; } if (o.tilt === 1) d.tilt = 1; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
+  for (const k of ['tod', 'wx']) if (o[k] >= 0 && o[k] <= (k === 'tod' ? 3 : 2)) d[k] = o[k] | 0; if (o.cam >= 0 && o.cam <= 7) d.cam = o.cam | 0; for (const k of ['names', 'smoke', 'legend', 'muted']) if (typeof o[k] === 'boolean') d[k] = o[k]; if (typeof o.legendPin === 'boolean') d.legendPin = o.legendPin; if ([0, 1, 2].includes(o.uSpd)) d.uSpd = o.uSpd; if ([0, 1, 2].includes(o.gfx)) d.gfx = o.gfx; if (o.tilt === 1) d.tilt = 1; if ([0, 1, 2].includes(o.uDist)) d.uDist = o.uDist; if ([0, 1].includes(o.uAlt)) d.uAlt = o.uAlt; } catch (e) { /* no storage: defaults */ } return d; })();
 /** Save the choices. Once the game is up (SAVE.ready, set at the end of init) the settings made in flight are saved too: time of day, weather, view, names, smoke, key guide, sound. */
 function persist() { try { if (SAVE.ready) Object.assign(SAVE, { tod: S.tod, wx: WX, cam: S.cam, names: !!S.names, smoke: !!S.smoke, legend: !!S.legend, muted: !!Snd.muted });
   const o = Object.assign({}, SAVE); delete o.ready; delete o.first; const j = JSON.stringify(o); if (j !== SAVE_LAST) { SAVE_LAST = j; localStorage.setItem('ifs-save', j); } } catch (e) { /* storage unavailable: settings last for this session only */ } }
@@ -3717,7 +3717,7 @@ const L = (en, he) => SAVE.lang === 'he' ? he : en;
 const TRD = { 'The aircraft hit the water.': 'המטוס פגע במים', 'Touched down far too fast.': 'נגיעה בקרקע במהירות גבוהה מדי', 'Touched down with the landing gear up.': 'נחיתה עם גלגלים מקופלים', 'Flew into terrain.': 'התנגשות בקרקע', 'Wing or nose struck the ground.': 'הכנף או האף פגעו בקרקע', 'Left the airfield at speed.': 'ירידה מהמסלול במהירות גבוהה', 'Airliner': 'מטוס נוסעים', 'Business jet': 'מטוס מנהלים', 'Fighter jet': 'מטוס קרב', 'Aerobatic plane': 'מטוס פעלולים', 'Concorde': 'קונקורד', 'Stealth jet': 'חמקן', 'Heavy bomber': 'מפציץ כבד', 'Supersonic airliner. Mach 2 at the edge of space, lands fast with its nose high': 'מטוס נוסעים על-קולי. פעמיים מהירות הקול בקצה החלל, נוחת מהר עם האף למעלה', 'Black, faceted, invisible to radar. Fast and low, no afterburner': 'שחור, זוויתי ובלתי נראה למכ״ם. מהיר ונמוך, בלי מבער', 'Eight engines and enormous wings. Slow to turn, flies for ever': 'שמונה מנועים וכנפיים ענקיות. פונה לאט, טס בלי סוף',
   'Twin-jet for 150 passengers. Steady and forgiving, slow to turn': 'סילון גדול ל-150 נוסעים. יציב וסלחני, פונה לאט', 'Sleek T-tail jet. Quick, agile, lands short': 'סילון קטן ומהיר. זריז ונוחת בקלות',
   'Afterburner, Mach 1.5, rolls and loops. Hold on': 'מבער, מהירות על-קולית, גלגולים ולולאות. תחזיקו חזק', 'Light propeller plane with show smoke. Slow, nimble, lands anywhere': 'מטוס מדחף קל עם עשן. איטי, זריז ונוחת בכל מקום',
-  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת', 'Tel Aviv at night': 'תל אביב בלילה', 'Storm over Haifa': 'סערה מעל חיפה', 'A surprise flight': 'טיסת הפתעה', 'Concorde at Mach 2': 'קונקורד במאך 2', 'Rings: the Tel Aviv coast': 'טבעות: חוף תל אביב', 'Rings: the Ramon crater': 'טבעות: מכתש רמון', 'Rings: down the Jordan': 'טבעות: לאורך הירדן',
+  'Takeoff: Ben Gurion Airport': 'המראה מנתב״ג', 'Takeoff: Haifa': 'המראה מחיפה', 'Takeoff: Eilat Ramon': 'המראה מרמון', 'Takeoff: Rosh Pina': 'המראה מראש פינה', 'Takeoff: Masada (Bar Yehuda)': 'המראה ממצדה', 'Takeoff: Beer Sheva': 'המראה מבאר שבע', 'Coastline: Tel Aviv': 'חוף תל אביב', 'Flyover: Jerusalem': 'מעל ירושלים', 'Low pass: Dead Sea': 'נמוך מעל ים המלח', 'Crater run: Makhtesh Ramon': 'מכתש רמון', 'Snow line: Mount Hermon': 'השלג בחרמון', 'Sea of Galilee': 'הכנרת', 'Tel Aviv at night': 'תל אביב בלילה', 'Storm over Haifa': 'סערה מעל חיפה', 'A surprise flight': 'טיסת הפתעה', 'Concorde at Mach 2': 'קונקורד במאך 2',
   'Ben Gurion runway 12': 'נתב״ג, מסלול 12', 'Haifa over the bay': 'חיפה, מעל המפרץ', 'Eilat Ramon': 'רמון (אילת)', 'Rosh Pina airstrip': 'מנחת ראש פינה', 'Masada (Bar Yehuda) airstrip': 'מנחת בר יהודה (מצדה)', 'Beer Sheva airstrip': 'מנחת באר שבע',
   'Cockpit': 'תא הטייס', 'Chase': 'מאחור', 'Wing': 'מהכנף', 'Fly-by': 'מהצד (מעבר)', 'Above': 'מלמעלה', 'Front': 'מלפנים', 'Below': 'מבט למטה', 'Tail': 'מהזנב', 'Continue the last flight': 'המשך הטיסה האחרונה', 'Clear': 'בהיר', 'Dust haze': 'אובך', 'Storm': 'סופה', 'day': 'יום', 'sunset': 'שקיעה', 'night': 'לילה' };
 const tr = s => SAVE.lang === 'he' && TRD[s] ? TRD[s] : s;
@@ -4182,36 +4182,6 @@ function buildOldCity() {
   for (const m of [bm, dm]) { m.frustumCulled = false; m.userData = { x: O.x - 145, z: O.z, half: 340, far: 16000 }; scene.add(m); cityMeshes.push(m); } XT.oldCity = [bm, dm];
 }
 
-/** Ring courses (the "Challenges" section of the menus): a line of glowing rings to fly through in order, in three places. The next ring is green, the ones
-    after it gold; each ring passed chimes; the time runs from the first ring to the last and is said once at the end, with the best time (kept in `SAVE.best`).
-    Nothing is added to the screen: the rings are objects in the world, the time is one message. */
-const COURSES = [
-  { label: 'Rings: the Tel Aviv coast', pts: [[34.752, 32.045, 170], [34.760, 32.062, 210], [34.768, 32.079, 250], [34.774, 32.097, 290], [34.786, 32.113, 250], [34.798, 32.128, 200], [34.806, 32.146, 160]] },
-  { label: 'Rings: the Ramon crater', pts: [[34.72, 30.570, 200], [34.76, 30.585, 150], [34.80, 30.600, 140], [34.84, 30.612, 150], [34.88, 30.630, 190], [34.92, 30.652, 260]] },
-  { label: 'Rings: down the Jordan', pts: [[35.600, 32.700, 150], [35.588, 32.660, 130], [35.577, 32.620, 120], [35.570, 32.580, 120], [35.566, 32.540, 120], [35.560, 32.500, 140]] }];
-const COURSE = { on: false, id: -1, i: 0, t0: 0, rings: [], pool: [] };
-function courseStarts() { return COURSES.map((c, id) => { if (c.def) return c.def; const a = c.pts[0], b = c.pts[1], ax = lon2x(a[0]), az = lat2z(a[1]), dx = ax - lon2x(b[0]), dz = az - lat2z(b[1]), l = Math.hypot(dx, dz), x = ax + dx / l * 1700, z = az + dz / l * 1700;
-  return c.def = { label: c.label, type: 'air', x, z, alt: Math.max(groundAt(ax, az).h + a[2], groundAt(x, z).h + 150), hdg: (Math.atan2(-dx, dz) / DEG + 360) % 360, spd: 105, course: id }; }); }
-function courseBest(id) { const b = SAVE.best && SAVE.best[id]; return b ? courseTime(b) : ''; }
-const courseTime = t => Math.floor(t / 60) + ':' + String(Math.floor(t % 60)).padStart(2, '0');
-/** Called from `spawn`: lay out the rings of a course start, or put them away for any other start. */
-function courseFor(def) {
-  for (const m of COURSE.pool) m.visible = false; COURSE.on = false; COURSE.rings = []; if (!def || def.course === undefined || !WORLD.ready) return;
-  const c = COURSES[def.course], R = 62; COURSE.on = true; COURSE.id = def.course; COURSE.i = 0; COURSE.t0 = 0;
-  c.pts.forEach((p, k) => { const x = lon2x(p[0]), z = lat2z(p[1]), y = Math.max(groundAt(x, z).h + p[2], obstacleTop(x, z) + R + 30), q = c.pts[Math.min(k + 1, c.pts.length - 1)], o = c.pts[Math.max(k - 1, 0)];
-    let m = COURSE.pool[k]; if (!m) { m = new THREE.Mesh(new THREE.TorusGeometry(R, 5.5, 8, 44), new THREE.MeshBasicMaterial({ color: 0xffd76a, fog: false, toneMapped: false, transparent: true, opacity: 0.9 })); m.frustumCulled = false; scene.add(m); COURSE.pool[k] = m; }
-    m.position.set(x, y, z); m.rotation.set(0, Math.atan2(lon2x(q[0]) - lon2x(o[0]), lat2z(q[1]) - lat2z(o[1])), 0); m.visible = true; COURSE.rings.push({ m, x, y, z, R }); });
-  toast(L('Fly through the rings, the green one first', 'טסים דרך הטבעות, קודם הירוקה'), 4);
-}
-function updateCourse() {
-  if (!COURSE.on) return; const n = COURSE.rings.length;
-  COURSE.rings.forEach((r, k) => { r.m.visible = k >= COURSE.i; if (k === COURSE.i) { r.m.material.color.setHex(0x5dff8a); r.m.scale.setScalar(1 + 0.05 * Math.sin(TNOW * 6)); } else { r.m.material.color.setHex(0xffd76a); r.m.scale.setScalar(1); } r.m.material.opacity = k === COURSE.i ? 1 : 0.6; });
-  const r = COURSE.rings[COURSE.i]; if (!r || S.crashed) return;
-  if (Math.hypot(S.pos.x - r.x, S.pos.y - r.y, S.pos.z - r.z) < r.R * 0.97) { COURSE.i++; if (COURSE.i === 1) COURSE.t0 = TNOW;
-    if (COURSE.i < n) { Snd.chime(700 + 60 * COURSE.i, 0.18); buzz(15); toast(COURSE.i + ' / ' + n, 1.2); }
-    else { const t = TNOW - COURSE.t0, best = SAVE.best || (SAVE.best = {}), rec = !best[COURSE.id] || t < best[COURSE.id]; if (rec) { best[COURSE.id] = Math.round(t * 10) / 10; persist(); } fanfare(3); COURSE.on = false; r.m.visible = false;
-      toast('★ ' + L('Course done in ', 'המסלול הושלם ב-') + courseTime(t) + (rec ? L('. A new best!', '. שיא חדש!') : L('. Best: ', '. השיא: ') + courseTime(best[COURSE.id])), 6); } }
-}
 /** The two bridges of `BRIDGES`. The viaduct: a deck on tall piers, solid (deck and piers are obstacles), with clear air under it: flying under the deck
     between two piers is answered with a message. The Chords Bridge: a low curved deck, a leaning white mast and its cables. */
 function buildBridges() {
@@ -4281,7 +4251,7 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
-  updateCourse(); updateSkyLife(dt);
+  updateSkyLife(dt);
   // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
   if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
     if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');
@@ -4497,7 +4467,6 @@ function renderPanel(where) {
     ['tk', L('Take off from a runway', 'המראה ממסלול'), TAKEOFFS.includes(cur) ? startName(cur, true) : '', starts(TAKEOFFS, true)],
     ['air', L('Start in the air', 'התחלה באוויר'), AIRSTARTS.includes(cur) || (cur && cur.pick) ? startName(cur) : '', el => { starts(AIRSTARTS)(el); surpriseButton(el, where, rer); pickButton(el, where, cur, rer); }],
     ['ap', L('Practise a landing', 'תרגול נחיתה'), LANDTESTS.includes(cur) ? startName(cur) : '', starts(LANDTESTS)],
-    ...(WORLD.ready ? [['ch', L('Challenges', 'אתגרים'), cur && cur.course !== undefined ? startName(cur) : '', el => gridButtons(el, courseStarts().map(d => [startName(d), courseBest(d.course) ? L('Best ', 'שיא ') + courseBest(d.course) : L('Fly through the rings', 'טסים דרך הטבעות'), go(d), d === cur]))]] : []),
     ['set', L('Settings', 'הגדרות'), [todName(S.tod), tr(WXN[WX])].join(' · '), el => settingsRows(el, where, rer)]];
   if (!touchUI) secs.push(['keys', L('Keyboard keys', 'מקשי מקלדת'), '', keyList]);
   const open = OPEN[where]; body.textContent = '';
