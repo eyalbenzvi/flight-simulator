@@ -200,22 +200,32 @@ function buildCities() {
     const R = rng(Math.round(l[2] * 9973 + l[3] * 7919)), n = clamp(Math.round(6 + l[4] * 4), 6, 22);
     for (let k = 0; k < n; k++) { const a = k * 2.39996 + R() * 0.4, r = 22 + 15 * Math.sqrt(k) + R() * 6, hx = x + Math.cos(a) * r, hz = z + Math.sin(a) * r; if (nearRoad(hx, hz, 10)) continue;
       push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 11 + R() * 6, 8 + R() * 3, 10 + R() * 5, Math.floor(R() * 4) * 0.785, 0.93 + R() * 0.07]); } }
-  // the ground-shadow texture (desktop): per 60 m cell, the tallest block standing in it as [offset x, offset z, half-size, height]
-  if (HIRES && TERRAIN_MAT) { const a = new Uint8Array(w * h * 4), put = b => { const ci = Math.floor((b[0] - X0) / 60), cj = Math.floor((b[2] - Z0) / 60); if (ci < 0 || cj < 0 || ci >= w || cj >= h) return; const o = (cj * w + ci) * 4, top = b[4] - (b[4] > 12 ? 8 : 4), H = clamp(Math.round(top), 1, 255); if (H <= a[o + 3]) return;
+  // the ground-shadow texture (desktop, and phones with memory to spare): per 60 m cell, the tallest block standing in it as [offset x, offset z, half-size, height]
+  if (BIGGRID && TERRAIN_MAT) { const a = new Uint8Array(w * h * 4), put = b => { const ci = Math.floor((b[0] - X0) / 60), cj = Math.floor((b[2] - Z0) / 60); if (ci < 0 || cj < 0 || ci >= w || cj >= h) return; const o = (cj * w + ci) * 4, top = b[4] - (b[4] > 12 ? 8 : 4), H = clamp(Math.round(top), 1, 255); if (H <= a[o + 3]) return;
       a[o] = clamp(Math.round(((b[0] - X0) / 60 - ci) * 255), 0, 255); a[o + 1] = clamp(Math.round(((b[2] - Z0) / 60 - cj) * 255), 0, 255); a[o + 2] = clamp(Math.round((b[3] + b[5]) / 4 / 42 * 255), 1, 255); a[o + 3] = H; };
     for (const list of boxes.values()) list.forEach(put); for (const list of flat.values()) list.forEach(b => { if (b[6] === 0 && b[4] > 6) put(b); });
     const t = new THREE.DataTexture(a, w, h, THREE.RGBAFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; TERRAIN_MAT.uniforms.tBS.value = t; TERRAIN_MAT.uniforms.uBS.value = 1; }
   const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 400)]; };
   for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
     list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); if (b[6]) { e.set(0, b[6], 0); q.setFromEuler(e); } else q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7]).multiplyScalar(0.88)); });          /* walls a little under white: pure white is kept for the aircraft, clouds, snow and surf */
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 22000 : 11000 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 22000 : BIGGRID ? 16000 : 11000 }; scene.add(im); cityMeshes.push(im); }
   const flatMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const [k, list] of flat) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 18000 : 9000 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 18000 : BIGGRID ? 13500 : 9000 }; scene.add(im); cityMeshes.push(im); }
+  // What stands on the roofs, seen from low down (not on small phones): a tall block ends in a set-back top floor, sometimes with a mast; a lower one
+  // carries its stair house and the white boiler tanks with their dark collectors that every Israeli roof has. Small plain boxes, drawn only near.
+  if (BIGGRID) try { for (const [k, list] of boxes) { const out = [];
+      for (const b of list) { const sx = b[3], H = b[4], sz = b[5]; if (H < 9 || Math.min(sx, sz) < 10) continue;
+        const R = rng(Math.round(Math.abs(b[0] * 13.7 + b[2] * 7.3)) + 1), ry = b[6] || 0, co = Math.cos(ry), si = Math.sin(ry), top = b[1] + H, at = (ox, oz, wd, ht, dp, colr) => out.push([b[0] + ox * co + oz * si, top, b[2] - ox * si + oz * co, wd, ht, dp, ry, colr]);
+        if (H > 34) { at(0, 0, sx * 0.62, 4 + R() * 5, sz * 0.62, 0x8f959b); if (R() < 0.5) at((R() - 0.5) * sx * 0.3, (R() - 0.5) * sz * 0.3, 2.2, 7 + R() * 8, 2.2, 0x6f757c); }
+        else { if (R() < 0.7) at((R() - 0.5) * sx * 0.5, (R() - 0.5) * sz * 0.5, 4.2, 2.8, 3.6, 0xb9b4a8); const nT = 1 + Math.floor(R() * 2); for (let i = 0; i < nT; i++) { const ox = (R() - 0.5) * (sx - 6), oz = (R() - 0.5) * (sz - 4); at(ox, oz, 1.3, 1.5, 1.3, 0xeeeeea); at(ox + 1.9, oz, 2.0, 0.5, 1.4, 0x2c3440); } } }
+      if (!out.length) continue; const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, out.length);
+      out.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
+      im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 3000 }; scene.add(im); cityMeshes.push(im); } } catch (err) { console.warn('roof detail left out', err); }
   for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : 6000 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : BIGGRID ? 8500 : 6000 }; scene.add(im); cityMeshes.push(im); }
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
   cityLights = new THREE.Points(lg, clampPoints(new THREE.PointsMaterial({ size: 30, map: lightDot(), color: 0xffc46b, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }), 1.6, 12));
   cityLights.visible = false; scene.add(cityLights);

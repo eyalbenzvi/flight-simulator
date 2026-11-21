@@ -243,6 +243,11 @@ What was done with that (round eight, softening):
   60 m grid), a broad wobble takes over from high up, and along a border the colour leans toward the neighbouring class (`tPal`,
   `landCoverPalette`), so borders are soft bands that wander, not lines in steps.
 - The finer terrain grid (384 x 704) is used on a phone with 6 GB or more (`BIGGRID`).
+- Second run on that phone: 60 frames a second as played at x2 in all three places (the synced lines are noise at that level). On that evidence
+  `BIGGRID` phones also get the building ground shadows (`tBS`), draw distances between the small phone's and the desktop's, and roof detail
+  (`buildCities`: a set-back top floor and sometimes a mast on blocks over 34 m, a stair house, white boiler tanks and dark collectors on lower
+  ones; plain instanced boxes per 6 km bucket, drawn within 3 km). These three were written without being run or looked at here (the owner asked
+  that nothing be rendered or measured in this environment): treat them as unverified until he reports.
 
 ## Start-up
 

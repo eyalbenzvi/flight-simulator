@@ -265,5 +265,5 @@ function buildCityLandmarks() {
       k(b, l.x, Math.max(y, l.kind === 'port' || l.kind === 'marina' ? 0 : y), l.z, l.o); }
     const ext = Math.max(...list.map(l => Math.hypot(l.x - cx, l.z - cz) + l.r + 300));
     for (const [set, geo] of b.meshes()) { const m = new THREE.Mesh(geo, mats[set]); m.position.set(cx, 0, cz); m.updateMatrix(); m.matrixAutoUpdate = false;
-      m.userData = { x: cx, z: cz, half: ext, far: HIRES ? 26000 : 14000 }; scene.add(m); LMK.meshes.push(m); } }
+      m.userData = { x: cx, z: cz, half: ext, far: HIRES ? 26000 : BIGGRID ? 19000 : 14000 }; scene.add(m); LMK.meshes.push(m); } }
 }

@@ -154,7 +154,7 @@ function buildSites() {
     let cx = 0, cz = 0, ext = 0; for (const b of g.list) { cx += b[0]; cz += b[2]; } cx /= g.list.length; cz /= g.list.length;
     g.list.forEach((b, n) => { e.set(0, b[3], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[4], b[5], b[6]); m4.compose(p, q, sc); im.setMatrixAt(n, m4);
       im.setColorAt(n, b[7] !== null ? col.setHex(b[7]) : col.setRGB(b[8], b[8], b[8])); ext = Math.max(ext, Math.hypot(b[0] - cx, b[2] - cz)); });
-    im.frustumCulled = false; im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: ext + 300, far: (HIRES ? 1 : 0.55) * (FAR[g.kind] || 11000) }; scene.add(im); SITE.meshes.push(im);
+    im.frustumCulled = false; im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: ext + 300, far: (HIRES ? 1 : BIGGRID ? 0.75 : 0.55) * (FAR[g.kind] || 11000) }; scene.add(im); SITE.meshes.push(im);
   }
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
   siteLights = new THREE.Points(lg, clampPoints(new THREE.PointsMaterial({ size: 14, map: lightDot(), color: 0xff3020, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }), 1.6, 9));
