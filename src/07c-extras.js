@@ -16,6 +16,11 @@ function padRead(dt) {
 }
 
 function buildExtras() {
+  buildOldCity();
+  // --- the aircraft shadows itself (wing on fuselage, tail on wing): one small shadow map that follows it; larger screens only ---
+  if (HIRES && new URLSearchParams(location.search).get('shadow') !== '0') { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; sun.castShadow = true; const c = sun.shadow.camera; c.left = c.bottom = -42; c.right = c.top = 42; c.near = 850; c.far = 1150; c.updateProjectionMatrix();
+    sun.shadow.mapSize.set(1024, 1024); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
+    for (const k in AC.models) AC.models[k].g.traverse(o => { const m = o.material; if (o.isMesh && m && !m.transparent && (m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial)) { o.castShadow = true; o.receiveShadow = true; } }); }
   // --- cars: a small body and cabin, drawn for the cars of the traffic that are near the camera ---
   { const g = mergeGeo([[new THREE.BoxGeometry(1.85, 0.7, 4.4).translate(0, 0.62, 0), 1, 1, 1], [new THREE.BoxGeometry(1.6, 0.55, 2.3).translate(0, 1.22, 0.25), 0.16, 0.2, 0.25],
       [new THREE.BoxGeometry(1.9, 0.3, 0.3).translate(0, 0.5, -2.12), 0.3, 0.3, 0.32], [new THREE.CylinderGeometry(0.34, 0.34, 1.95, 8).rotateZ(Math.PI / 2).translate(0, 0.34, 1.4), 0.07, 0.07, 0.08], [new THREE.CylinderGeometry(0.34, 0.34, 1.95, 8).rotateZ(Math.PI / 2).translate(0, 0.34, -1.4), 0.07, 0.07, 0.08]]);
@@ -61,6 +66,29 @@ function buildExtras() {
   // --- the lightning bolt: a jagged ribbon from the cloud base to the ground, shown for the length of the flash ---
   { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 2 * 3), 3)); const I = []; for (let k = 0; k < 15; k++) I.push(k * 2, k * 2 + 1, k * 2 + 2, k * 2 + 1, k * 2 + 3, k * 2 + 2); g.setIndex(I);
     XT.bolt = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xf2f4ff, side: THREE.DoubleSide, fog: false, toneMapped: false, transparent: true, depthWrite: false })); XT.bolt.frustumCulled = false; XT.bolt.visible = false; scene.add(XT.bolt); }
+}
+
+/** Jerusalem's Old City: crenellated walls on the real outline with towers at the corners and gates, and inside them a tight fabric of small
+    stone houses, a third of them domed, with alleys between. Two instanced meshes; every house is a solid obstacle. */
+function buildOldCity() {
+  const O = OLDCITY, P = O.poly, mat = new THREE.MeshLambertMaterial({ vertexColors: true }), box = mergeGeo([[new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), 1, 1, 1]]), dome = mergeGeo([[new THREE.SphereGeometry(0.5, 10, 6, 0, 6.2832, 0, 1.5708), 1, 1, 1]]);
+  const B = [], D = [], stoneC = [0xe2d3ae, 0xd9c79f, 0xe8dcbc, 0xcfbd95, 0xdccfae, 0xc9b78d], put = (x, y, z, sx, sy, sz, ry, col) => B.push([x, y, z, sx, sy, sz, ry, col]);
+  // walls: a run of wall per edge, merlons along the top, a tower at every corner (the gates stand taller)
+  for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz), ry = Math.atan2(dx, dz), n = Math.ceil(len / 40);
+    for (let k = 0; k < n; k++) { const f = (k + 0.5) / n, x = O.x + a[0] + dx * f, z = O.z + a[1] + dz * f, y = Math.min(triHeight(x, z), triHeight(O.x + a[0] + dx * k / n, O.z + a[1] + dz * k / n), triHeight(O.x + a[0] + dx * (k + 1) / n, O.z + a[1] + dz * (k + 1) / n)) - 3; put(x, y, z, 5, 17, len / n + 0.5, ry, 0xd6c8a2);
+      addObst(x, z, 5, len / n, -ry, y, y + 17); for (let m = 0; m < len / n / 4.2 - 0.5; m++) { const g = (m + 0.5) * 4.2 - len / n / 2; put(x + Math.sin(ry) * g, y + 17, z + Math.cos(ry) * g, 5.4, 1.6, 2.2, ry, 0xd6c8a2); } }
+    const gate = i === 2 || i === 10 || i === 8 || i === 7, tx = O.x + a[0], tz = O.z + a[1], ty = triHeight(tx, tz) - 3, tw = gate ? 20 : 13, th = gate ? 27 : 22; put(tx, ty, tz, tw, th, tw, ry, 0xcfc09a); addObst(tx, tz, tw, tw, 0, ty, ty + th);
+    for (const [u, v] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put(tx + u * tw * 0.4, ty + th, tz + v * tw * 0.4, tw * 0.2, 1.8, tw * 0.2, ry, 0xcfc09a); }
+  // houses: a jittered 16 m lattice, each cell one house or a pair, never on the Temple Mount platform, a road or something that already stands there
+  for (let a = -430; a <= 140; a += 16) for (let b = -335; b <= 325; b += 16) { const h1 = hash2(a * 0.37 + 5, b * 0.71 + 9), h2 = hash2(a * 0.91 + 2, b * 0.33 + 4), h3 = hash2(a * 0.13 + 8, b * 0.57 + 1);
+    const x = O.x + a + (h1 - 0.5) * 3, z = O.z + b + (h2 - 0.5) * 3; if (!inOldCity(x, z, 13) || (Math.abs(a) < 146 && Math.abs(b) < 176) || h3 < 0.07) continue;
+    const w = 9.5 + h1 * 4.5, d = 9.5 + h2 * 4.5, h = 6 + h3 * 9 + (h1 > 0.9 ? 6 : 0); if (nearRoad(x, z, 7) || obstBox(x, z, w / 2, d / 2) || LMK.list.some(l => Math.hypot(l.x - x, l.z - z) < l.r * 0.75 + 7)) continue;
+    const y = triHeight(x, z) - 2.5, col = stoneC[(h3 * 97 | 0) % stoneC.length]; put(x, y, z, w, h + 2.5, d, (h1 - 0.5) * 0.12, col); addObst(x, z, w, d, 0, y, y + h + 2.5);
+    if (h2 > 0.64) D.push([x, y + h + 2.5, z, Math.min(w, d) * 0.62, col]); else if (h1 > 0.5) put(x + (h2 - 0.3) * 3, y + h + 2.5, z + (h1 - 0.7) * 3, w * 0.4, 2.4, d * 0.4, 0, col); }
+  const o = new THREE.Object3D(), c = new THREE.Color(), bm = new THREE.InstancedMesh(box, mat, B.length), dm = new THREE.InstancedMesh(dome, mat, Math.max(1, D.length));
+  B.forEach((e, k) => { o.position.set(e[0], e[1], e[2]); o.rotation.set(0, e[6], 0); o.scale.set(e[3], e[4], e[5]); o.updateMatrix(); bm.setMatrixAt(k, o.matrix); bm.setColorAt(k, c.setHex(e[7])); });
+  D.forEach((e, k) => { o.position.set(e[0], e[1] - 0.2, e[2]); o.rotation.set(0, 0, 0); o.scale.set(e[3], e[3] * 0.85, e[3]); o.updateMatrix(); dm.setMatrixAt(k, o.matrix); dm.setColorAt(k, c.setHex(k % 7 === 0 ? 0x8f9aa0 : e[4]).multiplyScalar(0.96)); });
+  for (const m of [bm, dm]) { m.frustumCulled = false; m.userData = { x: O.x - 145, z: O.z, half: 340, far: 16000 }; scene.add(m); cityMeshes.push(m); } XT.oldCity = [bm, dm];
 }
 
 /** One puff of smoke or vapour into the trail buffer. */

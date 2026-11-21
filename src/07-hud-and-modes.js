@@ -411,6 +411,7 @@ function applyWeather() {
   if (WX === 2) { f.color.lerp(tmpC.setRGB(0.40 * dim, 0.43 * dim, 0.48 * dim), 0.85); skyU.hor.value.lerp(tmpC, 0.9); skyU.top.value.lerp(tmpC.multiplyScalar(0.6), 0.85); sun.intensity = t.sunI * 0.35; ENV.sunCol.value.multiplyScalar(0.35);
     hemi.intensity = t.hI * 0.8; ENV.skyCol.value.multiplyScalar(0.8); ENV.gndCol.value.multiplyScalar(0.8); skyU.sunCol.value.multiplyScalar(0.15); if (glare) glare.material.opacity *= 0.1; }
   if (cloudMat) { cloudMat.uniforms.uOp.value = WX === 2 ? 1 : 0.9; cloudMat.uniforms.uGrow.value = WX === 2 ? 2.6 : WX === 1 ? 0.8 : 1; if (WX === 2) cloudMat.color.multiplyScalar(0.42); }       /* in a storm the clouds swell and join into a dark deck */
+  if (TERRAIN_MAT) TERRAIN_MAT.uniforms.uWet.value = WX === 2 ? 1 : 0;
   ENV.fogCol.value.copy(f.color); $('rain').style.display = 'none';       /* the rain is in the world now (updateRain), not a striped overlay */
 }
 function updateWeather(dt) {

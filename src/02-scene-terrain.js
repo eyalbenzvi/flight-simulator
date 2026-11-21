@@ -161,7 +161,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -194,7 +194,8 @@ const TERRAIN_FS = `
     col=mix(col, col*1.2+0.04, arid*wadi*0.8);
     col*=1.0-arid*0.08*smoothstep(0.45,0.8,nC);
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
-    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r;
+    float lcG=0.0;
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r; lcG=lc;
       float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
         if(lc<1.5){ float h1=nz(P/16.0+0.21), can=smoothstep(0.40,0.66,h1*0.55+nD*0.45), h2=nz((P+sunDir.xz*9.0)/16.0+0.21);          /* forest: a canopy of crowns, each lit on its sun side with a shadowed gap behind */
@@ -224,7 +225,7 @@ const TERRAIN_FS = `
     float strata=0.5+0.5*sin(vW.y*0.085+nC*5.0+nB*9.0);
     col=mix(col, mix(vec3(0.50,0.47,0.41),vec3(0.72,0.47,0.30),arid)*(0.82+0.28*strata), steep);
     // snow above the Hermon snow line, thinner on cliffs
-    col=mix(col, vec3(0.95,0.96,1.0), smoothstep(1750.0,2150.0,vW.y+(nC-0.5)*520.0)*(1.0-0.55*steep));
+    col=mix(col, vec3(0.95,0.96,1.0), smoothstep(1750.0,2150.0,vW.y+(nC-0.5)*520.0-normalize(vN).z*520.0-normalize(vN).x*140.0)*(1.0-0.55*steep));          /* snow lies lower on slopes that face north, away from the sun */
     vec3 emis=vec3(0.0); vec3 warm=vec3(1.0,0.72,0.36);
     // towns: street grid, roofs, trees; street lamps at night
     if(urban>0.01){ vec2 q=(P-uOrg)/60.0; vec2 cq=floor(q); vec2 fq=abs(fract(q)-0.5);
@@ -258,7 +259,14 @@ const TERRAIN_FS = `
       bsh*=1.0-smoothstep(2600.0,3800.0,vDist); }
     float lowSun=clamp(1.0-sunDir.y*1.6,0.0,1.0), shB=max(vLit.x,0.22*lowSun);          // at a low sun a mountain's shadow is not black
     float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*shB*(1.0-0.80*bsh);                        // vLit: baked mountain shadow and valley occlusion
+    col*=1.0-0.26*uWet;
     vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5)*mix(0.80,1.0,shB)*vLit.y)+emis;
+    { vec3 V=normalize(cameraPosition-vW);
+      /* the sun flashes off solar fields and greenhouse roofs, panel by panel, when the camera is where the mirror points */
+      if(lcG>12.5&&lcG<14.5&&vDist<26000.0){ vec3 Hh=normalize(V+sunDir); float pn=nz(floor(P/14.0)*0.37); vec3 pnl=normalize(vec3((pn-0.5)*0.10,1.0,lcG>13.5?0.34:0.04)); float sp=pow(max(dot(Hh,pnl),0.0),lcG>13.5?260.0:220.0);
+        c+=sunCol*sp*(lcG>13.5?2.2:0.45)*shB*(1.0-0.6*cs)*step(0.25,pn)*smoothstep(350.0,1500.0,vDist); }
+      /* rain: wet ground is darker and mirrors the sky at a low angle */
+      c=mix(c,skyCol*1.25+fogCol*0.25,uWet*0.42*pow(1.0-max(V.y,0.0),5.0)*smoothstep(0.75,0.98,N.y)); }
     { float k=hazeK(vDist,cameraPosition.y,vW.y,fogDen)*(1.0+max(outside,0.0)/9000.0); vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); c=c*T+hazeCol(fogCol,vW-cameraPosition,sunDir,sunCol)*(1.0-T); }
     c=toneC(c);
     gl_FragColor=vec4(c,1.0);
@@ -344,7 +352,7 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;

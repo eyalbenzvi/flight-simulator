@@ -180,7 +180,9 @@ function buildCities() {
         const ox = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
         let w2 = bw * f[2], d2 = bd * f[2]; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) { w2 *= 0.7; d2 *= 0.7; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) continue; }       // something stands there already: a smaller block, or none
         const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.75 + ((s2 + k * 0.3) % 1) * 0.4 : 1);
-        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, 0, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, 0, by - 8, by + h2); } }
+        // a block that stands alone in its cell turns to face the nearest street (when its turned corners stay clear of the road and of its neighbours)
+        let rot = n === 1 && st !== 4 ? roadDirAt(f[0], f[1], 130) : 0; if (rot) { const rr = Math.hypot(w2, d2) / 2; if (nearRoad(f[0], f[1], rr - 3) || obstBox(f[0], f[1], rr, rr) || landmarkAt(f[0], f[1], rr)) rot = 0; }
+        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, rot, pal[((s3 + k * 0.29) * pal.length | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, rot, by - 8, by + h2); } }
     if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
   // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
@@ -197,7 +199,7 @@ function buildCities() {
     const t = new THREE.DataTexture(a, w, h, THREE.RGBAFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; TERRAIN_MAT.uniforms.tBS.value = t; TERRAIN_MAT.uniforms.uBS.value = 1; }
   const centre = k => { const [bx, bz] = k.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK; return [cx, cz, new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 400)]; };
   for (const [k, list] of boxes) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, bldMat, list.length);
-    list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7]).multiplyScalar(0.88)); });          /* walls a little under white: pure white is kept for the aircraft, clouds, snow and surf */
+    list.forEach((b, n) => { p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); if (b[6]) { e.set(0, b[6], 0); q.setFromEuler(e); } else q.set(0, 0, 0, 1); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7]).multiplyScalar(0.88)); });          /* walls a little under white: pure white is kept for the aircraft, clouds, snow and surf */
     im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 22000 : 11000 }; scene.add(im); cityMeshes.push(im); }
   const flatMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const [k, list] of flat) { const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, list.length);
@@ -225,7 +227,7 @@ function buildLandmarks() {
     add(new THREE.CylinderGeometry(60, 60, 36, 8), new THREE.MeshLambertMaterial({ color: 0x8fb8c9 }), x, y + 34, z);
     add(new THREE.CylinderGeometry(36, 36, 22, 20), new THREE.MeshLambertMaterial({ color: 0xe8ddb8 }), x, y + 63, z);
     add(new THREE.SphereGeometry(37, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshPhongMaterial({ color: 0xe0a91c, emissive: 0x4a3200, shininess: 120, specular: 0xfff0b0 }), x, y + 73, z);
-    for (const [wx, wz, sx, sz] of [[-420, 0, 12, 640], [130, 0, 12, 640], [-145, -320, 560, 12], [-145, 320, 560, 12]]) add(new THREE.BoxGeometry(sx, 26, sz), stone, x + wx, heightAt(x + wx, z + wz) + 5, z + wz); }
+  }          /* the walls and the houses inside them: buildOldCity */
   // Masada mesa above the Dead Sea shore
   { const x = lon2x(35.354), z = lat2z(31.316), y = heightAt(x, z);
     add(new THREE.CylinderGeometry(250, 430, 380, 9), new THREE.MeshLambertMaterial({ color: 0xb99668 }), x, y + 170, z).rotation.y = 0.4;
@@ -324,6 +326,12 @@ function nearRoad(x, z, r) {
   for (const [ax, az, bx, bz, hw] of a) { const dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0, 1);
     if (Math.hypot(x - ax - dx * t, z - az - dz * t) < hw + r + 4) return true; }
   return false;
+}
+/** Direction (rotation about Y, folded into -45..45 degrees) of the nearest road within `far` metres, or 0: a lone block turns to face its street. */
+function roadDirAt(x, z, far) {
+  if (!ROADIDX) roadIndex(); const a = ROADIDX.get(Math.floor(x / RIDX_C) * 100003 + Math.floor(z / RIDX_C)); if (!a) return 0; let best = far, rot = 0;
+  for (const [ax, az, bx, bz] of a) { const dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0, 1), d = Math.hypot(x - ax - dx * t, z - az - dz * t); if (d < best) { best = d; rot = Math.atan2(dx, dz); } }
+  rot = ((rot % 1.5708) + 1.5708) % 1.5708; if (rot > 0.7854) rot -= 1.5708; return Math.abs(rot) < 0.12 ? 0 : rot;
 }
 /** Level junctions and crossings get a plain asphalt patch on top, so the edge lines and dashes of the roads that meet do not run
     across each other. A patch sits on the wider road's centreline with that road's asphalt half-width, so it never spills past it.
@@ -632,9 +640,11 @@ function buildIsrael() {
   inst(GEO.minaret, mins, [42, 42, 42]);
   inst(mergeGeo([[new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0.62, 0.72, 0.66], [new THREE.BoxGeometry(2.6, 1.2, 2.6).translate(0, -0.6, 0), 0.9, 0.86, 0.76]]), domes, [8, 8, 8]);
   // --- Tel Aviv: hotel wall along the beach, breakwaters, Jaffa's hill and clock tower, the Kirya antenna tower ---
-  const slab = windowize(lam(0xe9e6de)), rock = lam(0x4a4d50), stone = lam(0xd9c79f);
+  const slab = windowize(lam(0xe9e6de)), rock = lam(0x4a4d50), stone = lam(0xd9c79f), rockF = new THREE.MeshLambertMaterial({ color: 0x6b6258, flatShading: true });
   for (let i = 0; i < 12; i++) { const lat = 32.062 + i * 0.0042, x = lon2x(coastLon(lat) + 0.0075), z = lat2z(lat), h = 55 + R() * 55; if (!groundAt(x, z).water) put(new THREE.BoxGeometry(24, h, 62), slab, x, heightAt(x, z) + h / 2 - 3, z).rotation.y = 0.25;
-    put(new THREE.BoxGeometry(14, 5, 110), rock, lon2x(coastLon(lat) - 0.0065), 0.5, z).rotation.y = 0.3; }
+    { const g = new THREE.CylinderGeometry(8, 8, 84, 9, 10).rotateX(Math.PI / 2), p = g.attributes.position;          /* a detached breakwater is a low mound of boulders, not a slab */
+      for (let k = 0; k < p.count; k++) { const e = 1 - Math.pow(Math.abs(p.getZ(k)) / 42, 4); p.setXYZ(k, p.getX(k) * (0.75 + R() * 0.5) * (0.35 + 0.65 * e), p.getY(k) * 0.34 * (0.7 + R() * 0.6) * (0.3 + 0.7 * e), p.getZ(k) + (R() - 0.5) * 5); }
+      g.computeVertexNormals(); put(g, rockF, lon2x(coastLon(lat) - 0.0065), 0.1, z).rotation.y = 0.3; } }
   { const x = lon2x(34.754), z = lat2z(32.0535), y = heightAt(x, z); for (let i = 0; i < 46; i++) { const a = R() * 6.283, r = 190 * Math.sqrt(R()), w = 14 + R() * 14, h = 10 + R() * 12 + (190 - r) * 0.08, bx = x + Math.cos(a) * r + 60, bz = z + Math.sin(a) * r; if (!nearRoad(bx, bz, w * 0.71)) put(new THREE.BoxGeometry(w, h, w), stone, bx, y + 8, bz); }
     put(new THREE.BoxGeometry(7, 34, 7), stone, x + 150, y + 17, z - 120); put(new THREE.ConeGeometry(6, 9, 4), lam(0x8a4a3a), x + 150, y + 38, z - 120);
     const kx = lon2x(34.787), kz = lat2z(32.073), ky = heightAt(kx, kz); put(new THREE.BoxGeometry(16, 110, 16), lam(0xbfc4c8), kx, ky + 55, kz); put(new THREE.CylinderGeometry(0.8, 2.5, 34, 6), lam(0xd8443a), kx, ky + 127, kz); }

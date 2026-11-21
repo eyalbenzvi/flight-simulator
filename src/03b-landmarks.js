@@ -81,7 +81,16 @@ const LANDMARKS = {
 
 const LMK = { list: [], meshes: [], clear: new Map() };
 /** Step 1, before buildCities: place every landmark (nudged off roads) and reserve its ground, so the generic blocks keep clear. */
+/** Jerusalem's Old City: the outline of the walls (metres from the centre of the Temple Mount platform, x east, z south; clockwise from the north-west
+    corner by the New Gate, Damascus Gate, Herod's Gate, the Stork Tower, the east wall, the Dung Gate, Zion Gate, the south-west corner, Jaffa Gate).
+    The generic city blocks keep out; `buildOldCity` (src/07c-extras.js) fills it with a dense fabric of small stone houses. */
+const OLDCITY = { x: lon2x(35.21) + 520, z: lat2z(31.78) + 60, poly: [[-420, -250], [-330, -288], [-170, -332], [-20, -302], [132, -292], [132, 300], [20, 312], [-60, 252], [-250, 322], [-400, 300], [-424, 20]] };
+function inOldCity(x, z, pad) { const P = OLDCITY.poly, px = x - OLDCITY.x, pz = z - OLDCITY.z; let ins = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j]; if ((zi > pz) !== (zj > pz) && px < (xj - xi) * (pz - zi) / (zj - zi) + xi) ins = !ins; }
+  if (!ins || !pad) return ins; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, zi] = P[i], [xj, zj] = P[j], dx = xj - xi, dz = zj - zi, t = clamp(((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz), 0, 1); if (Math.hypot(px - xi - dx * t, pz - zi - dz * t) < pad) return false; }
+  return true; }
 function planLandmarks() {
+  for (let a = -440; a <= 150; a += 55) for (let b = -340; b <= 330; b += 55) if (inOldCity(OLDCITY.x + a, OLDCITY.z + b)) reserveGround(OLDCITY.x + a, OLDCITY.z + b, 42);
   const R = { tower: 30, twin: 60, stadium: 130, arena: 60, campus: 140, hospital: 90, park: 0, mall: 80, hangars: 120, marina: 0, lighthouse: 12, observatory: 25, yeshiva: 60, factory: 120, ribbons: 40,
     hotels: 0, ferris: 30, watertower: 12, synagogue: 25, port: 0, fortress: 60, desal: 90, koffler: 20, squareTower: 15, mosque: 40, church: 40, basilica: 50, sepulchre: 50, citadel: 50, prism: 60,
     dormition: 35, patriarchs: 60, mausoleum: 40, nativity: 50, tomb: 15, ruins: 60, theater: 50, flagpole: 10, stacks: 60 };
