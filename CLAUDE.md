@@ -171,6 +171,10 @@ the map image changes (checked every 3 s). A canvas texture created after start-
     in screen axes, neutral taken when a flight starts or the menu closes, 30° of roll and 22° of pitch for full deflection, always yoke-like. The
     permission iOS needs is asked from the settings tap or the FLY tap. The maths passes a synthetic test for both platforms' sign conventions, but it
     has never run on a real phone.
+- Fast forward (`RATES`, `RATE`, `setRate` in `src/08-app.js`): the world runs at ×1, ×1.25, ×1.5 or ×2. The main loop passes `sdt` (frame time × rate) to
+  the flight model, traffic, trains, weather and the clock, in two steps per frame when the rate is above 1 so a physics step is never longer than at ×1;
+  camera, toasts and the crash screen stay on real time. On touch the rate button sits in the folded "more" row (it stays open while tapped, and the
+  "more" button shows the rate while time runs fast); `[` and `]` on a keyboard; a row in the pause menu's settings. It is not saved: a visit starts at ×1.
 - HUD buttons use `tapButton` (acts on `pointerup`): a click is only sent for a one-finger tap, so with a thumb on the stick nothing else worked.
 - Keys: while the menu is open only Esc is the game's; Ctrl/Alt/Meta with a letter is left to the browser; leaving in mid-flight asks first.
 - `SAVE` keeps plane, level, language, stick sense, the picked place, time, weather, view, names, smoke, key guide, sound, instruments (`pfd`) ; the loader validates every field (a damaged save must not stop the game). A first visit starts in the air over Tel Aviv.

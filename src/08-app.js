@@ -61,6 +61,10 @@ function foldMore(close) { const m = $('cMore'), box = $('ctxMore'); clearTimeou
 /** A button that also answers a second finger: browsers send a click only for a one-finger tap, so with a thumb on the stick no HUD button worked.
     It acts when the finger or mouse button comes up; a click with no pointer (the keyboard) still works. */
 function tapButton(b, fn) { b.addEventListener('pointerup', e => { if (e.button === 0 || e.pointerType !== 'mouse') fn(e); }); b.addEventListener('click', e => { if (e.detail === 0) fn(e); }); }
+/** Fast forward, as on a video player: the whole world (flight, traffic, weather, the clock) runs at 1, 1.25, 1.5 or 2 times its speed. On touch it is in
+    the folded "more" row (the button shows the rate, and so does the "more" button while time runs fast); keys [ and ] on a keyboard; a row in the settings. */
+const RATES = [1, 1.25, 1.5, 2], RATE = { i: 0, v: 1 };
+function setRate(i, say) { RATE.i = clamp(i | 0, 0, RATES.length - 1); RATE.v = RATES[RATE.i]; const t = '×' + RATE.v; $('cRate').textContent = t; $('cRate').classList.toggle('on', RATE.v > 1); S.legSig = ''; if (say) toast(L('Speed ', 'מהירות ') + t, 1.4); }
 function action(code) {
   if (S.crashed && (code === 'Escape' || code === 'Tab' || code === 'KeyO')) return;          // the crash screen has its own two buttons; a menu or photo mode opened under it left them dead
   if (code === 'Escape' || (code === 'Tab' && !S.paused)) {          /* Tab opens the menu; inside it Tab moves between the buttons, as everywhere */ if (PH.on) return action('KeyO'); return S.paused ? closeMenu() : openMenu(); }
@@ -69,6 +73,7 @@ function action(code) {
   if (PH.on) return;
   if (code === 'KeyR') { if (S.lastSpawn) spawn(S.lastSpawn); return; }
   if (code === 'KeyM') return Snd.toggle();
+  if (code === 'Rate' || code === 'BracketRight' || code === 'BracketLeft') return setRate(code === 'Rate' ? (RATE.i + 1) % RATES.length : clamp(RATE.i + (code === 'BracketRight' ? 1 : -1), 0, RATES.length - 1), true);
   if (code === 'KeyC') { S.cam = (S.cam + 1) % CAMS.length; camSnap = S.cam === 0 || S.cam === 3; toast(tr(CAMS[S.cam]), 1.6); return; }
   if (code === 'KeyT') { S.tod = (S.tod + 1) % 4; applyTOD(S.tod); return; }
   if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
@@ -137,7 +142,7 @@ function setupTouch() {
   th.addEventListener('pointercancel', () => thId = null);
   document.querySelectorAll('#ctx button').forEach(b => { const k = b.dataset.k;
     if (b.dataset.hold) { b.addEventListener('pointerdown', () => keys[k] = true); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, () => keys[k] = false); }
-    else tapButton(b, () => { action(k); if (b.parentNode.id === 'ctxMore') foldMore(true); }); });
+    else tapButton(b, () => { action(k); if (b.id === 'cRate') foldMore(false); else if (b.parentNode.id === 'ctxMore') foldMore(true); }); });          /* the rate button stays open, to be tapped again */
   // Land, Roll and Loop are folded behind one "more" button: it opens them, and they fold away again after a choice or a few seconds
   tapButton($('cMore'), () => foldMore($('cMore').getAttribute('aria-expanded') === 'true'));
   setupMapGestures(); $('map').addEventListener('click', () => { if (!mapWasDragged()) $('map').classList.toggle('big'); });
@@ -212,6 +217,7 @@ function settingsRows(el, where, rer) {
   row(L('Weather', 'מזג אוויר'), WXN.map(tr), WX, i => { WX = i; applyTOD(S.tod); });
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
   if (touchUI) row(L('Steering', 'היגוי'), [L('Thumb stick', 'ג׳ויסטיק'), L('Tilt the phone', 'הטיית הטלפון')], SAVE.tilt | 0, i => { SAVE.tilt = i; if (i) tiltStart(); else tiltStop(); });
+  if (where === 'pause') row(L('Speed of time', 'מהירות הזמן'), RATES.map(r => '×' + r), RATE.i, i => setRate(i));
   row(L('Graphics', 'גרפיקה'), [L('Automatic', 'אוטומטי'), L('Fast', 'מהיר'), L('Best', 'מרבי')], SAVE.gfx | 0, i => { SAVE.gfx = i; applyGfx(i); });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
   row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
@@ -288,9 +294,9 @@ function loop(now) {
   if (last && S.started && !S.paused) autoRes(now - last);
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now; frame++;
-  const run = S.started && !S.paused && !PH.on; if (run || !S.started) TNOW += dt;
+  const run = S.started && !S.paused && !PH.on, sdt = dt * (run ? RATE.v : 1); if (run || !S.started) TNOW += sdt;          // sdt: the time the world lives through this frame (faster with the time setting)
   if (run) {
-    if (!S.crashed) {
+    for (let k = 0, n = RATE.v > 1 ? 2 : 1, dt = sdt / n; k < n && !S.crashed; k++) {          /* two steps per frame when time runs fast, so each step stays as short as at normal speed */
       if (!S.arc || S.land || S.ap.on) { A.sync = true; readAttitude(); updateControls(dt); for (let i = 0; i < 2 && !S.crashed; i++) physics(dt / 2); } else arcadeStep(dt);
       if (!S.crashed && (!S.onGround || S.V > 4)) {          // buildings and other aircraft are solid, also for an aircraft rolling on the ground
         if (hitObstacle(S.pos.x, S.pos.y - GEAR_H * 0.5, S.pos.z, PL.chase[0] * 0.12)) crash(L('Flew into a building.', 'התנגשות בבניין'));
@@ -314,7 +320,7 @@ function loop(now) {
   if ((run || !S.started) && cloudMat) cloudMat.uniforms.uDrift.value += 6 * dt;
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
-  updateScatter(); if (run || !S.started) { updateTrains(dt); updateAIT(dt); updateWeather(dt); todTick(dt); updateTraffic(dt); for (const h of turbines) h.rotation.z += h.userData.v * dt; }
+  updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
   updateExtras(dt, run, run || !S.started);
   renderFrame();
 }
