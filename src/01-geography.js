@@ -65,7 +65,7 @@ const PEAKS = [[35.41, 32.997, 330, 0.03, 0.025], [35.5, 32.975, 150, 0.02, 0.01
 const VALES = [[35.22, 32.6, 70, 0.13, 0.05], [35.32, 32.81, 150, 0.07, 0.02], [35.0, 32.35, 40, 0.06, 0.12]];
 // Volcanic cones of the Golan and the Ajloun highlands, east of the rift
 const CONES = [[35.795, 33.11, 220, 0.012, 0.012], [35.785, 33.133, 200, 0.01, 0.01], [35.86, 32.955, 150, 0.012, 0.012], [35.8, 33.18, 150, 0.012, 0.012], [35.75, 32.33, 250, 0.08, 0.06]];
-function rawHeight(lon, lat) {
+function formulaHeight(lon, lat) {
   const d = lon - coastLon(lat);
   if (d < 0) return Math.max(-300, d * 1800);                          // Mediterranean seabed
   const rl = riftLon(lat), n1 = fbm(lon * 12, lat * 12, 4), n2 = fbm(lon * 48 + 5, lat * 48, 3);
@@ -100,6 +100,28 @@ function rawHeight(lon, lat) {
   // Mount Hermon
   h += 2000 * Math.exp(-(Math.pow((lon - 35.86) / 0.13, 2) + Math.pow((lat - 33.42) / 0.11, 2))) * (0.85 + 0.3 * n1);
   for (const p of CONES) { const a = (lon - p[0]) / p[3], b2 = (lat - p[1]) / p[4], q = a * a + b2 * b2; if (q < 8) h += p[2] * Math.exp(-q); }
+  return h;
+}
+
+/**
+ * Real elevations (`DEM_PNG`, made by `tools/dem2js.py` from SRTM and GEBCO; one sample per 0.00625 degrees, about the spacing of the terrain mesh).
+ * `rawHeight` reads them when they are loaded and falls back on the formula above when not. Three things are still the game's own, so that the
+ * water stays where everything else expects it: the sea is west of the coast table (`coastLon`), whatever the data says within a few hundred metres
+ * of it; the Sea of Galilee and the Dead Sea are the parts of their boxes that the data shows as lake surface (it stood at about -216 and -415 m
+ * when it was surveyed), pushed down under the game's water levels of -212 and -430.
+ */
+let DEMH = null;
+function demAt(lon, lat) {
+  const I = DEM_INFO, fx = clamp((lon - I.lon0) / I.step, 0, I.w - 1.001), fy = clamp((I.lat1 - lat) / I.step, 0, I.h - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, k = j * I.w + i;
+  return lerp(lerp(DEMH[k], DEMH[k + 1], u), lerp(DEMH[k + I.w], DEMH[k + I.w + 1], u), v);
+}
+function rawHeight(lon, lat) {
+  if (!DEMH) return formulaHeight(lon, lat);
+  let h = demAt(lon, lat); const d = lon - coastLon(lat);
+  if (d < 0) return Math.max(-300, Math.min(h, d * 1800, -1.5));
+  if (d < 0.03) h = Math.max(h, 1.5 + 9 * ss(0.001, 0.03, d));
+  if (h < -212.5 && lat > 32.68 && lat < 32.94 && lon > 35.48 && lon < 35.70) h = -234;
+  if (h < -408 && lat > 30.98 && lat < 31.86 && lon > 35.25 && lon < 35.68) h = -455;
   return h;
 }
 

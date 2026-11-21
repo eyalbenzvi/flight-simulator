@@ -18,6 +18,7 @@ With GitHub Pages enabled on the repository root, the same file is the live site
 | `src/01-geography.js` … `src/08-app.js` | The simulator, split by subsystem (see `CLAUDE.md`); `src/03b-landmarks.js` holds the city landmarks |
 | `src/data.js` | **Generated.** Settlement raster (base64 PNG) and the list of localities |
 | `src/roads.js` | **Generated.** The road network from OpenStreetMap |
+| `src/dem.js` | **Generated.** Real terrain elevations, by `tools/dem2js.py` |
 | `src/osmworld.js` | **Generated.** Land cover, buildings per cell, about 12,000 identifiable sites and the railways, from OpenStreetMap |
 | `data/` | The same data as plain files, plus previews |
 | `tools/build.py` | Inlines everything into one self-contained `dist/index.html` |
@@ -67,6 +68,9 @@ python3 tools/smoke_test.py dist/index.html
 ```
 
 ## Data sources and credit
+
+- Terrain elevation: Mapzen / AWS Open Data "Terrain Tiles" (<https://registry.opendata.aws/terrain-tiles/>), which here are NASA SRTM on land
+  and GEBCO at sea. Rebuild with `python3 tools/dem2js.py` (it fetches about 40 small tiles into `raw/dem/`) → `src/dem.js`.
 
 - Built-up surface and building height: GHSL (Global Human Settlement Layer), European Commission, Joint Research Centre,
   GHS-BUILT-S and GHS-BUILT-H R2023A.
