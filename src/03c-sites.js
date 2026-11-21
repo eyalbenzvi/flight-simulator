@@ -113,6 +113,6 @@ function buildSites() {
     im.frustumCulled = false; im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: ext + 300, far: (HIRES ? 1 : 0.55) * (FAR[g.kind] || 11000) }; scene.add(im); SITE.meshes.push(im);
   }
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(LP, 3));
-  siteLights = new THREE.Points(lg, new THREE.PointsMaterial({ size: 14, map: lightDot(), color: 0xff3020, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  siteLights = new THREE.Points(lg, clampPoints(new THREE.PointsMaterial({ size: 14, map: lightDot(), color: 0xff3020, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }), 1.6, 9));
   siteLights.visible = false; scene.add(siteLights);
 }

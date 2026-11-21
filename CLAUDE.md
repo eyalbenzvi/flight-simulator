@@ -78,6 +78,23 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 - Camera (`CAMX` in `updateCamera`): the chase camera leans into turns (half as much in Easy) and looks into them; a new start swings in from the side;
   a change of view blends over 0.38 s; shake is summed sines; `setViewOffset` keeps the aircraft clear of the instruments, and of the menu sheet
   (`menuOffset`).
+- Round three of the look (colour, sky, cities):
+  - One final grade lives in `toneC`, in the replaced tone-mapping chunk and at the end of the sky shader; keep the three copies identical.
+  - Sky dome: cirrus streaks (`uCir` per time of day), round stars, a moon with a halo at night (the night light direction is the moon). `TOD` holds the
+    colour script: an orange sunset over violet shade, a moonlit blue night; `den` is the haze density per time of day (denser than real air, for the 4:1 map).
+  - Clouds are one instanced, shaded billboard batch (`cloudMat`, uniforms `uCol`, `uOp`, `uGrow`, `uDrift`); in a storm they swell into a dark deck.
+    Rain is streaks in a box round the camera (`updateRain`). The explosion has a flash, debris that bounces, a scorch mark and long smoke.
+  - Buildings: `windowize` reflects the sky in every pane, flashes the sun pane by pane, colours lit windows three ways at night and lights the lowest
+    floors from the street. Buildings cast shadows on the ground through a per-cell box texture sampled in `TERRAIN_FS` (`tBS`, desktop only), not a shadow
+    map. Blocks are tested with `obstBox` before they are placed and dense cells stand their blocks side by side, so nothing runs through anything else.
+    City palettes are regional (`palAt`: stone in the hills, white and glass on the coast, sand in the Negev), walls are scaled to 0.88.
+  - Urban ground near the camera has yards, car parks, pavements and dashed streets; forests have a sun-lit canopy; rock and sand take half their colour
+    from the ground around; the desert varies in hue, not in grey. Trees stand on a soft shadow disc. At night roads are red and white ribbons
+    (`updateTraffic`), cities glow from altitude, point lights are clamped on screen (`clampPoints`).
+  - The fighter is a lathe model with an intake, a clear canopy and pilot, missiles and an afterburner with shock diamonds; the flight deck is a room
+    (floor, seats, overhead; a canopy bow and nose for bubble canopies); the terminal has windowed walls, a curved roof, piers, an apron texture, a tower.
+  - A closed power lever means no power in every level: the aircraft glides down (Medium's protections do not add power behind the pilot's back).
+  - Shake is small and almost absent in the cockpit and wing views (a metre from the panel, centimetres of camera movement made everything jump).
 - Interface polish layer (the last block of CSS in `index.html`): tokens (`--r1`, `--r2`, `--glass`, `--glass-solid`, `--elev`, `--ease`), a Hebrew font
   stack with no letter-spacing, menus as a side sheet (a bottom sheet on an upright phone) so the world shows, aircraft cards with pictures rendered at
   start-up (`shootPlanes`), a one-line title with the aircraft glyph, a dawn loading screen (`body:not(.ready)`), entry animations, one message slot

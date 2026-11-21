@@ -139,6 +139,7 @@ const TERRAIN_FS = `
     vec3 N=normalize(vec3(vN.x-g.x, vN.y, vN.z-g.y));
     float slope=1.0-N.y;
     vec3 col=vCol*(0.80+0.40*nA)*(1.0+(nE-0.5)*0.26*close);
+    col=mix(col, vCol*mix(vec3(0.93,0.80,0.66),vec3(1.10,1.04,0.94),nA)*(1.0+(nE-0.5)*0.26*close), arid);          // desert: the patches differ in hue (ochre to cream), not in grey value
     { float c2=1.0-smoothstep(30.0,650.0,vDist); if(c2>0.01){ float nF=nz(mat2(0.6,0.8,-0.8,0.6)*P/29.0+0.19), nG=nz(P/8.3+0.61); col*=1.0+((nF-0.5)*0.30+(nG-0.5)*0.16*(1.0-smoothstep(10.0,160.0,vDist)))*c2*(0.5+0.5*rough); } }      // low and close: stones, tufts and furrows, so the ground stays sharp right under the aircraft
     // farmland
     col=mix(col, mix(texture2D(tFields,P/3000.0).rgb,col,0.22)*(0.80+0.30*nC), farm*0.85);
@@ -148,36 +149,37 @@ const TERRAIN_FS = `
     // desert: pale wadi beds, darker gravel plains
     float wadi=pow(1.0-abs(2.0*nB-1.0),7.0);
     col=mix(col, col*1.2+0.04, arid*wadi*0.8);
-    col*=1.0-arid*0.2*smoothstep(0.45,0.8,nC);
+    col*=1.0-arid*0.08*smoothstep(0.45,0.8,nC);
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
-    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*55.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r;
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r;
       float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
-        if(lc<1.5){ float can=smoothstep(0.40,0.66,nz(P/16.0+0.21)*0.55+nD*0.45); col=mix(vec3(0.17,0.24,0.11),vec3(0.06,0.13,0.05),mix(0.55,can,fine))*(0.85+0.3*nC); urban=0.0; }
+        if(lc<1.5){ float h1=nz(P/16.0+0.21), can=smoothstep(0.40,0.66,h1*0.55+nD*0.45), h2=nz((P+sunDir.xz*9.0)/16.0+0.21);          /* forest: a canopy of crowns, each lit on its sun side with a shadowed gap behind */
+          col=mix(vec3(0.20,0.29,0.13),vec3(0.10,0.19,0.08),mix(0.55,can,fine))*(0.85+0.3*nC)*mix(1.0,mix(0.70,1.14,smoothstep(-0.07,0.11,h1-h2)),fine); urban=0.0; }
         else if(lc<2.5){ vec2 r=fract(P/vec2(7.0,9.0)); float t=smoothstep(0.44,0.26,length(r-0.5)); col=mix(mix(soil,vec3(0.13,0.25,0.10),0.55),mix(soil,vec3(0.12,0.24,0.09),t),fineS); urban=0.0; }
         else if(lc<3.5){ float t=smoothstep(0.32,0.12,abs(fract(P.x/5.0+P.y/41.0)-0.5)); col=mix(mix(soil,vec3(0.26,0.34,0.14),0.45),mix(soil,vec3(0.24,0.33,0.12),t),fineS); }
         else if(lc<4.5){ col=mix(texture2D(tFields,P/3000.0).rgb,col,0.15)*(0.85+0.25*nC); urban=0.0; }
         else if(lc<5.5){ col=vec3(0.28,0.44,0.19)*(0.85+0.3*nD); }
         else if(lc<6.5){ col=mix(vec3(0.54,0.51,0.37),vec3(0.29,0.35,0.19),smoothstep(0.48,0.74,nD))*(0.9+0.2*nC); }
-        else if(lc<7.5){ col=vec3(0.88,0.81,0.62)*(0.93+0.12*nD); urban=0.0; }
-        else if(lc<8.5){ col=vec3(0.63,0.61,0.56)*(0.84+0.22*nC)*(0.9+0.2*sin(vW.y*0.09+nB*7.0)); urban=0.0; }
+        else if(lc<7.5){ col=mix(col,vec3(0.88,0.80,0.60),0.6)*(0.93+0.12*nD); urban=0.0; }
+        else if(lc<8.5){ col=mix(col,vec3(0.60,0.58,0.53),0.5)*(0.86+0.22*nC)*(0.95+0.10*nD); urban=0.0; }       /* rock and sand take half their colour from the ground around them */
         else if(lc<9.5){ col=vec3(0.15,0.31,0.39)+0.05*nD; urban=0.0; }
         else if(lc<10.5){ col=mix(vec3(0.20,0.33,0.23),vec3(0.18,0.30,0.36),smoothstep(0.5,0.7,nD)); }
         else if(lc<11.5){ urban=max(urban,0.7); }
         else if(lc<12.5){ vec2 q=fract((P-uOrg)/30.0); col=mix(vec3(0.62,0.62,0.60),vec3(0.40,0.41,0.42),step(0.88,max(q.x,q.y))*fine)*(0.9+0.15*nD); urban=0.0; }
-        else if(lc<13.5){ float t=step(0.5,fract(P.x/3.0+P.y/90.0)); col=mix(vec3(0.82,0.84,0.83),mix(vec3(0.89,0.91,0.89),vec3(0.77,0.80,0.79),t),fineG)*(0.93+0.14*nD); urban=0.0; }
+        else if(lc<13.5){ float t=step(0.5,fract(P.x/3.0+P.y/90.0)); col=mix(vec3(0.74,0.77,0.76),mix(vec3(0.80,0.83,0.81),vec3(0.72,0.75,0.74),t),fineG)*(0.93+0.14*nD)*(1.0-0.5*uLights); urban=0.0; }
         else if(lc<14.5){ vec2 q=fract(P/vec2(4.0,6.5)); col=mix(vec3(0.16,0.19,0.27),mix(vec3(0.10,0.13,0.22),vec3(0.58,0.60,0.62),step(0.84,max(q.x,q.y))),fineS); urban=0.0; }
         else if(lc<15.5){ }
         else if(lc<16.5){ col=mix(vec3(0.64,0.63,0.59),vec3(0.24,0.33,0.19),smoothstep(0.52,0.70,nD)); }
         else { col=vec3(0.67,0.58,0.45)*(0.9+0.2*nC); }
-        col=mix(col0,col,smoothstep(0.18,0.62,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
+        col=mix(col0,col,smoothstep(0.10,0.70,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
       } }
     float outside=max(max(uB.x-P.x,P.x-uB.z),max(uB.y-P.y,P.y-uB.w));
     if(outside>0.0){ col=vCol*(0.80+0.40*nA)*(0.88+0.24*nB); urban=0.0; }          // beyond the map: plain regional ground, fading into the haze
     // layered rock on steep ground
     float steep=smoothstep(0.13,0.40,slope)*(0.3+0.7*rough);
     float strata=0.5+0.5*sin(vW.y*0.085+nC*5.0+nB*9.0);
-    col=mix(col, mix(vec3(0.50,0.47,0.41),vec3(0.60,0.40,0.27),arid)*(0.70+0.40*strata), steep);
+    col=mix(col, mix(vec3(0.50,0.47,0.41),vec3(0.72,0.47,0.30),arid)*(0.82+0.28*strata), steep);
     // snow above the Hermon snow line, thinner on cliffs
     col=mix(col, vec3(0.95,0.96,1.0), smoothstep(1750.0,2150.0,vW.y+(nC-0.5)*520.0)*(1.0-0.55*steep));
     vec3 emis=vec3(0.0); vec3 warm=vec3(1.0,0.72,0.36);
@@ -187,7 +189,15 @@ const TERRAIN_FS = `
       float ex=step(0.45,fract(sin(dot(cq+vec2(0.5,0.0),vec2(12.99,78.23)))*43758.5)), ez=step(0.45,fract(sin(dot(cq+vec2(0.0,0.5),vec2(39.35,11.13)))*24634.6));
       float road=max(smoothstep(0.455,0.475,fq.x)*ex, smoothstep(0.455,0.475,fq.y)*ez)*(1.0-smoothstep(1500.0,6000.0,vDist));
       vec3 uc=mix(vec3(0.55,0.54,0.51),vec3(0.73,0.69,0.61),nz(cq/61.0));
-      uc=mix(uc,vec3(0.26,0.37,0.20),smoothstep(0.66,0.76,nD)*0.6); uc=mix(uc,vec3(0.43,0.44,0.45),road*0.8);
+      uc=mix(uc,vec3(0.26,0.37,0.20),smoothstep(0.66,0.76,nD)*0.6);
+      { // low over a town the ground is not a beige carpet: each block has a yard, a car park or paving, the streets are asphalt with a pavement beside them and a dashed line
+        float nearU=1.0-smoothstep(300.0,1500.0,vDist);
+        if(nearU>0.01){ float ih=fract(sin(dot(cq,vec2(27.1,61.7)))*4375.5);
+          vec3 inter=ih<0.35?vec3(0.30,0.40,0.22):ih<0.60?mix(vec3(0.27,0.28,0.30),vec3(0.82),step(0.86,fract(P.x/2.6))*step(0.55,fract(P.y/11.0))*0.55*(1.0-smoothstep(200.0,600.0,vDist))):vec3(0.60,0.57,0.52);
+          uc=mix(uc,inter*(0.9+0.2*nD),nearU*0.7);
+          float pave=max(smoothstep(0.425,0.44,fq.x)*ex, smoothstep(0.425,0.44,fq.y)*ez); uc=mix(uc,vec3(0.66,0.64,0.60),clamp(pave-road,0.0,1.0)*nearU*0.8); }
+        uc=mix(uc,mix(vec3(0.43,0.44,0.45),vec3(0.23,0.24,0.26),nearU),road*0.8);
+        float dash=max(smoothstep(0.4935,0.4975,fq.x)*ex*step(0.5,fract(P.y/8.0)), smoothstep(0.4935,0.4975,fq.y)*ez*step(0.5,fract(P.x/8.0)))*(1.0-smoothstep(150.0,500.0,vDist)); uc=mix(uc,vec3(0.85),dash*0.8); }
       col=mix(col,uc,urban*0.9); { float fg=smoothstep(1200.0,6000.0,vDist), spk=smoothstep(0.50,0.56,nz(P/95.0+0.3))*smoothstep(0.42,0.50,nz(P/31.0+0.7)); emis+=warm*uLights*urban*(road*0.45+0.08+fg*(0.25+1.5*spk)); } }       /* from altitude a city is a field of gold, not a dark patch */
     // scattered village lights at night
     { vec2 cq=P/420.0; float hv=fract(sin(dot(floor(cq),vec2(127.1,311.7)))*43758.5453);

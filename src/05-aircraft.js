@@ -185,6 +185,7 @@ function buildAircraft() {
   }
   // ---- flight deck (shown only in cockpit view; framing is hidden under bubble canopies) ----
   const trim = lam(0x4a5058), dk = lam(0x23272c);           // lighter than black, so the panel reads as a panel; and set low, so the world fills most of the view
+  const cab2 = () => lam(0x2b3036);
   const dadd = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || AC.deck).add(m); return m; };
   dadd(new THREE.BoxGeometry(3.4, 0.08, 0.9), dk, 0, 0.62, -16.3).rotation.x = 0.08;                   // glare shield
   dadd(new THREE.PlaneGeometry(3.3, 0.72), trim, 0, 0.25, -16.45).rotation.x = -0.2;                  // main panel
@@ -197,6 +198,19 @@ function buildAircraft() {
   AC.stick = new THREE.Group(); AC.stick.position.set(-1.0, 0.23, -15.75); AC.deck.add(AC.stick);
   dadd(new THREE.CylinderGeometry(0.025, 0.035, 0.26, 8), dk, 0, 0.13, 0, AC.stick); dadd(new THREE.SphereGeometry(0.045, 8, 6), dk, 0, 0.27, 0, AC.stick);
   AC.thr = new THREE.Group(); AC.thr.position.set(0, 0.08, -15.75); AC.deck.add(AC.thr); dadd(new THREE.BoxGeometry(0.22, 0.2, 0.06), dk, 0, 0.12, 0, AC.thr);
+  // a room, not a floating panel: floor, side consoles, an overhead panel, two seats and the back wall (seen when looking round)
+  { const cab = lam(0x2b3036), seat = lam(0x3b4654);
+    dadd(new THREE.BoxGeometry(3.6, 0.06, 4.2), cab, 0, -0.42, -14.6, AC.frame); dadd(new THREE.BoxGeometry(3.6, 2.7, 0.08), cab, 0, 0.9, -12.6, AC.frame);                 // floor, back wall
+    for (const sd of [-1, 1]) { dadd(new THREE.BoxGeometry(0.5, 0.5, 3.2), trim, sd * 1.5, -0.1, -15.2, AC.frame);                                                          // side consoles
+      dadd(new THREE.BoxGeometry(0.52, 1.25, 0.14), seat, sd * 0.62, 0.42, -14.25, AC.frame).rotation.x = -0.12; dadd(new THREE.BoxGeometry(0.52, 0.12, 0.5), seat, sd * 0.62, -0.08, -14.5, AC.frame);   // seats
+      dadd(new THREE.BoxGeometry(0.3, 0.2, 0.2), seat, sd * 0.62, 1.12, -14.2, AC.frame); }
+    dadd(new THREE.BoxGeometry(1.5, 0.1, 1.3), trim, 0, 2.12, -15.5, AC.frame).rotation.x = 0.1; dadd(new THREE.BoxGeometry(3.6, 0.08, 4.2), cab, 0, 2.3, -14.6, AC.frame);     // overhead panel, ceiling
+    dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, 0, 1.42, -16.62, AC.frame); }                                                                                        // centre post of the windshield
+  // bubble canopies (fighter, aerobatic plane): the canopy bow, the side rails and the nose ahead
+  AC.bub = new THREE.Group(); AC.deck.add(AC.bub);
+  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.78, 0.035, 6, 20, Math.PI), trim); bow.position.set(0, 0.62, -16.25); AC.bub.add(bow);
+    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.06, 0.06, 2.6), trim, sd * 0.78, 0.62, -15.1, AC.bub);
+    dadd(new THREE.CylinderGeometry(0.1, 0.62, 4.2, 14).rotateX(-Math.PI / 2), lam(0x7d8894), 0, 0.2, -18.9, AC.bub); dadd(new THREE.BoxGeometry(1.5, 0.5, 1.6), cab2(), 0, -0.05, -15.2, AC.bub); }
   AC.deck.add(AC.frame); AC.root.add(AC.deck); AC.deck.visible = false; scene.add(AC.root);
 }
 /** Switch aircraft: load its flight model numbers and show its 3D model. */
@@ -204,7 +218,7 @@ function selectPlane(key) {
   PL = PLANES[key] || PLANES.airliner; AC.m = AC.models[PL.key];
   MASS = PL.mass; SW = PL.S; CL0 = PL.cl0; CLA = PL.cla; CD0 = PL.cd0; KIND = PL.k; TMAX = PL.T; ASTALL = PL.ast; GEAR_H = PL.gearH; FLAPS = PL.flaps;
   for (const k of PLANE_ORDER) AC.models[k].g.visible = false;
-  AC.deck.position.set(PL.eye[0], PL.eye[1] - 1.16, PL.eye[2] + 15); AC.frame.visible = !PL.bubble;
+  AC.deck.position.set(PL.eye[0], PL.eye[1] - 1.16, PL.eye[2] + 15); AC.frame.visible = !PL.bubble; if (AC.bub) AC.bub.visible = !!PL.bubble;
   SAVE.plane = PL.key; persist();
 }
 const fi = n => Math.min(n, FLAPS.length - 1);          // flap notch that exists on this aircraft

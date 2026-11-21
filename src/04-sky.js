@@ -94,7 +94,7 @@ function applyTOD(i) {
   if (cityLights) { cityLights.visible = t.lights > 0; cityLights.material.opacity = t.lights; }
   if (siteLights) { siteLights.visible = t.lights > 0; siteLights.material.opacity = Math.min(1, t.lights * 1.4); }
   applyWeather(); bakeTerrainLight(i, sunDir);
-  if (traffic) { traffic.pts.material.size = 9 + 17 * t.lights; traffic.pts.material.color.setHex(t.lights > 0.3 ? 0xffe2a8 : 0xf4f1e6); }
+  if (traffic) { traffic.pts.material.size = 9 + 17 * t.lights; }
   if (rwyLights) { rwyLights.material.opacity = 0.55 + 0.45 * t.lights; rwyLights.material.size = 5 + 11 * t.lights; }
   if (bldMat) bldMat.emissive.setRGB(0.035 * t.lights, 0.03 * t.lights, 0.02 * t.lights);
   if (AC.cabinMat) AC.cabinMat.color.setHex(t.lights > 0.3 ? 0xffe9a8 : 0x1b2430);
