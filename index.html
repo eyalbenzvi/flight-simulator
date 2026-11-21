@@ -265,6 +265,12 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   #strip span { font-size: 12px; }
   /* a map large enough to read on a phone held sideways */
   @media (orientation: landscape) { body.touch #map:not(.big) { height: min(46vh, 200px); } }
+  /* weapons (only on a firing range): the aiming mark with the rounds left, the lock box on a drone, the Fire button */
+  #aim, #aimLock { position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: none; pointer-events: none; box-sizing: border-box; }
+  #aim { border: 2px solid rgba(255, 233, 160, .95); border-radius: 50%; color: rgba(255, 233, 160, .95); font: 600 10px/1 var(--face, sans-serif); text-align: center; padding-top: 30px; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+  #aim.bomb { border-radius: 4px; transform-origin: center; border-style: dashed; } #aim.gun::after { content: ""; position: absolute; left: 11px; top: 11px; width: 2px; height: 2px; background: rgba(255, 233, 160, .95); }
+  #aimLock { border: 2px solid #ff4b3a; width: 34px; height: 34px; margin: -3px; }
+  #cFire { border-color: #ff7a1a !important; color: #ffb37a !important; min-width: 84px; } #cFire:active { background: rgba(255, 122, 26, .35) !important; }
 </style>
 </head>
 <body>
@@ -290,6 +296,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
   <canvas id="map" width="320" height="588" role="button" tabindex="0" title="Tap to enlarge" aria-label="Map"></canvas>
   <canvas id="pfd" width="440" height="300"></canvas>
   <div id="alert"></div>
+  <div id="aim"></div><div id="aimLock"></div>
   <div id="toast" class="panel" dir="auto"></div>
   <div id="rain"></div>
   <div id="photoBar" class="panel"><span>Photo mode: drag to look around</span><button id="phIn">＋</button><button id="phOut">－</button><button id="phSave">Save</button><button id="phDone">Done</button></div>
@@ -309,6 +316,8 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
       <button id="cGear" hidden data-k="KeyG">Gear</button>
       <button id="cFlap" hidden data-k="KeyF">Flaps</button>
       <button id="cBrake" hidden data-k="KeyB" data-hold="1">Brake</button>
+      <button id="cFire" hidden data-k="Enter" data-hold="1" class="hot">Fire</button>
+      <button id="cWpn" hidden data-k="KeyU">Gun</button>
       <button id="cCam" data-k="KeyC">View</button>
     </div>
     <div id="thrT"><div id="thrTf"></div><span id="thrPct">0%</span><em id="thrLbl">Power</em></div>
@@ -372,6 +381,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
 <script src="src/07-hud-and-modes.js"></script>
 <script src="src/07b-picker.js"></script>
 <script src="src/07c-extras.js"></script>
+<script src="src/07d-weapons.js"></script>
 <script src="src/08-app.js"></script>
 </body>
 </html>

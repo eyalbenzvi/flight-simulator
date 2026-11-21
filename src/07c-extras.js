@@ -10,7 +10,8 @@ function padRead(dt) {
   const dz = v => Math.abs(v) < 0.12 ? 0 : (v - Math.sign(v) * 0.12) / 0.88, b = i => g.buttons[i] ? (g.buttons[i].value || (g.buttons[i].pressed ? 1 : 0)) : 0;
   PAD.x = dz(g.axes[0]); PAD.y = dz(g.axes[1]); PAD.on = PAD.x !== 0 || PAD.y !== 0;
   if (S.started && !S.paused) { const t = b(7) - b(6) - (g.axes.length > 3 ? dz(g.axes[3]) : 0); if (t) S.thr = clamp(S.thr + t * 0.7 * dt, 0, 1); }
-  const map = { 0: 'KeyC', 2: 'KeyL', 3: 'KeyG', 4: 'KeyF', 5: 'KeyV', 9: 'Escape' };
+  const map = { 0: 'KeyC', 2: 'KeyL', 3: 'KeyG', 4: 'KeyF', 8: 'KeyU', 9: 'Escape' };
+  { const f = b(5) > 0.5; if (f) keys.Enter = true; else if (PAD.fire) keys.Enter = false; PAD.fire = f; }          // the right shoulder button fires (on a firing range); Select changes weapon
   for (const k in map) { const on = b(+k) > 0.5; if (on && !PAD.was[k] && S.started) action(map[k]); PAD.was[k] = on; }
   PAD.brk = b(1) > 0.5;
 }

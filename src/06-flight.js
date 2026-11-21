@@ -24,7 +24,9 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
 }
 function spawn(def) {
   LOOK.yaw = LOOK.pitch = 0;
-  if (def.plane && PL.key !== def.plane && WORLD.ready) selectPlane(def.plane);          // a start that brings its own aircraft
+  if (def.plane && PL.key !== def.plane && WORLD.ready) selectPlane(def.plane);
+  if (def.armed && WORLD.ready && !armsOf(PL)) selectPlane('fighter');          // a start on a firing range needs an armed aircraft
+  if (WORLD.ready) wpnRearm();          // a start that brings its own aircraft
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
   if (def.tod !== undefined && WORLD.ready && (S.tod !== def.tod || WX !== (def.wx | 0))) { S.tod = def.tod; WX = def.wx | 0; applyTOD(S.tod); }          // a start that brings its own time of day and weather

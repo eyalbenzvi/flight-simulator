@@ -51,6 +51,7 @@ no bundler, no framework. Everything shares one global scope, so the load order 
 | `src/07-hud-and-modes.js` | 12, 12b, 12d, 12e | PFD, minimap, hints, key guide; settings (`SAVE`), smoke trails, air traffic, weather, photo mode; Easy mode (`arcadeStep`), translations (`L`, `TRD`, `applyLang`); obstacle hash, explosion, level buttons |
 | `src/07b-picker.js` | 12f | Start anywhere: the place picker (`openPicker`), a full-screen map (tap to choose, drag, pinch or wheel to zoom) with a search over `LOCS` and `PICK_SITES` (Hebrew or English, spelling variants folded by `pickNorm` / `pickSkel`, `PICK_ALIAS`); height and direction rows; starts a little before the place, facing it. The last choice is kept in `SAVE.pick` |
 | `src/07c-extras.js` | 12g | Game controller (`padRead`), 3D cars near the camera, motorway lamps, tower cranes, power lines, the lightning bolt, puffs (touchdown smoke, wingtip vapour), night lamps (minarets, stadiums, obstruction lights), `buildOldCity`, the aircraft's self-shadow map; `buildExtras` (from `init`) and `updateExtras` (from `loop`) |
+| `src/07d-weapons.js` | 12h | Weapons for the three military aircraft, on firing ranges only: `RANGES`, `armsOf`, `buildWeapons`, `wpnFire`, `wpnSelect`, `updateWeapons` (the design is in the file's header) |
 | `src/08-app.js` | 13–17 | Audio (`Snd`), input (`action`), menus, main `loop`, boot (`init`) |
 
 ## Look and resolution
@@ -194,6 +195,22 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
   road's segments; run again after pruning), runs of two points are drawn (2,750 short pieces by the junctions used to be left out), a road is split
   where it meets the sea, a lake or an airfield and the stub left there is pruned like any loose end, and up to about 400 m of water is crossed as a
   causeway. Ends that stop short of another road went from about 715 to 44 (those whose link would cross water or an airfield).
+
+## Weapons (`src/07d-weapons.js`)
+
+- Who: the fighter (cannon 500 rounds, four homing missiles, four bombs), the stealth jet (two guided bombs, nothing else), the heavy bomber (48 bombs,
+  six to a press). The other four aircraft are unarmed and see none of it.
+- Where: only inside the two firing ranges (`RANGES`: open Negev south of Mitzpe Ramon, and out at sea). Everywhere else the weapons are locked and the
+  fire key only says where the nearest range is. This is a design rule, not a limitation: nothing in the rest of the world (towns, buildings, vehicles,
+  ships, other aircraft, balloons) can be shot at or damaged. Do not widen it without the owner asking.
+- At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
+  A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
+- How it shows: nothing outside a range. Inside, for an armed aircraft: `#cFire` (hold for the gun, tap for a missile or bombs; shows the rounds left),
+  `#cWpn` when there is more than one weapon, `#aim` (the gun's line, or where a bomb let go now would land: `wpnImpact` runs the bomb's own steps) and
+  `#aimLock` on a drone the missile has locked; orange dashed rings on the minimap. Keys: Enter fires, U changes weapon; controller: right shoulder
+  fires, Select changes weapon. Ammunition comes back on any new start and after landing. Two starts in "start in the air" lead to the ranges
+  (`armed: true` exchanges an unarmed aircraft for the fighter).
+- Motion is in map space like the aircraft (ground speed × `hsAt`), so the aiming mark and the bomb agree. `updateWeapons` gets `sdt` (fast forward applies).
 
 ## Start-up
 

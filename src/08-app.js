@@ -79,6 +79,8 @@ function action(code) {
   if (code === 'KeyR') { if (S.lastSpawn) spawn(S.lastSpawn); return; }
   if (code === 'KeyM') return Snd.toggle();
   if (code === 'Rate' || code === 'BracketRight' || code === 'BracketLeft') return setRate(code === 'Rate' ? (RATE.i + 1) % RATES.length : clamp(RATE.i + (code === 'BracketRight' ? 1 : -1), 0, RATES.length - 1), true);
+  if (code === 'Enter') return wpnFire(false);
+  if (code === 'KeyU') return wpnSelect();
   if (code === 'KeyC') { S.cam = (S.cam + 1) % CAMS.length; camSnap = S.cam === 0 || S.cam === 3; toast(tr(CAMS[S.cam]), 1.6); return; }
   if (code === 'KeyT') { S.tod = (S.tod + 1) % 4; applyTOD(S.tod); return; }
   if (code === 'KeyI') { SAVE.pfd = document.body.classList.toggle('nopfd') ? false : true; persist(); return; }
@@ -109,7 +111,7 @@ function action(code) {
     else { S.apT0 = TNOW; S.land = null; S.trick = null; S.ap.on = true; S.ap.alt = S.pos.y; S.ap.hdg = S.hdg; S.ap.spd = Math.max(S.V, S.vs0 * 1.3); toast(L('Autopilot holding altitude, heading and speed', 'טייס אוטומטי: שומר גובה, כיוון ומהירות')); }
   }
 }
-const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyF', 'KeyB', 'KeyP', 'KeyC', 'KeyT', 'KeyR', 'KeyM', 'KeyH', 'KeyL', 'KeyX', 'KeyZ', 'KeyV', 'KeyI', 'KeyO', 'KeyY', 'KeyN', 'KeyK', 'Space', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Equal', 'Minus', 'PageUp', 'PageDown']);
+const HANDLED = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyG', 'KeyF', 'KeyB', 'KeyP', 'KeyC', 'KeyT', 'KeyR', 'KeyM', 'KeyH', 'KeyL', 'KeyX', 'KeyZ', 'KeyV', 'KeyI', 'KeyO', 'KeyY', 'KeyN', 'KeyK', 'KeyU', 'Enter', 'BracketLeft', 'BracketRight', 'Space', 'Escape', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'Equal', 'Minus', 'PageUp', 'PageDown']);
 window.addEventListener('keydown', e => {
   if (PICK.open) return;                 // typing in the place search, not flying
   if (!S.started) { if (e.code === 'Enter' && !$('fly').disabled && (document.activeElement === document.body || !document.activeElement)) $('fly').click(); return; }      // Enter on a focused button presses that button
@@ -304,6 +306,8 @@ function buildMenu() {
   AIRSTARTS = FREE.slice(1);
   // two more invitations: the city by night and a storm (they set the time of day and the weather too)
   AIRSTARTS.push({ label: 'Concorde at Mach 2', type: 'air', lon: 34.95, lat: 29.75, alt: 17000, hdg: 4, spd: 478, plane: 'concorde', thr: 1 });          // already up where it flies twice as fast as sound, heading up the length of the country
+  // the two firing ranges (an unarmed aircraft is exchanged for the fighter)
+  AIRSTARTS.push({ label: 'Firing range: the Negev', type: 'air', lon: 34.78, lat: 30.335, alt: 1500, hdg: 0, spd: 115, armed: true }, { label: 'Firing range: the sea', type: 'air', lon: 34.36, lat: 32.13, alt: 800, hdg: 0, spd: 115, armed: true });
   AIRSTARTS.push({ label: 'Tel Aviv at night', type: 'air', lon: 34.74, lat: 32.03, alt: 420, hdg: 30, spd: 115, tod: 2, wx: 0 }, { label: 'Storm over Haifa', type: 'air', lon: 34.93, lat: 32.74, alt: 700, hdg: 40, spd: 115, tod: 0, wx: 2 });
   LANDTESTS = [
     { label: 'Approach: Ben Gurion runway 12', type: 'approach', rw: RUNWAYS[1], dist: 2700, flaps: 3, gear: true },
@@ -347,7 +351,7 @@ function loop(now) {
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
-  updateExtras(dt, run, run || !S.started);
+  updateExtras(dt, run, run || !S.started); updateWeapons(sdt, run);
   renderFrame();
 }
 
@@ -422,7 +426,7 @@ function init() {
 /** Step 2, behind the choice screen: the world, one builder at a time with a breath between them, so the screen keeps answering taps. */
 async function buildWorld() {
   const breath = () => new Promise(r => setTimeout(r, 0)), hold = +(new URLSearchParams(location.search).get('hold')) || 0; if (hold) await new Promise(r => setTimeout(r, hold));
-  for (const f of [buildHeights, buildTerrain, buildWater, buildAirports, buildScatter, buildCities, buildLandmarks, buildRoads, buildDetails, buildIsrael, buildCityLandmarks, buildSites, buildRivers, buildBoom, buildLabels, bakeMap, buildSkyObjects, buildAircraft, buildGameObjects, buildExtras]) { f(); await breath(); }
+  for (const f of [buildHeights, buildTerrain, buildWater, buildAirports, buildScatter, buildCities, buildLandmarks, buildRoads, buildDetails, buildIsrael, buildCityLandmarks, buildSites, buildRivers, buildBoom, buildLabels, bakeMap, buildSkyObjects, buildAircraft, buildGameObjects, buildExtras, buildWeapons]) { f(); await breath(); }
   buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(PL.key); setMode(S.mode); setupCanvasGuard(); await breath();
   // settings from the last visit
   if (SAVE.gfx) applyGfx(SAVE.gfx);
