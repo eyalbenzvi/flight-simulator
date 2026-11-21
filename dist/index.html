@@ -2771,32 +2771,22 @@ function buildAircraft() {
   const trim = lam(0x4a5058), dk = lam(0x23272c);           // lighter than black, so the panel reads as a panel; and set low, so the world fills most of the view
   const cab2 = () => lam(0x2b3036);
   const dadd = (geo, mat, x, y, z, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || AC.deck).add(m); return m; };
-  // the panel stands where the eye finds it: its top edge 13 degrees below the horizon, the two flight displays and the map lit in it (they are the game's own
-  // instruments, live), so the lower quarter of the cockpit view is a working panel and not a dark slab
-  dadd(new THREE.BoxGeometry(3.4, 0.06, 0.7), dk, 0, 0.9, -16.25).rotation.x = 0.08;                   // glare shield
-  dadd(new THREE.PlaneGeometry(3.3, 0.66), trim, 0, 0.57, -16.47).rotation.x = -0.28;                 // main panel
+  // The cockpit view is for the scenery (the owner's wish, even at the cost of accuracy, in every aircraft): nothing stands between the eye and the world.
+  // No window posts, no roof, no canopy bow, no nose, no walls, no wide panel. All that is left in front is a small instrument pod low in the middle of the
+  // view, from 21 degrees below the horizon down: the two live flight displays and the map, under a thin lip. The world shows to both sides of it, right
+  // down to the bottom of the screen. Behind (seen only when looking round) are a floor and two low seats.
+  dadd(new THREE.BoxGeometry(1.34, 0.03, 0.12), dk, 0, 0.615, -16.42).rotation.x = 0.08;              // the lip over the pod
+  dadd(new THREE.PlaneGeometry(1.3, 0.34), trim, 0, 0.45, -16.5).rotation.x = -0.5;                   // the pod
   AC.pfdTex = new THREE.CanvasTexture(document.getElementById('pfd')); AC.mapTex = new THREE.CanvasTexture(document.getElementById('map'));
-  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.58, -16.44).rotation.x = -0.28; };
-  scr(0.78, 0.53, -0.72, AC.pfdTex); scr(0.29, 0.53, 0.0, AC.mapTex); scr(0.78, 0.53, 0.72, AC.pfdTex);
-  dadd(new THREE.BoxGeometry(1.0, 0.5, 1.2), trim, 0, -0.17, -15.9);                                   // pedestal
-  for (const s of [-1, 1]) { dadd(new THREE.BoxGeometry(0.05, 1.7, 0.05), trim, s * 1.38, 1.42, -16.6, AC.frame).rotation.z = -s * 0.1; dadd(new THREE.BoxGeometry(0.08, 0.5, 3), trim, s * 1.72, 0.3, -15.4, AC.frame); dadd(new THREE.BoxGeometry(0.07, 2.2, 0.09), trim, s * 1.72, 1.4, -15.3, AC.frame); }       // slim posts, a low sill and open side windows
-  dadd(new THREE.BoxGeometry(3.6, 0.16, 1.0), trim, 0, 2.2, -16.2, AC.frame);
-  AC.stick = new THREE.Group(); AC.stick.position.set(-1.0, 0.23, -15.75); AC.deck.add(AC.stick);
+  const scr = (w, h, x, tex) => { dadd(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, 0.46, -16.47).rotation.x = -0.5; };
+  scr(0.4, 0.27, -0.39, AC.pfdTex); scr(0.15, 0.27, 0.0, AC.mapTex); scr(0.4, 0.27, 0.39, AC.pfdTex);
+  AC.stick = new THREE.Group(); AC.stick.position.set(-0.5, -0.25, -15.6); AC.deck.add(AC.stick);
   dadd(new THREE.CylinderGeometry(0.025, 0.035, 0.26, 8), dk, 0, 0.13, 0, AC.stick); dadd(new THREE.SphereGeometry(0.045, 8, 6), dk, 0, 0.27, 0, AC.stick);
-  AC.thr = new THREE.Group(); AC.thr.position.set(0, 0.08, -15.75); AC.deck.add(AC.thr); dadd(new THREE.BoxGeometry(0.22, 0.2, 0.06), dk, 0, 0.12, 0, AC.thr);
-  // a room, not a floating panel: floor, side consoles, an overhead panel, two seats and the back wall (seen when looking round)
+  AC.thr = new THREE.Group(); AC.thr.position.set(0.5, -0.3, -15.75); AC.deck.add(AC.thr); dadd(new THREE.BoxGeometry(0.22, 0.2, 0.06), dk, 0, 0.12, 0, AC.thr);
   { const cab = lam(0x2b3036), seat = lam(0x3b4654);
-    dadd(new THREE.BoxGeometry(3.6, 0.06, 4.2), cab, 0, -0.42, -14.6, AC.frame); dadd(new THREE.BoxGeometry(3.6, 2.7, 0.08), cab, 0, 0.9, -12.6, AC.frame);                 // floor, back wall
-    for (const sd of [-1, 1]) { dadd(new THREE.BoxGeometry(0.5, 0.5, 3.2), trim, sd * 1.5, -0.1, -15.2, AC.frame);                                                          // side consoles
-      dadd(new THREE.BoxGeometry(0.52, 1.25, 0.14), seat, sd * 0.62, 0.42, -14.25, AC.frame).rotation.x = -0.12; dadd(new THREE.BoxGeometry(0.52, 0.12, 0.5), seat, sd * 0.62, -0.08, -14.5, AC.frame);   // seats
-      dadd(new THREE.BoxGeometry(0.3, 0.2, 0.2), seat, sd * 0.62, 1.12, -14.2, AC.frame); }
-    dadd(new THREE.BoxGeometry(1.5, 0.1, 1.3), trim, 0, 2.12, -15.5, AC.frame).rotation.x = 0.1; dadd(new THREE.BoxGeometry(3.6, 0.08, 4.2), cab, 0, 2.3, -14.6, AC.frame);     // overhead panel, ceiling
-  }          /* (no centre post: it ran through the middle of the view) */                                                                                        // centre post of the windshield
-  // bubble canopies (fighter, aerobatic plane): the canopy bow, the side rails and the nose ahead
-  AC.bub = new THREE.Group(); AC.deck.add(AC.bub);
-  { const bow = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.018, 6, 24, Math.PI), trim); bow.position.set(0, 0.86, -16.25); AC.bub.add(bow);
-    for (const sd of [-1, 1]) dadd(new THREE.BoxGeometry(0.05, 0.05, 2.6), trim, sd * 0.82, 0.86, -15.1, AC.bub);
-    AC.bubNose = dadd(new THREE.CylinderGeometry(0.1, 0.62, 4.2, 14).rotateX(-Math.PI / 2), lam(0x7d8894), 0, 0.2, -18.9, AC.bub); dadd(new THREE.BoxGeometry(1.5, 0.5, 1.6), cab2(), 0, -0.05, -15.2, AC.bub); }
+    dadd(new THREE.BoxGeometry(2.2, 0.06, 2.4), cab, 0, -0.42, -14.0, AC.frame);                                                                                            // a floor behind the eye
+    for (const sd of [-1, 1]) { dadd(new THREE.BoxGeometry(0.52, 0.8, 0.14), seat, sd * 0.62, 0.2, -14.25, AC.frame).rotation.x = -0.12; dadd(new THREE.BoxGeometry(0.52, 0.12, 0.5), seat, sd * 0.62, -0.08, -14.5, AC.frame); } }   // low seats
+  AC.bub = new THREE.Group(); AC.deck.add(AC.bub); AC.bubNose = dadd(new THREE.BoxGeometry(0.01, 0.01, 0.01), lam(0x7d8894), 0, -5, -15, AC.bub); AC.bubNose.visible = false;          // single-seaters have the same open view (the nose that used to show is gone)
   AC.deck.add(AC.frame); AC.root.add(AC.deck); AC.deck.visible = false; scene.add(AC.root);
 }
 /** Switch aircraft: load its flight model numbers and show its 3D model. */
@@ -3215,7 +3205,7 @@ function updateCamera(dt) {
     camera.quaternion.copy(S.q).multiply(tmpQ); if (looking) camera.quaternion.multiply(dq.setFromEuler(eul.set(LOOK.pitch, -LOOK.yaw, 0, 'YXZ'))); camera.position.copy(eye).applyQuaternion(S.q).add(S.pos);
   }
   // game feel: the view widens with speed and shakes on afterburner, stall buffet and touchdown
-  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) + 7 * clamp(S.V / PL.vmo, 0, 1) * clamp(1 - S.ra / 100, 0, 1) : 0) + (TNOW - (S.boomT === undefined ? -9 : S.boomT) < 1.2 ? 14 * (1 - (TNOW - S.boomT) / 1.2) : 0);          /* wider when fast and low, and a kick as the sound barrier breaks */       /* the fly-by camera uses a long lens */
+  const base = window.innerWidth < window.innerHeight ? 74 : 60, want = S.cam === 3 ? 32 : S.cam === 0 ? base + 9 : S.cam === 6 ? base + 8 : base + (S.cam === 1 ? 13 * clamp((S.V - PL.vc * 0.8) / (PL.vmo * 0.6), 0, 1) + 7 * clamp(S.V / PL.vmo, 0, 1) * clamp(1 - S.ra / 100, 0, 1) : 0) + (TNOW - (S.boomT === undefined ? -9 : S.boomT) < 1.2 ? 14 * (1 - (TNOW - S.boomT) / 1.2) : 0);          /* wider when fast and low, and a kick as the sound barrier breaks */       /* the fly-by camera uses a long lens */
   camera.fov += (want - camera.fov) * Math.min(1, 3 * dt); camera.near = S.cam === 0 ? 0.15 : S.cam >= 6 ? 0.3 : 1; camera.updateProjectionMatrix();
   if (CAMX.blend > 0) { CAMX.blend = Math.max(0, CAMX.blend - Math.max(dt, 0.001)); const k = 1 - CAMX.blend / 0.38, e = k * k * (3 - 2 * k); tmpV.copy(camera.position); camera.position.lerpVectors(CAMX.fromP, tmpV, e); tmpQ.copy(camera.quaternion); camera.quaternion.copy(CAMX.fromQ).slerp(tmpQ, e); }
   { // keep the aircraft clear of what covers the lower part of the screen: the instrument panel on desktop, the stick and buttons on a phone held upright

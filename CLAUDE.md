@@ -144,8 +144,10 @@ no bundler, no framework. Everything shares one global scope, so the load order 
   km/h and metres; messages sit under the readout strip; the lever's percentage is inside it; the opened "more" row stands above its button, clear of the
   stick's zone; once a visit a hint and a pulse point at "⋯"; the `touch` class is set in `init`; after a crash the main button in Easy is "Back in the
   air" (in the other levels "Try again") and the phone's Back presses it; the chase camera sits 24% closer on touch.
-- Look: the cockpit panel stands in view with the live flight displays and map in it (top edge 13° below the horizon, no centre post, a thin canopy bow);
-  at night the aircraft keeps a faint moonlit sheen.
+- Look: at night the aircraft keeps a faint moonlit sheen.
+- The cockpit view is for the scenery (the owner's wish, accuracy comes second, the same in all seven aircraft): no posts, roof, canopy bow, nose, walls or
+  wide panel. In front there is only a small instrument pod low in the middle (two live flight displays and the map, from 21° below the horizon down), the
+  world shows on both sides of it to the bottom of the screen, and the lens is 9° wider than in the other views. Do not put framing back.
 
 ## Round six: the next ten from the reviews
 
