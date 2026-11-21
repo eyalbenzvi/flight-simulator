@@ -25,7 +25,7 @@ function trimFor(V, alt, gamma, flapDeg, gear) {
 function spawn(def) {
   S.spawnT = TNOW; S.landSeen = false; if (!def.keep) S.lastSpawn = def; document.body.classList.remove('crashed'); S.crashed = false; $('crash').style.display = 'none';
   S.pr = S.rr = S.yr = 0; ctl.pitch = ctl.roll = ctl.yaw = 0; S.ap.on = false; S.brake = false; S.stalled = false; S.airTime = 5; camSnap = true;
-  S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
+  S.holdAlt = null; S.toClimb = false; S.land = null; S.landed = false; S.terr = false; S.trick = null; S.shake = 0; S.mach1 = false; S.crashT = 0; EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; if (EXP.deb) { EXP.deb.visible = false; EXP.flash.visible = false; } if (S.camSave) { S.cam = 0; S.camSave = false; } S.noEngine = !!def.noEngine; S.gamHold = null;
   if (def.type === 'ground') {
     const rw = def.rw, sg = def.rev ? -1 : 1, h = def.rev ? (rw.hdg + 180) % 360 : rw.hdg;     // rev: take off from the far end, the other way
     const ex = def.rev ? rw.x + rw.dx * rw.len / 2 : rw.tx, ez = def.rev ? rw.z + rw.dz * rw.len / 2 : rw.tz;
@@ -362,7 +362,7 @@ function updateCamera(dt) {
     else camPos.lerp(tmpV, 1 - Math.exp(-(3.2 + S.V * 0.022) * dt));
     { const want = S.trick || S.onGround ? 0 : clamp(S.bank, -1, 1) * (S.arc ? 0.12 : 0.22); CAMX.bank += (want - CAMX.bank) * (1 - Math.exp(-2.5 * dt)); }       // lean into the turn, gently (half as much in Easy)
     camPos.y = Math.max(camPos.y, groundAt(camPos.x, camPos.z).h + 1.5);
-    camera.position.copy(camPos); camera.up.set(0, 1, 0); tmpV2.copy(S.pos).addScaledVector(fwd, c[0] * 0.47); tmpV2.y -= c[2];
+    camera.position.copy(camPos); camera.up.set(0, 1, 0); tmpV2.copy(S.pos).addScaledVector(fwd, c[0] * 0.47); tmpV2.y -= c[2] * lerp(1, 1.6, clamp((S.ra - 40) / 110, 0, 1));          /* aloft the camera looks further down: the horizon sits on the upper third and the land fills the frame; near the ground it looks ahead at the runway */
     if (looking) { tmpV.copy(camPos).sub(S.pos).applyAxisAngle(YA, -LOOK.yaw); const hd = Math.hypot(tmpV.x, tmpV.z), el = clamp(Math.atan2(tmpV.y, hd) - LOOK.pitch, -0.35, 1.45), r = tmpV.length(); tmpV.multiplyScalar(r * Math.cos(el) / Math.max(hd, 0.01)); tmpV.y = r * Math.sin(el);
       camera.position.copy(S.pos).add(tmpV); camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, camera.position.z).h + 1.5); tmpV2.lerp(S.pos, clamp((Math.abs(LOOK.yaw) + Math.abs(LOOK.pitch)) * 2, 0, 1)); }
     else { const sl = c[0] * 0.30 * Math.sin(CAMX.bank * 4); tmpV2.x += -fwd.z * sl; tmpV2.z += fwd.x * sl; }          // look into the turn: the aircraft slides toward the outside of the frame
@@ -405,6 +405,6 @@ function updateCamera(dt) {
   if (M.gear) { M.gear.visible = S.gearPos > 0.03; M.gear.scale.y = Math.max(0.05, S.gearPos); M.gear.position.y = -0.35 * PL.gearH * (1 - S.gearPos); }
   if (M.beacon) M.beacon.visible = (TNOW % 1.2) < 0.12; const st = (TNOW % 1.5) < 0.07 || ((TNOW + 0.2) % 1.5) < 0.07; M.strobes.forEach(s => s.visible = st);
   if (M.prop) M.prop.rotation.z += (8 + 40 * Math.abs(S.n1)) * dt;
-  if (M.burner) { const ab = clamp((S.n1 - 0.85) / 0.15, 0, 1); M.burner.visible = ab > 0.02; M.burner.scale.set(1, 1, ab * (0.85 + Math.random() * 0.3)); M.burner.position.z = 6.7 + 2.75 * M.burner.scale.z; }
+  if (M.burner) { const ab = clamp((S.n1 - 0.85) / 0.15, 0, 1); M.burner.visible = ab > 0.02; M.burner.scale.set(1, 1, ab * (0.9 + 0.07 * Math.sin(TNOW * 47) + 0.05 * Math.sin(TNOW * 83))); M.burner.position.z = 7.7 + 2.75 * M.burner.scale.z; if (M.nozzle) M.nozzle.material.color.setRGB(0.06 + ab * 0.94, 0.03 + ab * 0.55, 0.02 + ab * 0.2); }       /* a steady flame with a slight pulse, and a glowing nozzle */
   AC.stick.rotation.x = -ctl.pitch * 0.3; AC.stick.rotation.z = -ctl.roll * 0.3; AC.thr.position.z = -15.75 - S.thr * 0.18;
 }

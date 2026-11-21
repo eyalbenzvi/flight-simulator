@@ -405,14 +405,15 @@ function updateAIT(dt) { for (const a of AIT) { a.a += a.dir * 105 * HSCALE / a.
 // weather is layered on top of the time of day
 const tmpC = new THREE.Color();
 function applyWeather() {
-  const t = TOD[S.tod], f = scene.fog, dim = 1 - 0.85 * t.lights, den = [0.000028, 0.00008, 0.000062][WX]; f.density = den; ENV.fogDen.value = den; S.turb = [0, 0.15, 1][WX];
-  if (WX === 1) { f.color.lerp(tmpC.setRGB(0.80 * dim, 0.67 * dim, 0.48 * dim), 0.75); skyU.hor.value.lerp(tmpC, 0.8); skyU.top.value.lerp(tmpC, 0.35); }
+  const t = TOD[S.tod], f = scene.fog, dim = 1 - 0.85 * t.lights, den = WX === 0 ? (t.den || 0.00006) : [0, 0.00013, 0.00009][WX];       /* denser than real air, because the map is compressed 4:1: far ridges must recede in steps */ f.density = den; ENV.fogDen.value = den; S.turb = [0, 0.15, 1][WX];
+  if (WX === 1) { f.color.lerp(tmpC.setRGB(0.86 * dim, 0.72 * dim, 0.50 * dim), 0.8); skyU.hor.value.lerp(tmpC, 0.9); skyU.top.value.lerp(tmpC.setRGB(0.62 * dim, 0.60 * dim, 0.56 * dim), 0.6); ENV.sunCol.value.multiply(tmpC.setRGB(0.8, 0.69, 0.53)); skyU.uCir.value = 0.1; if (glare) { glare.material.opacity *= 0.35; } }       /* a sharav day: tan air, a pale sun, grey-beige sky */
   if (WX === 2) { f.color.lerp(tmpC.setRGB(0.40 * dim, 0.43 * dim, 0.48 * dim), 0.85); skyU.hor.value.lerp(tmpC, 0.9); skyU.top.value.lerp(tmpC.multiplyScalar(0.6), 0.85); sun.intensity = t.sunI * 0.35; ENV.sunCol.value.multiplyScalar(0.35);
     hemi.intensity = t.hI * 0.8; ENV.skyCol.value.multiplyScalar(0.8); ENV.gndCol.value.multiplyScalar(0.8); skyU.sunCol.value.multiplyScalar(0.15); if (glare) glare.material.opacity *= 0.1; }
-  if (cloudMat) { cloudMat.opacity = WX === 2 ? 1 : 0.9; if (WX === 2) cloudMat.color.multiplyScalar(0.5); }
-  ENV.fogCol.value.copy(f.color); $('rain').style.display = WX === 2 ? 'block' : 'none';
+  if (cloudMat) { cloudMat.uniforms.uOp.value = WX === 2 ? 1 : 0.9; cloudMat.uniforms.uGrow.value = WX === 2 ? 2.6 : WX === 1 ? 0.8 : 1; if (WX === 2) cloudMat.color.multiplyScalar(0.42); }       /* in a storm the clouds swell and join into a dark deck */
+  ENV.fogCol.value.copy(f.color); $('rain').style.display = 'none';       /* the rain is in the world now (updateRain), not a striped overlay */
 }
 function updateWeather(dt) {
+  updateRain(dt);
   if (S.flash > 0) { S.flash -= dt; if (S.flash <= 0) applyTOD(S.tod); }
   if (WX !== 2) return; S.lt -= dt;
   if (S.lt <= 0) { S.lt = 4 + Math.random() * 10; S.flash = 0.16; ENV.skyCol.value.setRGB(1.5, 1.5, 1.8); skyU.top.value.setRGB(0.7, 0.72, 0.85); setTimeout(() => Snd.boom(), 300 + Math.random() * 1500); }
@@ -569,6 +570,11 @@ function hitObstacle(x, y, z, pad) {
 function buildBoom() {
   for (let i = 0; i < 30; i++) { const fire = i < 18, s = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: fire ? (i % 3 ? 0xff8a2a : 0xffe08a) : 0x2a2622, transparent: true, depthWrite: false, fog: false, blending: fire ? THREE.AdditiveBlending : THREE.NormalBlending }));
     s.visible = false; scene.add(s); EXP.parts.push({ s, fire, v: new THREE.Vector3(), r: 1 }); }
+  // a white flash, tumbling debris that falls and bounces, and a scorch mark left on the ground
+  EXP.flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: lightDot(), color: 0xffffff, transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, toneMapped: false })); EXP.flash.visible = false; scene.add(EXP.flash);
+  EXP.deb = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.25, 0.7), new THREE.MeshLambertMaterial({ color: 0x3a3d42 }), 26); EXP.deb.frustumCulled = false; EXP.deb.visible = false; scene.add(EXP.deb);
+  EXP.dp = []; for (let i = 0; i < 26; i++) EXP.dp.push({ p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), w: new THREE.Vector3(), s: 1 });
+  EXP.scorch = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: lightDot(), color: 0x0d0c0b, transparent: true, depthWrite: false, opacity: 0 })); EXP.scorch.rotation.x = -Math.PI / 2; EXP.scorch.renderOrder = 2; EXP.scorch.visible = false; scene.add(EXP.scorch);
   // tall landmarks you can hit
   const A2 = (lon, lat, dx, dz, w, d, h) => { const x = lon2x(lon) + dx, z = lat2z(lat) + dz, y = heightAt(x, z); addObst(x, z, w, d, 0, y - 10, y + h); };
   A2(34.78, 32.075, 365, -85, 130, 130, 190); A2(34.787, 32.073, 0, 0, 20, 20, 140); A2(35.21, 31.78, 520, 60, 130, 130, 110); A2(35.354, 31.316, 0, 0, 520, 520, 370); A2(34.73, 30.96, 0, 0, 30, 30, 250);
@@ -578,12 +584,50 @@ function startExplosion() {
   const k = PL.chase[0] / 30; EXP.t = 0; EXP.k = k;
   for (const p of EXP.parts) { p.s.position.copy(S.pos); p.s.visible = true; const a = Math.random() * 6.283, e = Math.random() * 1.4 - 0.2, sp = (p.fire ? 8 + Math.random() * 26 : 4 + Math.random() * 9) * k;
     p.v.set(Math.cos(a) * Math.cos(e) * sp, Math.abs(Math.sin(e)) * sp + (p.fire ? 6 : 16) * k, Math.sin(a) * Math.cos(e) * sp).addScaledVector(S.vel, p.fire ? 0.12 : 0.05); p.r = 0.6 + Math.random() * 0.8; }
+  const g = groundAt(S.pos.x, S.pos.z); EXP.gy = g.h; EXP.wet = g.water;
+  EXP.flash.position.copy(S.pos); EXP.flash.visible = true; EXP.deb.visible = true;
+  for (const d of EXP.dp) { const a = Math.random() * 6.283, sp = (10 + Math.random() * 34) * k; d.p.copy(S.pos); d.v.set(Math.cos(a) * sp, (8 + Math.random() * 30) * k, Math.sin(a) * sp).addScaledVector(S.vel, 0.25); d.a.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); d.w.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12); d.s = (0.5 + Math.random() * 1.3) * k; }
+  EXP.scorch.visible = !g.water && S.ra < 40; if (EXP.scorch.visible) { EXP.scorch.position.set(S.pos.x, Math.max(g.h, triHeight(S.pos.x, S.pos.z)) + (g.field ? 0.45 : 3.75), S.pos.z); EXP.scorch.scale.set(46 * k, 46 * k, 1); EXP.scorch.material.opacity = 0; }
 }
 function updateExplosion(dt) {
-  if (EXP.t < 0) return; EXP.t += dt; const t = EXP.t, k = EXP.k;
+  if (EXP.t < 0) return; EXP.t += dt; const t = EXP.t, k = EXP.k, LIFE = 14;
   for (const p of EXP.parts) { p.s.position.addScaledVector(p.v, dt); p.v.multiplyScalar(Math.exp(-(p.fire ? 2.2 : 0.9) * dt)); if (!p.fire) p.v.y += 3 * dt;
-    const sc = (p.fire ? 5 + t * 22 : 7 + t * 13) * k * p.r; p.s.scale.set(sc, sc, 1); p.s.material.opacity = p.fire ? 0.85 * Math.max(0, 1 - t / 1.1) : Math.min(0.7, t * 3) * Math.max(0, 1 - t / 6); }
-  if (t > 6) { EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; }
+    const sc = (p.fire ? 5 + t * 22 : 7 + t * 13 + t * t * 0.5) * k * p.r; p.s.scale.set(sc, sc, 1);
+    if (p.fire) { p.s.material.opacity = 0.85 * Math.max(0, 1 - t / 1.3); const h = clamp(t / 1.1, 0, 1); p.s.material.color.setRGB(1, lerp(0.92, 0.28, h), lerp(0.62, 0.05, h)); }      // white-hot, then orange, then dark red
+    else p.s.material.opacity = Math.min(0.72, t * 3) * Math.max(0, 1 - t / LIFE); }
+  EXP.flash.visible = t < 0.14; if (EXP.flash.visible) { const fs = (60 + t * 900) * k; EXP.flash.scale.set(fs, fs, 1); EXP.flash.material.opacity = 1 - t / 0.14; }
+  if (EXP.deb.visible) { const m4 = tmpM, q = tmpQ, sc = tmpV2; let alive = 0;
+    EXP.dp.forEach((d, i) => { if (d.s > 0) { d.v.y -= 9.8 * dt; d.p.addScaledVector(d.v, dt); d.a.addScaledVector(d.w, dt); const gy = EXP.gy + 0.4;
+        if (d.p.y < gy) { d.p.y = gy; if (EXP.wet || Math.abs(d.v.y) < 3) { d.v.set(0, 0, 0); d.w.set(0, 0, 0); if (EXP.wet) d.s = 0; } else { d.v.y *= -0.35; d.v.x *= 0.6; d.v.z *= 0.6; d.w.multiplyScalar(0.5); } }
+        alive++; }
+      q.setFromEuler(eul.set(d.a.x, d.a.y, d.a.z, 'YXZ')); sc.setScalar(Math.max(d.s, 0.001)); m4.compose(d.p, q, sc); EXP.deb.setMatrixAt(i, m4); });
+    EXP.deb.instanceMatrix.needsUpdate = true; }
+  if (EXP.scorch.visible) EXP.scorch.material.opacity = Math.min(0.75, t * 1.5);
+  if (t > LIFE) { EXP.t = -1; for (const p of EXP.parts) p.s.visible = false; EXP.deb.visible = false; EXP.flash.visible = false; }
+}
+/** Rain you fly through: streaks in a box round the camera, slanted by the aircraft's own speed, so they rush at you when you fly fast. One draw call. */
+let RAIN = null;
+function updateRain(dt) {
+  if (WX !== 2) { if (RAIN) RAIN.visible = false; return; }
+  if (!RAIN) { const N = HIRES ? 900 : 420, P = new Float32Array(N * 6), E = new Float32Array(N * 2); for (let i = 0; i < N; i++) { const a = Math.random(), b = Math.random(), c = Math.random(); P.set([a, b, c, a, b, c], i * 6); E[i * 2] = 0; E[i * 2 + 1] = 1; }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('aEnd', new THREE.BufferAttribute(E, 1));
+    const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uOff: { value: new THREE.Vector3() }, uDir: { value: new THREE.Vector3(0, -1, 0) }, uLen: { value: 1 } },
+      vertexShader: `attribute float aEnd; uniform vec3 uOff, uDir; uniform float uLen; varying float vA;
+        #include <common>
+        #include <logdepthbuf_pars_vertex>
+        void main(){ vec3 p=mod(position*70.0+uOff,70.0)-35.0; vA=(1.0-aEnd)*(1.0-smoothstep(20.0,35.0,length(p))); p+=cameraPosition-uDir*uLen*aEnd; vec4 mv=viewMatrix*vec4(p,1.0); gl_Position=projectionMatrix*mv;
+          #include <logdepthbuf_vertex>
+        }`,
+      fragmentShader: `varying float vA;
+        #include <common>
+        #include <logdepthbuf_pars_fragment>
+        void main(){
+          #include <logdepthbuf_fragment>
+          gl_FragColor=vec4(0.80,0.86,0.94,0.5*vA); }` });
+    m.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false };
+    RAIN = new THREE.LineSegments(g, m); RAIN.frustumCulled = false; RAIN.renderOrder = 6; scene.add(RAIN); }
+  RAIN.visible = S.started; const u = RAIN.material.uniforms, rel = tmpV.set(3, -11, 1).sub(S.vel), sp = rel.length();        // the rain's motion as seen from the aircraft
+  u.uOff.value.addScaledVector(rel, dt); u.uOff.value.set(u.uOff.value.x % 70, u.uOff.value.y % 70, u.uOff.value.z % 70); u.uDir.value.copy(rel).multiplyScalar(1 / Math.max(sp, 1)); u.uLen.value = clamp(sp * 0.035, 0.7, 7);
 }
 const LV = [['Easy', 'קל'], ['Medium', 'בינוני'], ['Expert', 'מקצועי']];
 const LVD = [['The stick steers the aircraft directly. No stalls, land anywhere', 'המוט מכוון את המטוס ישירות. המטוס לא נופל, ונוחתים בכל מקום'], ['Real flight physics, with automatic gear, flaps and protections', 'פיזיקת טיסה אמיתית, עם גלגלים ומדפים אוטומטיים והגנות'], ['Real physics and full manual control', 'פיזיקה אמיתית ושליטה ידנית מלאה']];

@@ -19,14 +19,15 @@ THREE.ShaderChunk.fog_pars_vertex = '#ifdef USE_FOG\n varying float fogDepth; va
 THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n fogDepth = length(mvPosition.xyz); vFogY = cameraPosition.y + dot(mvPosition.xyz, vec3(viewMatrix[0].y, viewMatrix[1].y, viewMatrix[2].y));\n#endif';
 THREE.ShaderChunk.fog_pars_fragment = '#ifdef USE_FOG\n uniform vec3 fogColor; varying float fogDepth; varying float vFogY;\n #ifdef FOG_EXP2\n uniform float fogDensity;\n #else\n uniform float fogNear; uniform float fogFar;\n #endif\n#endif';
 THREE.ShaderChunk.fog_fragment = '#ifdef USE_FOG\n #ifdef FOG_EXP2\n { float a=(cameraPosition.y+450.0)/1800.0, b=(vFogY+450.0)/1800.0, dd=b-a; float f=abs(dd)<0.02?exp(-a):(exp(-a)-exp(-b))/dd; float k=fogDensity*fogDepth*f*1.45; vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); gl_FragColor.rgb=gl_FragColor.rgb*T+fogColor*(1.0-T); }\n #else\n gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, smoothstep(fogNear, fogFar, fogDepth));\n #endif\n#endif';
-THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace('vec3 CustomToneMapping( vec3 color ) { return color; }', 'vec3 CustomToneMapping( vec3 color ) { vec3 t=max(color-0.55,0.0); return min(color,vec3(0.55))+t/(1.0+1.6*t); }');
+THREE.ShaderChunk.tonemapping_pars_fragment = THREE.ShaderChunk.tonemapping_pars_fragment.replace('vec3 CustomToneMapping( vec3 color ) { return color; }', 'vec3 CustomToneMapping( vec3 color ) { vec3 t=max(color-0.55,0.0); vec3 c=min(color,vec3(0.55))+t/(1.0+1.6*t); { float l=dot(c,vec3(0.30,0.59,0.11)); c=mix(vec3(l),c,1.15); c=mix(c,c*c*(3.0-2.0*c),0.35); c+=vec3(-0.010,0.004,0.022)*(1.0-smoothstep(0.0,0.35,l))+vec3(0.018,0.006,-0.020)*smoothstep(0.45,0.9,l); c=max(c,vec3(0.0)); } return c; }');
 renderer.toneMapping = THREE.CustomToneMapping;
 const HAZE_GLSL = `
   // shared look: haze that thins with height and shifts blue with distance, warm toward a low sun; and a soft shoulder so bright ground does not clip
   float hazeK(float d, float y0, float y1, float den){ float a=(y0+450.0)/1800.0, b=(y1+450.0)/1800.0, dd=b-a; float f=abs(dd)<0.02?exp(-a):(exp(-a)-exp(-b))/dd; return den*d*f*1.45; }
   vec3 hazeCol(vec3 base, vec3 vd, vec3 sdir, vec3 scol){ float low=clamp(1.0-sdir.y*1.6,0.0,1.0); float s=max(dot(normalize(vd.xz+vec2(1e-5)),normalize(sdir.xz+vec2(1e-5))),0.0);
     return base*mix(vec3(1.0),vec3(0.84,0.92,1.10),low*(1.0-s)*0.7)+scol*0.22*low*s*s*s; }
-  vec3 toneC(vec3 c){ vec3 t=max(c-0.55,0.0); return min(c,vec3(0.55))+t/(1.0+1.6*t); }
+  // the final grade, the same in every shader: a little more colour, a gentle S-curve, blue-teal shadows and warm highlights
+  vec3 toneC(vec3 c){ vec3 t=max(c-0.55,0.0); c=min(c,vec3(0.55))+t/(1.0+1.6*t); { float l=dot(c,vec3(0.30,0.59,0.11)); c=mix(vec3(l),c,1.15); c=mix(c,c*c*(3.0-2.0*c),0.35); c+=vec3(-0.010,0.004,0.022)*(1.0-smoothstep(0.0,0.35,l))+vec3(0.018,0.006,-0.020)*smoothstep(0.45,0.9,l); c=max(c,vec3(0.0)); } return c; }
 `;
 const camera = new THREE.PerspectiveCamera(60, 1, 1, 260000);
 const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x8a7a5a, 0.75); scene.add(hemi);
@@ -187,7 +188,7 @@ const TERRAIN_FS = `
       float road=max(smoothstep(0.455,0.475,fq.x)*ex, smoothstep(0.455,0.475,fq.y)*ez)*(1.0-smoothstep(1500.0,6000.0,vDist));
       vec3 uc=mix(vec3(0.55,0.54,0.51),vec3(0.73,0.69,0.61),nz(cq/61.0));
       uc=mix(uc,vec3(0.26,0.37,0.20),smoothstep(0.66,0.76,nD)*0.6); uc=mix(uc,vec3(0.43,0.44,0.45),road*0.8);
-      col=mix(col,uc,urban*0.9); emis+=warm*uLights*urban*(road*0.45+0.08); }
+      col=mix(col,uc,urban*0.9); { float fg=smoothstep(1200.0,6000.0,vDist), spk=smoothstep(0.50,0.56,nz(P/95.0+0.3))*smoothstep(0.42,0.50,nz(P/31.0+0.7)); emis+=warm*uLights*urban*(road*0.45+0.08+fg*(0.25+1.5*spk)); } }       /* from altitude a city is a field of gold, not a dark patch */
     // scattered village lights at night
     { vec2 cq=P/420.0; float hv=fract(sin(dot(floor(cq),vec2(127.1,311.7)))*43758.5453);
       emis+=warm*uLights*(1.0-arid*0.92)*step(0.80,hv)*smoothstep(0.07,0.0,length(fract(cq)-0.5))*0.8*step(-405.0,vW.y); }
@@ -202,8 +203,9 @@ const TERRAIN_FS = `
           vec2 ctr=uLCr.xy+(cell+0.5)*60.0+(b.xy-0.5)*60.0; float half2=b.z*42.0; vec2 rel=ctr-P; float t=dot(rel,sd2), l=abs(dot(rel,lat));
           float s=smoothstep(half2+2.5,half2-1.0,l)*smoothstep(-half2-2.0,-half2+1.5,t)*smoothstep(H*lenK+half2,H*lenK*0.82+half2-2.0,t); bsh=max(bsh,s); } }
       bsh*=1.0-smoothstep(2600.0,3800.0,vDist); }
-    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*vLit.x*(1.0-0.80*bsh);                        // vLit: baked mountain shadow and valley occlusion
-    vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5)*mix(0.80,1.0,vLit.x)*vLit.y)+emis;
+    float lowSun=clamp(1.0-sunDir.y*1.6,0.0,1.0), shB=max(vLit.x,0.22*lowSun);          // at a low sun a mountain's shadow is not black
+    float dif=max(dot(N,sunDir),0.0)*(1.0-0.42*cs)*shB*(1.0-0.80*bsh);                        // vLit: baked mountain shadow and valley occlusion
+    vec3 c=col*(sunCol*dif+mix(gndCol,skyCol,N.y*0.5+0.5)*mix(0.80,1.0,shB)*vLit.y)+emis;
     { float k=hazeK(vDist,cameraPosition.y,vW.y,fogDen)*(1.0+max(outside,0.0)/9000.0); vec3 T=exp(-k*k*vec3(0.8,1.0,1.35)); c=c*T+hazeCol(fogCol,vW-cameraPosition,sunDir,sunCol)*(1.0-T); }
     c=toneC(c);
     gl_FragColor=vec4(c,1.0);
@@ -232,7 +234,7 @@ const WATER_FS = `
     vec3 skyR=mix(skyHor,skyTop,pow(R.y,0.5));
     float sd=max(dot(R,sunDir),0.0), rgh=clamp(vDist/14000.0,0.0,1.0); float glint=pow(sd,mix(420.0,38.0,rgh))*mix(1.25,0.42,rgh)+pow(sd,20.0)*0.08;       // the sun's path widens toward the horizon instead of dying out
     vec3 light=skyCol+sunCol*max(dot(N,sunDir),0.0);
-    vec3 body=mix(deepCol,shalCol,exp(-max(depth,0.0)/14.0))*light;
+    vec3 body=mix(deepCol,shalCol,exp(-max(depth,0.0)/14.0))*light; body=mix(body,fogCol*0.55,clamp((fogDen-0.00006)*9000.0,0.0,0.6));          // under dust or storm the sea greys with the air
     vec3 c=mix(body,skyR,fres)+sunCol*glint;
     float surf=smoothstep(4.0,0.6,depth+sin(uTime*0.9+a*9.0)*1.3)*smoothstep(0.30,0.55,b+a*0.4);
     surf=max(surf, smoothstep(5.5,0.3,depth)*smoothstep(0.55,0.95,sin(depth*1.5-uTime*1.1+a*6.0))*0.75*(1.0-smoothstep(1500.0,7000.0,vDist)));          // lines of surf running in parallel to the beach
@@ -335,7 +337,7 @@ function buildWater() {
   for (let r = 0; r < rows - 1; r++) { const a = r * 2; I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
   const med = new THREE.BufferGeometry(); med.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); med.setIndex(I);
   const white = [0.95, 0.97, 1.0];
-  const mm = new THREE.Mesh(med, waterMat([0.02, 0.13, 0.30], [0.16, 0.56, 0.58], white, 26)); mm.frustumCulled = false; scene.add(mm);
+  const mm = new THREE.Mesh(med, waterMat([0.03, 0.21, 0.40], [0.18, 0.66, 0.68], white, 26)); mm.frustumCulled = false; scene.add(mm);
   // Gulf of Eilat / Red Sea with its bright reef fringe
   const rs = new THREE.Mesh(quadXZ(lon2x(34.55), lon2x(35.45), lat2z(29.57), FAR, 0), waterMat([0.02, 0.12, 0.32], [0.12, 0.62, 0.62], white, 20)); rs.frustumCulled = false; scene.add(rs);
   // Sea of Galilee, and the Dead Sea: milky turquoise over salt
