@@ -203,6 +203,9 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
 - Where: only inside the two firing ranges (`RANGES`: open Negev south of Mitzpe Ramon, and out at sea). Everywhere else the weapons are locked and the
   fire key only says where the nearest range is. This is a design rule, not a limitation: nothing in the rest of the world (towns, buildings, vehicles,
   ships, other aircraft, balloons) can be shot at or damaged. Do not widen it without the owner asking.
+- Everywhere, behind a child lock (the owner asked for it): the settings row "Weapons" has "Firing ranges only" (the default) and "Anywhere". Turning
+  "Anywhere" on asks a grown-up's question first (`wpnGate`: a multiplication, through `prompt`); turning it off asks nothing. It is kept in `SAVE.wpnAll`.
+  Even then the world is not a target: a shell or a bomb bursts where it lands, on the ground or on a roof (`hitObstacle`), and nothing is damaged.
 - At what: practice targets only, orange: three slow drones circling each range (gun, missiles), and bullseyes, checkered crates and rafts (bombs, gun).
   A target that is hit bursts and stands again 30 s later. No score and no table: a hit is a short message, a chime and a buzz.
 - How it shows: nothing outside a range. Inside, for an armed aircraft: `#cFire` (hold for the gun, tap for a missile or bombs; shows the rounds left),

@@ -14,11 +14,19 @@
 //   missile has locked. Keys: Enter fires, U changes weapon. Ammunition comes back on a new start and after landing.
 // - Motion. Everything flies in map space like the aircraft itself (ground speed scaled by `hsAt`), so the aiming mark and the bomb agree.
 
+// - Everywhere, behind a lock (added at the owner's request): a settings row can free the weapons over the whole map. It is off by default and turning it
+//   on asks a grown-up's question first (`wpnGate`: a multiplication a small child cannot do), so a child alone stays on the ranges. Even then the world is
+//   not a target: a bomb or a shell bursts where it lands, on the ground or on a roof, and nothing is damaged or destroyed; only the practice targets react.
 const WPN = { on: false, range: null, sel: 0, ammo: {}, cool: 0, bullets: [], shots: [], drones: [], targets: [], blasts: [], lock: null, hitT: -9, safeT: -9, gunT: 0 };
 const RANGES = [{ name: ['the Negev range', 'שטח האש בנגב'], lon: 34.78, lat: 30.40, r: 4200 }          /* open desert south of Mitzpe Ramon: no town within reach, a handful of masts at most */, { name: ['the sea range', 'שטח האש בים'], lon: 34.36, lat: 32.2, r: 5200, sea: true }];
 const WPN_NAME = { gun: ['Gun', 'תותח'], missile: ['Missile', 'טיל'], bomb: ['Bomb', 'פצצה'] };
 /** The weapons of an aircraft, in the order the weapon button steps through them: [kind, how many, released per press]. */
 const armsOf = pl => pl.key === 'fighter' ? [['gun', 500, 1], ['missile', 4, 1], ['bomb', 4, 1]] : pl.key === 'stealth' ? [['bomb', 2, 1]] : pl.key === 'bomber' ? [['bomb', 48, 6]] : null;
+/** The lock on "weapons everywhere": a question for a grown-up. True when it is answered right. */
+function wpnGate() {
+  const a = 6 + ((Math.random() * 4) | 0), b = 7 + ((Math.random() * 3) | 0), r = window.prompt(L('For a grown-up. To let the weapons fire anywhere on the map, type the answer: ' + a + ' × ' + b + ' = ?', 'להורים. כדי לאפשר ירי בכל מקום במפה, הקלידו את התשובה: ' + a + ' × ' + b + ' = ?'), '');
+  return r !== null && +String(r).trim() === a * b;
+}
 function wpnRearm() { const a = armsOf(PL); WPN.ammo = {}; WPN.sel = 0; if (a) for (const [k, n] of a) WPN.ammo[k] = n; }
 
 function buildWeapons() {
@@ -63,7 +71,7 @@ function wpnSelect() { const a = armsOf(PL); if (!a || a.length < 2) return; WPN
 /** One press of the fire key (the gun also fires while it is held, from `updateWeapons`). */
 function wpnFire(held) {
   const a = armsOf(PL); if (!a || S.crashed || S.paused) return; const [kind, , per] = a[WPN.sel] || a[0], rg = wpnRange();
-  if (!rg.in) { if (!held && TNOW - WPN.safeT > 4) { WPN.safeT = TNOW; const brg = (Math.atan2(rg.best.x - S.pos.x, -(rg.best.z - S.pos.z)) / DEG + 360) % 360;
+  if (!rg.in && !SAVE.wpnAll) { if (!held && TNOW - WPN.safeT > 4) { WPN.safeT = TNOW; const brg = (Math.atan2(rg.best.x - S.pos.x, -(rg.best.z - S.pos.z)) / DEG + 360) % 360;
       toast(L('Weapons are locked outside a firing range. Nearest: ' + rg.best.name[0] + ', ', 'הנשק נעול מחוץ לשטח אש. הקרוב: ' + rg.best.name[1] + ', ') + kmTxt(realDist(rg.best.x - S.pos.x, rg.best.z - S.pos.z)) + ' ' + dirTxt(brg), 5); } return; }
   if (S.onGround) return; if (!WPN.ammo[kind]) { if (!held && TNOW - WPN.safeT > 3) { WPN.safeT = TNOW; toast(L('Out of ammunition: land, or start again, to rearm', 'נגמרה התחמושת: נוחתים או מתחילים מחדש כדי להתחמש'), 4); } return; }
   const hs = hsAt(S.ra); fwd.set(0, 0, -1).applyQuaternion(S.q);
@@ -76,10 +84,10 @@ function wpnFire(held) {
 }
 
 function updateWeapons(dt, run) {
-  const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && rg.in && !S.crashed && !S.paused && !PH.on);
+  const a = armsOf(PL), T = document.body.classList.contains('touch'), rg = a && S.started ? wpnRange() : null, live = !!(rg && (rg.in || SAVE.wpnAll) && !S.crashed && !S.paused && !PH.on);
   // the buttons and marks exist only for an armed aircraft inside a range
   if (WPN.on !== live || WPN.uiPl !== PL.key) { WPN.on = live; WPN.uiPl = PL.key; $('cFire').hidden = !live; $('cWpn').hidden = !(live && a && a.length > 1); if (!live) { $('aim').style.display = 'none'; $('aimLock').style.display = 'none'; keys.Enter = false; }
-    if (live && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Aim at the orange targets and press Fire', 'מכוונים אל המטרות הכתומות ולוחצים "אש"') : L('Aim at the orange targets. Enter fires, U changes weapon', 'מכוונים אל המטרות הכתומות. Enter יורה, U מחליף נשק')), 6); } }
+    if (live && rg.in && TNOW - (WPN.inT || -99) > 30) { WPN.inT = TNOW; toast(L('Firing range: weapons are live. ', 'שטח אש: הנשק פעיל. ') + (T ? L('Aim at the orange targets and press Fire', 'מכוונים אל המטרות הכתומות ולוחצים "אש"') : L('Aim at the orange targets. Enter fires, U changes weapon', 'מכוונים אל המטרות הכתומות. Enter יורה, U מחליף נשק')), 6); } }
   if (S.landed && S.onGround && a && S.V < 2 && !WPN.rearmed) { WPN.rearmed = true; wpnRearm(); } else if (!S.onGround) WPN.rearmed = false;
   // drones fly their circles everywhere (they are part of the range), targets come back after a while
   for (const d of WPN.drones) { const R = RANGES[d.range]; if (run) d.a += d.dir * 38 / d.r * dt;          /* slow enough to hit with the gun without leading far */ d.p.set(R.x + Math.cos(d.a) * d.r, d.alt, R.z + Math.sin(d.a) * d.r); d.m.position.copy(d.p); d.m.rotation.set(0, Math.atan2(Math.sin(d.a) * d.dir, -Math.cos(d.a) * d.dir), -d.dir * 0.25, 'YXZ'); d.m.scale.setScalar(2.2);
@@ -92,6 +100,7 @@ function updateWeapons(dt, run) {
   // bullets: straight and fast, a little drop; they wear a target down
   { const P = WPN.tr.geometry.attributes.position; let n = 0; WPN.bullets = WPN.bullets.filter(b => { b.t += dt; const px = b.p.x, py = b.p.y, pz = b.p.z; b.v.y -= G * dt; b.p.addScaledVector(b.v, dt); if (b.t > 1.5) return false;
       for (const d of WPN.drones) if (d.dead <= 0 && Math.abs(d.p.x - b.p.x) < 60 && tmpV.copy(d.p).sub(b.p).length() < 26) { if (--d.hp <= 0) killDrone(d); else puff(d.p.x, d.p.y, d.p.z, 3, 0.5); return false; }
+      if (hitObstacle(b.p.x, b.p.y, b.p.z, 1)) { puff(b.p.x, b.p.y, b.p.z, 2.2, 0.4); return false; }
       const gh = groundAt(b.p.x, b.p.z).h; if (b.p.y <= gh + 1) { for (const t of WPN.targets) if (t.dead <= 0 && Math.hypot(t.x - b.p.x, t.z - b.p.z) < 14) { if (--t.hp <= 0) killTgt(t); } puff(b.p.x, gh + 1, b.p.z, 2.2, 0.4); return false; }
       if (n < 60) { P.setXYZ(n * 2, px, py, pz); P.setXYZ(n * 2 + 1, b.p.x, b.p.y, b.p.z); n++; } return true; });
     WPN.tr.geometry.setDrawRange(0, n * 2); P.needsUpdate = true; }
@@ -101,7 +110,7 @@ function updateWeapons(dt, run) {
       s.p.addScaledVector(s.v, dt); if ((s.n = (s.n | 0) + 1) % 2 === 0) puff(s.p.x, s.p.y, s.p.z, 1.6, 0.5);
       if (d && s.p.distanceTo(d.p) < 28) { killDrone(d); s.on = false; } else if (s.t > 9 || s.p.y < groundAt(s.p.x, s.p.z).h) { wpnBlast(s.p.x, s.p.y, s.p.z, 0.8, true); s.on = false; } }
     else { s.v.y -= G * dt; if (s.guided && s.t > 0.6) { let best = null, bd = 420; for (const t of WPN.targets) if (t.dead <= 0) { const dd = Math.hypot(t.x - s.p.x, t.z - s.p.z); if (dd < bd) { bd = dd; best = t; } } if (best) { const tt = Math.max((s.p.y - best.y) / Math.max(-s.v.y, 20), 0.3); s.v.x += ((best.x - s.p.x) / tt - s.v.x) * Math.min(1, 2.5 * dt); s.v.z += ((best.z - s.p.z) / tt - s.v.z) * Math.min(1, 2.5 * dt); } }
-      s.p.addScaledVector(s.v, dt); const gh = groundAt(s.p.x, s.p.z).h; if (s.p.y <= gh) { wpnBlast(s.p.x, gh + 2, s.p.z, 2.2); for (const t of WPN.targets) if (t.dead <= 0 && Math.hypot(t.x - s.p.x, t.z - s.p.z) < 38) killTgt(t); s.on = false; } }
+      s.p.addScaledVector(s.v, dt); const gh = hitObstacle(s.p.x, s.p.y, s.p.z, 1) ? s.p.y : groundAt(s.p.x, s.p.z).h; if (s.p.y <= gh) { wpnBlast(s.p.x, gh + 2, s.p.z, 2.2);          /* on a roof it bursts on the roof: a picture only, nothing is damaged */ for (const t of WPN.targets) if (t.dead <= 0 && Math.hypot(t.x - s.p.x, t.z - s.p.z) < 38) killTgt(t); s.on = false; } }
     if (s.on) { tmpV.copy(s.p).add(s.v); s.m.lookAt(tmpV); s.m.rotateY(Math.PI); } else s.m.visible = false; }
   // aiming marks (screen elements moved to where the weapon points)
   const aim = $('aim'), lk = $('aimLock'); WPN.lock = null;

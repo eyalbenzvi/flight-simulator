@@ -243,6 +243,8 @@ function settingsRows(el, where, rer) {
   row(L('View', 'מבט'), CAMS.map(tr), S.cam, i => { S.cam = i; camSnap = true; });
   if (touchUI) row(L('Steering', 'היגוי'), [L('Thumb stick', 'ג׳ויסטיק'), L('Tilt the phone', 'הטיית הטלפון')], SAVE.tilt | 0, i => { SAVE.tilt = i; if (i) tiltStart(); else tiltStop(); });
   if (where === 'pause') row(L('Speed of time', 'מהירות הזמן'), RATES.map(r => '×' + r), RATE.i, i => setRate(i));
+  // weapons: on the firing ranges only (the default), or anywhere, which is behind a grown-up's question (the child lock)
+  row(L('Weapons', 'נשק'), [L('Firing ranges only', 'בשטחי אש בלבד'), '🔒 ' + L('Anywhere', 'בכל מקום')], SAVE.wpnAll ? 1 : 0, i => { if (i && !SAVE.wpnAll && !wpnGate()) { toast(L('The weapons stay on the firing ranges', 'הנשק נשאר בשטחי האש בלבד'), 3); return; } SAVE.wpnAll = !!i; });
   row(L('Graphics', 'גרפיקה'), [L('Automatic', 'אוטומטי'), L('Fast', 'מהיר'), L('Best', 'מרבי')], SAVE.gfx | 0, i => { SAVE.gfx = i; applyGfx(i); });
   row(L('Speed units', 'יחידות מהירות'), U_SPD.map(u => L(u[1], u[2])), SAVE.uSpd | 0, i => { SAVE.uSpd = i; });
   row(L('Distance units', 'יחידות מרחק'), [L('km', 'ק״מ'), L('miles', 'מייל'), L('nautical miles', 'מייל ימי')], SAVE.uDist | 0, i => { SAVE.uDist = i; });
