@@ -530,11 +530,17 @@ function buildScatter() {
   scatter = { bm: mk(GEO.crown, BIGGRID ? 6500 : 2600), tm: mk(GEO.tree, BIGGRID ? 9000 : 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
 }
 function updateScatter() {
-  const S2 = scatter, cx = camera.position.x, cz = camera.position.z; if (Math.hypot(cx - S2.x, cz - S2.z) < 170) return; S2.x = cx; S2.z = cz;
-  const { tm, bm, hm, sm, wm, mm, col, e } = S2; let nt = 0, nb = 0, nh = 0, ns = 0, nw = 0, nm = 0;
-  if (camera.position.y - heightAt(cx, cz) < 2600) {
-    const CELL = 42, RAD = 1500, n = Math.ceil(RAD / CELL), gx0 = Math.round(cx / CELL), gz0 = Math.round(cz / CELL), m4 = tmpM, q = tmpQ, p = tmpV, sc = tmpV2;
-    for (let gz = gz0 - n; gz <= gz0 + n; gz++) for (let gx = gx0 - n; gx <= gx0 + n; gx++) {
+  // The scatter is rebuilt every 170 m of flight, and a low, fast jet covers that twice a second: done in one go it held a frame back each time (the
+  // owner saw it as jumps). So it is a job that works a row or two per frame, about 2 ms, into the meshes' own arrays, which only reach the graphics
+  // chip when the job is done. The first build, and one after a jump to another place, is done at once.
+  const S2 = scatter; let J = S2.job, sync = !S2.built;
+  if (!J) { const x0 = camera.position.x, z0 = camera.position.z, moved = Math.hypot(x0 - S2.x, z0 - S2.z); if (moved < 170) return; if (moved > 2500) sync = true; S2.x = x0; S2.z = z0;
+    J = S2.job = { cx: x0, cz: z0, on: camera.position.y - heightAt(x0, z0) < 2600, gz: null, sync, c: [0, 0, 0, 0, 0, 0] }; }
+  const cx = J.cx, cz = J.cz, t0 = performance.now(), { tm, bm, hm, sm, wm, mm, col, e } = S2; let [nt, nb, nh, ns, nw, nm] = J.c;
+  if (J.on) {
+    const CELL = 42, RAD = 1500, n = Math.ceil(RAD / CELL), gx0 = Math.round(cx / CELL), gz0 = Math.round(cz / CELL), m4 = tmpM, q = tmpQ, p = tmpV, sc = tmpV2; if (J.gz === null) J.gz = gz0 - n;
+    for (let gz = J.gz; gz <= gz0 + n; gz++) { if (!J.sync && gz > J.gz && performance.now() - t0 > 2) { J.gz = gz; J.c = [nt, nb, nh, ns, nw, nm]; return; }
+     for (let gx = gx0 - n; gx <= gx0 + n; gx++) {
       const h = hash2(gx * 1.37 + 11, gz * 2.11 + 7), x = (gx + hash2(gx + 3.3, gz + 9.1) - 0.5) * CELL, z = (gz + hash2(gx + 7.7, gz + 1.9) - 0.5) * CELL, d = Math.hypot(x - cx, z - cz); if (d > RAD) continue;
       const zi = zoneAt(x, z), farm = ZONE[zi], arid = ZONE[zi + 1], urban = ZONE[zi + 2], wood = (1 - arid) * (1 - farm) * (1 - urban), clump = FOREST[zi >> 2] > 0.3 ? 1.5 : vnoise(gx * 0.11, gz * 0.11) > 0.47 ? 1 : 0.22;
       // one coarse cell in four holds a village; its kind depends on the region
@@ -567,9 +573,10 @@ function updateScatter() {
         const k2 = r ? hash2(gx + r * 7.7, gz + r * 3.1) : k, ht = (shrub ? 3 + k2 * 2.5 : orch ? 6 + k2 * 2 : 8 + k2 * 8) * fade, wd = (shrub ? 5 + k2 * 3 : orch ? 6 + k2 * 1.5 : 7 + k2 * 6) * fade;
         p.set(x2, triHeight(x2, z2) - 0.3, z2); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); bm.setMatrixAt(nb, m4);
         bm.setColorAt(nb++, shrub ? col.setRGB(0.33 + k2 * 0.05, 0.34 + k2 * 0.05, 0.22) : orch ? col.setRGB(0.12 + k2 * 0.04, 0.26 + k2 * 0.06, 0.10) : col.setRGB(0.13 + k2 * 0.07, 0.24 + k2 * 0.09, 0.10 + k2 * 0.04)); }       /* natural greens: olive-grey scrub, deep orchard, darker crowns */
-    }
+    } }
   }
   [[tm, nt], [bm, nb], [hm, nh], [sm, ns], [wm, nw], [mm, nm]].forEach(([m, c]) => { m.count = c; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+  S2.job = null; S2.built = true;
 }
 
 function buildDetails() {

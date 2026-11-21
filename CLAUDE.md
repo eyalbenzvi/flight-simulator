@@ -251,6 +251,11 @@ What was done with that (round eight, softening):
 - The beach (`TERRAIN_FS`): ground between -3 and about 4.6 m is sand, wet and darker at the water's edge; only the open coasts lie at that height.
 - A mapped forest or orchard is thick on `BIGGRID` devices (`updateScatter`): up to four trees per 42 m cell within 950 m, limits 9,000 pines and
   6,500 crowns.
+- Jumps between frames (the owner's recording of a low, fast jet showed a late frame every half second or so): `updateScatter` rebuilt every tree
+  within 1.5 km in one go each 170 m of flight. It is now a job of about 2 ms a frame whose writes reach the graphics chip only when it is done
+  (`scatter.job`); the first build and one after a jump are still done at once. `?perf=1` now starts with a low, fast pass and counts late frames
+  (over 25 ms of 240), the worst one, and the game code's worst frame. Not yet confirmed on the phone that this was the whole cause: the map
+  redraw every fourth frame and first-time uploads of city buckets are the next suspects.
 - Left for later, each needs its own round: rounded terrain between grid points (the mesh must stay equal to `triHeight`), road shoulders (needs
   transparency over a logarithmic depth buffer), districts by character, more hand-made landmarks, and real elevation data.
 
