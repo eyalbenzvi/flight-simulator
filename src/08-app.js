@@ -333,7 +333,7 @@ function menuOffset() { const w = window.innerWidth, h = window.innerHeight; if 
 let last = 0, frame = 0;
 function loop(now) {
   const pT = PERF.on ? performance.now() : 0;
-  if (last && S.started && !S.paused) autoRes(now - last);
+  if (last && S.started && !S.paused) { autoDetail(now - last); autoRes(now - last); }
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016); last = now; frame++;
   const run = S.started && !S.paused && !PH.on, sdt = dt * (run ? RATE.v : 1); if (run || !S.started) TNOW += sdt;          // sdt: the time the world lives through this frame (faster with the time setting)
@@ -361,7 +361,7 @@ function loop(now) {
   ENV.uTime.value = TNOW; skyU.uT.value = TNOW; if (TR) TR.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(camera.fov * DEG / 2));
   if ((run || !S.started) && cloudMat) cloudMat.uniforms.uDrift.value += 6 * dt;
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
-  for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far; }   // distance cull, to the nearest edge of each bucket
+  for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far * DET.far; }   // distance cull, to the nearest edge of each bucket
   updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
   updateExtras(dt, run, run || !S.started); updateWeapons(sdt, run);
   if (PERF.on) { PERF.acc(performance.now() - pT); if (PERF.busy) return; }          /* ?perf=1: the measurement draws its own frames */

@@ -9,8 +9,25 @@ RES.pr = RES.fixed || Math.min(RES.max, 1.75); renderer.setPixelRatio(RES.pr);
 /** The player's graphics choice (settings): 0 automatic (resolution follows the frame rate), 1 fast (one screen pixel per pixel at most, no post pass),
     2 best (the screen's full density, pinned). */
 function applyGfx(g) {
-  RES.user = g | 0; POST.on = POST.url && g !== 1; const pr = RES.fixed || (g === 1 ? Math.min(1, RES.max) : g === 2 ? RES.max : Math.min(RES.max, 1.75));
+  DET.lvl = Math.min(DET.lvl, 3); RES.user = g | 0; POST.on = POST.url && g !== 1; const pr = RES.fixed || (g === 1 ? Math.min(1, RES.max) : g === 2 ? RES.max : Math.min(RES.max, 1.75));
   if (pr !== RES.pr) { RES.pr = pr; renderer.setPixelRatio(pr); resize(); }
+}
+/**
+ * The detail governor. Measured on the owner's phone: with the extras for capable devices (building shadows on the ground, longer draw distances,
+ * thick forests) and the full pixel density, some places hold 60 frames a second and some fall to 30, and the change between the two is felt as
+ * jumps. So when 45 frames average over 19.5 ms the extras are given back one at a time, cheapest loss first: the building shadows, then the draw
+ * distance (to 75%, then 55%, with the thick forests), and last, in the "best" graphics setting, the pixel density in quarter steps down to 1.5.
+ * One way only for the visit: going back up would be the same jumping again. The automatic resolution (`autoRes`, from 27 ms) comes after it.
+ */
+const DET = { lvl: 0, far: 1, acc: 0, n: 0, hold: 120 };
+function autoDetail(ms) {
+  if (ms > 250 || document.hidden || DET.lvl >= 5 || (typeof PERF !== 'undefined' && PERF.busy)) return; if (DET.hold > 0) { DET.hold--; return; }
+  DET.acc += ms; if (++DET.n < 45) return; const avg = DET.acc / DET.n; DET.acc = DET.n = 0; if (avg < 19.5) return;
+  DET.lvl++; DET.hold = 60;
+  if (DET.lvl === 1) { if (TERRAIN_MAT && TERRAIN_MAT.uniforms.uBS.value) { TERRAIN_MAT.uniforms.uBS.value = 0; return; } DET.lvl = 2; }
+  if (DET.lvl === 2) DET.far = 0.75;
+  else if (DET.lvl === 3) { DET.far = 0.55; if (typeof scatter !== 'undefined' && scatter) scatter.x = 1e9; }
+  else if (RES.user === 2 && !RES.fixed && RES.pr > 1.5) { RES.pr = Math.max(1.5, RES.pr - 0.25); renderer.setPixelRatio(RES.pr); resize(); if (RES.pr > 1.5) DET.lvl = 3; }
 }
 function autoRes(ms) {
   if (RES.fixed || RES.user || ms > 250 || document.hidden) return; RES.acc += ms; if (++RES.n < 45) return; const avg = RES.acc / RES.n; RES.acc = RES.n = 0; if (RES.hold > 0) RES.hold--;

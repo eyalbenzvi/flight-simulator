@@ -562,7 +562,7 @@ function updateScatter() {
       const g = groundAt(x, z); if (g.water || lcAt(x, z) === 9 || airfieldAt(x, z, 6) || nearRoad(x, z, 6) || (urban > 0.05 || lc === 11 || lc === 12 ? obstBox(x, z, 3, 3) : false)) continue;
       const k = hash2(gx + 5.5, gz + 2.5), fade = ss(RAD, RAD * 0.8, d), shrub = lc ? lc === 6 : arid > 0.6, pine = lc ? lc === 1 || (lc === 16 && k < 0.6) : !shrub && clump > 0.9;
       // a mapped forest or orchard is thick (not on small phones): within 950 m each cell holds up to four trees, not one
-      const TCAP = BIGGRID ? 9000 : 3200, BCAP = BIGGRID ? 6500 : 2600, reps = BIGGRID && d < 950 && (lc === 1 || lc === 2) ? 4 : 1;
+      const TCAP = BIGGRID ? 9000 : 3200, BCAP = BIGGRID ? 6500 : 2600, reps = BIGGRID && DET.lvl < 3 && d < 950 && (lc === 1 || lc === 2) ? 4 : 1;
       if (pine) { for (let r = 0; r < reps && nt < TCAP; r++) { const x2 = r ? x + (hash2(gx * 3.1 + r, gz * 1.7) - 0.5) * CELL * 0.92 : x, z2 = r ? z + (hash2(gx * 1.3, gz * 2.9 + r) - 0.5) * CELL * 0.92 : z; if (r && (lcAt(x2, z2) !== 1 || nearRoad(x2, z2, 5))) continue;
           const k2 = r ? hash2(gx + r * 7.7, gz + r * 3.1) : k, ht = (10 + k2 * 10) * fade, wd = (5 + k2 * 3) * fade; p.set(x2, triHeight(x2, z2) - 0.5, z2); sc.set(wd, ht, wd); q.set(0, 0, 0, 1); m4.compose(p, q, sc); tm.setMatrixAt(nt, m4);
           tm.setColorAt(nt++, col.setRGB(0.09 + k2 * 0.06, 0.20 + k2 * 0.10, 0.08 + k2 * 0.04)); } continue; }
