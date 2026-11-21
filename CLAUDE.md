@@ -226,12 +226,23 @@ nothing, water courses that climb, flat sites on slopes, and buildings against t
 
 ## Measuring where the frame time goes (`?perf=1`)
 
-`perfRun` (end of `src/07c-extras.js`) is for a real device: with `?perf=1` in the address, a few seconds into a flight it flies to three places and draws
-each a few dozen times in different ways, waiting for the graphics chip after every frame (a one-pixel read), then shows a table to photograph: whole
-frame, no post pass, a quarter of the pixels, without terrain / water / buildings / sky, triangles and draw calls per group, and the game code's own
-time. First numbers (software renderer, so only the counts mean anything; touch configuration): 1.3 to 1.8 million triangles and 380 to 850 draw calls
-a frame, of which buildings and sites 0.8 to 1.1 million, terrain about 100,000, the water pass as much again as the terrain (it redraws the terrain's
-tiles), the rest 260,000 to 460,000 and up to 530 draw calls at altitude; game code 1 to 2 ms. No phone has reported yet.
+`perfRun` (end of `src/07c-extras.js`) is for a real device: with `?perf=1` in the address, a few seconds into a flight it flies to three places, times
+the game as played (the screen's own clock) and then draws each place a few dozen times in different ways, waiting for the graphics chip after every
+frame (a one-pixel read), and shows a table to photograph: whole frame, no post pass, a quarter of the pixels, without terrain / water / buildings /
+sky, triangles and draw calls per group, the game code's own time. The synced lines compare parts; they read higher than play.
+
+The one phone measured so far (Adreno 740, 822 x 1502 drawn at x2): 37 to 53 ms synced, 76 to 87% of it per pixel; terrain 17 to 31 ms, buildings 9 to
+17, post pass 2 to 6, game code 3, sky nothing; 1.3 to 1.8 million triangles and 380 to 860 draw calls are not what costs. (That first run also said
+"water 15 to 24 ms": the tool matched the terrain as water. Fixed; the water is four flat quads.) So: per-pixel work on the terrain is the budget.
+
+What was done with that (round eight, softening):
+- The sea and lake bed is left out of the terrain mesh (`sunk` in `buildTerrain`): the logarithmic depth buffer writes depth in the fragment shader, so
+  nothing is rejected early and every hidden pixel is shaded in full. Keep that in mind for anything drawn behind something else.
+- `TERRAIN_FS` looks up each detail layer only where it can be seen (`gC` within 22 km, `gE` within 2.2 km, the fine wobbles within 9 and 2.5 km).
+- Land-cover borders: the shader's class texture is twice as fine, made with Scale2x (`landCoverTexture`; `lcAt` and all placement still read the
+  60 m grid), a broad wobble takes over from high up, and along a border the colour leans toward the neighbouring class (`tPal`,
+  `landCoverPalette`), so borders are soft bands that wander, not lines in steps.
+- The finer terrain grid (384 x 704) is used on a phone with 6 GB or more (`BIGGRID`).
 
 ## Start-up
 

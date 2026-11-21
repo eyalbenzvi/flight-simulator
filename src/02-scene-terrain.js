@@ -124,8 +124,22 @@ function fieldsTexture() {
 function landCoverTexture() {
   // mapped water that lies on dry ground here (the formula terrain's shores differ from the real ones, most of all at the Dead Sea) is not painted blue: the water surface itself already is
   for (let j = 0; j < LCR.h; j++) for (let i = 0; i < LCR.w; i++) { const o = (j * LCR.w + i) * 4; if (LCR.d[o] === 9 && !groundAt(X0 + (i + 0.5) * 60, Z0 + (j + 0.5) * 60).water) LCR.d[o] = 0; }
-  const n = LCR.w * LCR.h, a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = LCR.d[i * 4];
-  const t = new THREE.DataTexture(a, LCR.w, LCR.h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+  // The shader's copy is twice as fine in each direction, made with the pixel-art rule "Scale2x": where two neighbours of a cell agree across a corner,
+  // that corner takes their class. A staircase of 60 m steps becomes a diagonal of 30 m ones. (Everything else still reads the 60 m grid, `lcAt`.)
+  const w = LCR.w, h = LCR.h, at = (i, j) => LCR.d[(Math.min(h - 1, Math.max(0, j)) * w + Math.min(w - 1, Math.max(0, i))) * 4];
+  if (renderer.capabilities.maxTextureSize < h * 2) { const a = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) a[i] = LCR.d[i * 4]; const t = new THREE.DataTexture(a, w, h, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t; }
+  const a = new Uint8Array(w * h * 4);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const P = at(i, j), A = at(i, j - 1), B = at(i + 1, j), C = at(i - 1, j), D = at(i, j + 1), o = (j * 2) * (w * 2) + i * 2;
+    a[o] = C === A && C !== D && A !== B ? A : P; a[o + 1] = A === B && A !== C && B !== D ? B : P; a[o + w * 2] = D === C && D !== B && C !== A ? C : P; a[o + w * 2 + 1] = B === D && B !== A && D !== C ? D : P; }
+  const t = new THREE.DataTexture(a, w * 2, h * 2, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
+}
+/** One typical colour per land-cover class (alpha 0: the class has none of its own and shows the ground beside it). The shader blends a class toward its
+    neighbour's colour along their border, so borders are a soft band and not a line. */
+function landCoverPalette() {
+  const C = [[0, 0, 0, 0], [0.15, 0.24, 0.10, 1], [0.28, 0.32, 0.19, 1], [0.38, 0.37, 0.23, 1], [0.42, 0.45, 0.25, 0.7], [0.28, 0.44, 0.19, 1], [0.42, 0.43, 0.28, 1], [0.80, 0.74, 0.58, 0.7], [0.58, 0.56, 0.51, 0.6], [0.15, 0.31, 0.39, 1],
+    [0.19, 0.32, 0.28, 1], [0, 0, 0, 0], [0.58, 0.58, 0.57, 1], [0.76, 0.79, 0.78, 1], [0.16, 0.19, 0.27, 1], [0, 0, 0, 0], [0.50, 0.52, 0.44, 1], [0.67, 0.58, 0.45, 1]], a = new Uint8Array(32 * 4);
+  C.forEach((c, i) => { for (let k = 0; k < 4; k++) a[i * 4 + k] = Math.round(c[k] * 255); });
+  const t = new THREE.DataTexture(a, 32, 1, THREE.RGBAFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
 }
 /** Where the land-cover map has any class, blurred over a cell and filtered: the shader feathers class edges with it. */
 function landCoverMask() {
@@ -167,7 +181,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS, tPal; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -181,9 +195,9 @@ const TERRAIN_FS = `
     // relief: gradient of a synthetic detail height field bends the mesh normal
     float near=1.0-smoothstep(5000.0,22000.0,vDist);
     vec2 gB=vec2(nz(pB+vec2(60.0/5300.0,0.0))-nB, nz(pB+vec2(0.0,60.0/5300.0))-nB)/60.0;
-    vec2 gC=vec2(nz(pC+vec2(8.0/700.0,0.0))-nC, nz(pC+vec2(0.0,8.0/700.0))-nC)/8.0;
+    vec2 gC=vec2(0.0); if(near>0.01){ gC=vec2(nz(pC+vec2(8.0/700.0,0.0))-nC, nz(pC+vec2(0.0,8.0/700.0))-nC)/8.0; }          /* each layer of detail is only looked up where it can be seen: this shader is what a phone spends its frame on */
     // close-up grain: a third, metre-scale layer that only shows near the ground
-    vec2 pE=mat2(0.8,-0.6,0.6,0.8)*P/43.0+0.53; float nE=nz(pE), close=1.0-smoothstep(250.0,2200.0,vDist); vec2 gE=vec2(nz(pE+vec2(1.0/43.0,0.0))-nE, nz(pE+vec2(0.0,1.0/43.0))-nE)*2.2;       /* one noise tile now spans 43 m, turned 37 degrees, so no 13 m lattice shows on bare ground */
+    vec2 pE=mat2(0.8,-0.6,0.6,0.8)*P/43.0+0.53; float nE=0.5, close=1.0-smoothstep(250.0,2200.0,vDist); vec2 gE=vec2(0.0); if(close>0.01){ nE=nz(pE); gE=vec2(nz(pE+vec2(1.0/43.0,0.0))-nE, nz(pE+vec2(0.0,1.0/43.0))-nE)*2.2; }       /* one noise tile now spans 43 m, turned 37 degrees, so no 13 m lattice shows on bare ground */
     vec2 g=(gB*__UB__+gC*__UC__*near+gE*3.0*close)*rough;
     vec3 N=normalize(vec3(vN.x-g.x, vN.y, vN.z-g.y));
     float slope=1.0-N.y;
@@ -202,7 +216,12 @@ const TERRAIN_FS = `
     // land cover from OpenStreetMap (one class per 60 m cell, ragged edges); fine patterns fade out with distance
     float lcG=0.0;
     /* three scales of wobble: the 60 m cells of the land cover lose their straight edges and square corners */
-    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0+(vec2(nz(P/41.0+0.13),nz(P/41.0+0.59))-0.5)*uLCr.zw*46.0+(vec2(nz(P/13.0+0.71),nz(P/13.0+0.27))-0.5)*uLCr.zw*14.0; float lc=floor(texture2D(tLC,(P-uLCr.xy)*uLCr.zw+jit).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r; lcG=lc;
+    { vec2 jit=(vec2(nz(P/170.0+0.31),nz(P/170.0+0.77))-0.5)*uLCr.zw*85.0;
+      { float j2=1.0-smoothstep(4000.0,9000.0,vDist), j3=1.0-smoothstep(900.0,2500.0,vDist), jf=smoothstep(1800.0,6000.0,vDist);
+        if(j2>0.01){ jit+=(vec2(nz(P/41.0+0.13),nz(P/41.0+0.59))-0.5)*uLCr.zw*46.0*j2; }
+        if(j3>0.01){ jit+=(vec2(nz(P/13.0+0.71),nz(P/13.0+0.27))-0.5)*uLCr.zw*14.0*j3; }
+        if(jf>0.01){ jit+=(vec2(nz(P/520.0+0.43),nz(P/520.0+0.91))-0.5)*uLCr.zw*70.0*jf; } }          /* from high up the fine wobble is below a pixel: a broad one takes over, so borders wander instead of stepping */
+      vec2 uvL=(P-uLCr.xy)*uLCr.zw+jit; float lc=floor(texture2D(tLC,uvL).r*255.0+0.5); vec3 col0=col; float lcA=texture2D(tLCa,(P-uLCr.xy)*uLCr.zw+jit*0.5).r; lcG=lc;
       float fine=1.0-smoothstep(900.0,4500.0,vDist), fineS=1.0-smoothstep(220.0,1000.0,vDist), fineG=1.0-smoothstep(110.0,520.0,vDist);       /* rows a few metres apart fade out sooner: far away they only shimmer */ vec3 soil=vec3(0.47,0.40,0.30)*(0.9+0.2*nC);
       if(lc>0.5){
         if(lc<1.5){ float h1=nz(P/16.0+0.21), can=smoothstep(0.40,0.66,h1*0.55+nD*0.45), h2=nz((P+sunDir.xz*9.0)/16.0+0.21);          /* forest: a canopy of crowns, each lit on its sun side with a shadowed gap behind */
@@ -224,7 +243,12 @@ const TERRAIN_FS = `
         else if(lc<16.5){ col=mix(vec3(0.64,0.63,0.59),vec3(0.24,0.33,0.19),smoothstep(0.52,0.70,nD)); }
         else { col=vec3(0.67,0.58,0.45)*(0.9+0.2*nC); }
         col=mix(col0,col,smoothstep(0.10,0.70,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
-      } }
+      }
+      /* soft borders: half a cell away, to one side or the other, lies perhaps another class; the colour leans a third of the way toward it */
+      if(vDist<40000.0){ vec2 hd=uLCr.zw*30.0*(nD>0.5?1.0:-1.0)*(0.7+0.6*nC);
+        float l1=floor(texture2D(tLC,uvL+vec2(hd.x,0.0)).r*255.0+0.5), l2=floor(texture2D(tLC,uvL+vec2(0.0,hd.y)).r*255.0+0.5);
+        if(abs(l1-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l1+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); }
+        if(abs(l2-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l2+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); } } }
     float outside=max(max(uB.x-P.x,P.x-uB.z),max(uB.y-P.y,P.y-uB.w));
     if(outside>0.0){ col=vCol*(0.80+0.40*nA)*(0.88+0.24*nB); urban=0.0; }          // beyond the map: plain regional ground, fading into the haze
     // layered rock on steep ground
@@ -359,22 +383,28 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;
   const CX = NX / 8, CZ = NZ / 11;
+  // the bed of the sea and of the two lakes is never seen (the water is opaque), and the depth buffer here cannot reject it early, so every pixel of it
+  // was shaded in full and then painted over: quads with all four corners well under a water surface are left out of the mesh
+  const sunk = (i, j) => { const lon = LON0 + (LON1 - LON0) * i / NX, lat = LAT1 - (LAT1 - LAT0) * j / NZ, h = HGT[j * (NX + 1) + i];
+    if (lon < coastLon(lat)) return lat >= 31.0 && h < -2.5; if (lat < 29.57 && lon > 34.55 && lon < 35.45) return h < -2.5;
+    if (lat > 32.68 && lat < 32.94 && lon > 35.48 && lon < 35.70) return h < -214.5; if (lat > 30.98 && lat < 31.86 && lon > 35.25 && lon < 35.68) return h < -432.5; return false; };
   for (let cj = 0; cj < NZ; cj += CZ) for (let ci = 0; ci < NX; ci += CX) {
     const ix = new Uint32Array(CX * CZ * 6); let t = 0, lo = 1e9, hi = -1e9, edge = false;
     for (let j = cj; j < cj + CZ; j++) for (let i = ci; i < ci + CX; i++) {
       const a = j * (NX + 1) + i, b = a + NX + 1, c = a + 1, d = b + 1;
+      lo = Math.min(lo, HGT[a]); hi = Math.max(hi, HGT[a]); if (sunk(i, j) && sunk(i + 1, j) && sunk(i, j + 1) && sunk(i + 1, j + 1)) continue;
       ix[t++] = a; ix[t++] = b; ix[t++] = c; ix[t++] = c; ix[t++] = b; ix[t++] = d;
-      lo = Math.min(lo, HGT[a]); hi = Math.max(hi, HGT[a]);
     }
+    if (!t) continue;
     if (ci === 0 || cj === 0 || ci + CX >= NX || cj + CZ >= NZ) edge = true;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', pAttr); g.setAttribute('normal', nAttr); g.setAttribute('aCol', cAttr); g.setAttribute('aZone', zAttr); g.setAttribute('aLit', lAttr);
-    g.setIndex(new THREE.BufferAttribute(ix, 1));
+    g.setIndex(new THREE.BufferAttribute(ix.slice(0, t), 1));
     const xa = X0 + (X1 - X0) * ci / NX, xb = X0 + (X1 - X0) * (ci + CX) / NX, za = Z0 + (Z1 - Z0) * cj / NZ, zb = Z0 + (Z1 - Z0) * (cj + CZ) / NZ;
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3((xa + xb) / 2, (lo + hi) / 2, (za + zb) / 2), Math.hypot(xb - xa, zb - za, hi - lo) / 2 + 300);
     const m = new THREE.Mesh(g, mat); m.frustumCulled = !edge; m.matrixAutoUpdate = false; scene.add(m);

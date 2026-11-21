@@ -39,7 +39,7 @@ const HSCALE = 0.25, hsAt = ra => 1 - (1 - HSCALE) * ss(0, 1, (Math.log(Math.max
 /** Real distance in metres for a world offset: the compression undone with the true metres per degree at 31.4°N. */
 const REAL_X = 111320 * Math.cos(31.4 * Math.PI / 180) / KX, REAL_Z = 110950 / KZ, realDist = (dx, dz) => Math.hypot(dx * REAL_X, dz * REAL_Z);
 // Terrain grid: 173 m cells on computers, 277 m on phones and tablets (the heaviest setting that still loads and runs comfortably there)
-const HIRES = !(window.matchMedia && window.matchMedia('(pointer:coarse)').matches), NX = HIRES ? 384 : 240, NZ = HIRES ? 704 : 440, FAR = 400000;
+const HIRES = !(window.matchMedia && window.matchMedia('(pointer:coarse)').matches), BIGGRID = HIRES || (navigator.deviceMemory || 4) >= 6          /* the finer terrain grid also on a phone with memory to spare: measured on one, triangles are not what costs */, NX = BIGGRID ? 384 : 240, NZ = BIGGRID ? 704 : 440, FAR = 400000;
 const lon2x = l => (l - 35) * KX, lat2z = l => -(l - 31.4) * KZ, x2lon = x => x / KX + 35, z2lat = z => 31.4 - z / KZ;
 const X0 = lon2x(LON0), X1 = lon2x(LON1), Z0 = lat2z(LAT1), Z1 = lat2z(LAT0);
 
