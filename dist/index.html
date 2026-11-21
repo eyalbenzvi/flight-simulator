@@ -1398,13 +1398,20 @@ function roadLines() {
   // Roads that lead nowhere are left out: a piece that touches no other road at either end (unless it is long), and a short spur whose loose end is not
   // at a settlement, the edge of the map, water or an airfield. (About 300 ends of 18,000 were loose: left-overs of the extract, not real roads' ends.)
   { const PH = new Map(), all = ROADLINES; all.forEach((r, i) => r.D.forEach(p => { const k = Math.floor(p[0] / 80) + ':' + Math.floor(p[1] / 80); (PH.get(k) || PH.set(k, []).get(k)).push([p[0], p[1], i]); }));
+    // first, an end that stops 70 to 400 m short of another road is joined to it by a straight link (the street that connects them is below the classes
+    // the extract keeps), unless the link would cross water or an airfield
+    const edge = (x, z) => x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500;
+    all.forEach((r, i) => { for (const head of [true, false]) { const [x, z] = head ? r.D[0] : r.D[r.D.length - 1]; if (edge(x, z) || groundAt(x, z).water || airfieldAt(x, z, 250)) continue; let best = null, bd = 400;
+        for (let a = -5; a <= 5; a++) for (let c = -5; c <= 5; c++) for (const q of (PH.get((Math.floor(x / 80) + a) + ':' + (Math.floor(z / 80) + c)) || [])) { if (q[2] === i) continue; const d = Math.hypot(q[0] - x, q[1] - z); if (d < bd) { bd = d; best = q; } }
+        if (!best || bd < 70) continue; const n = Math.ceil(bd / 40), link = []; let ok = true; for (let k = 1; k <= n; k++) { const px = x + (best[0] - x) * k / n, pz = z + (best[1] - z) * k / n; if (groundAt(px, pz).water || lcAt(px, pz) === 9 || airfieldAt(px, pz, 30)) { ok = false; break; } link.push([px, pz]); }
+        if (ok) { if (head) r.D = link.reverse().concat(r.D); else r.D = r.D.concat(link); } } });
     const loose = (p, i) => { const [x, z] = p; if (x < X0 + 2500 || x > X1 - 2500 || z < Z0 + 2500 || z > Z1 - 2500 || groundAt(x, z).water || airfieldAt(x, z, 250)) return 0;
       for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + a) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 70) return 0;
       if (urbanAt(x, z) > 0.02 || LOCS.some(l => Math.abs(lon2x(l[2]) - x) < 900 && Math.abs(lat2z(l[3]) - z) < 900)) return 1; return 2; };          // 1: ends at a settlement, 2: ends nowhere
     ROADLINES = all.filter((r, i) => { let len = 0; for (let k = 1; k < r.D.length; k++) len += Math.hypot(r.D[k][0] - r.D[k - 1][0], r.D[k][1] - r.D[k - 1][1]); const a = loose(r.D[0], i), b = loose(r.D[r.D.length - 1], i);
       if (a && b && len < 6500) return false; if ((a === 2 || b === 2) && len < 1600) return false;
-      // a longer road with an end in the middle of nowhere: its tail is cut back to the last junction (when that is within 3 km)
-      const cutAt = (D) => { let t = 0; for (let k = 1; k < D.length; k++) { t += Math.hypot(D[k][0] - D[k - 1][0], D[k][1] - D[k - 1][1]); if (t > 3000) return 0; const [x, z] = D[k];
+      // a longer road with an end in the middle of nowhere: its tail is cut back to the last junction (when that is within 9 km)
+      const cutAt = (D) => { let t = 0; for (let k = 1; k < D.length; k++) { t += Math.hypot(D[k][0] - D[k - 1][0], D[k][1] - D[k - 1][1]); if (t > 9000) return 0; const [x, z] = D[k];
           for (let u = -1; u <= 1; u++) for (let c = -1; c <= 1; c++) for (const q of (PH.get((Math.floor(x / 80) + u) + ':' + (Math.floor(z / 80) + c)) || [])) if (q[2] !== i && Math.hypot(q[0] - x, q[1] - z) < 60) return k; } return 0; };
       if (a === 2) { const k = cutAt(r.D); if (k) r.D = r.D.slice(k); } if (b === 2) { const k = cutAt(r.D.slice().reverse()); if (k) r.D = r.D.slice(0, r.D.length - k); }
       return r.D.length >= 2; }); }
@@ -1927,7 +1934,7 @@ function planLandmarks() {
   for (const city in LANDMARKS) for (const [lon, lat, kind, o] of LANDMARKS[city]) {
     let x = lon2x(lon), z = lat2z(lat); const r = (R[kind] || 40) * (o.s || 1), wet = kind === 'port' || kind === 'marina';
     if (r && !wet) { let best = null;                   // nudge off roads: rings of 8 directions out to 3 radii
-      for (let k = 0; k <= 6 && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) { const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water && !airfieldAt(px, pz, r)) { best = [px, pz]; break; } }
+      for (let k = 0; k <= (airfieldAt(x, z, r) ? 30 : 6) && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) {          /* a landmark that falls on an airfield (runways are full size on the compressed map) looks farther for free ground */ const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water && !airfieldAt(px, pz, r)) { best = [px, pz]; break; } }
       if (best) [x, z] = best; }
     if (!wet && r && wetAt(x, z, r * 0.8)) { let ok = false;          // part of it would stand in the sea or a lake: move it inland, up to 500 m, or leave it out
       for (let k = 1; k <= 10 && !ok; k++) for (let q = 0; q < 8; q++) { const px = x + Math.cos(q * 0.785) * k * 50, pz = z + Math.sin(q * 0.785) * k * 50; if (!wetAt(px, pz, r * 0.8) && !nearRoad(px, pz, r * 0.7)) { x = px; z = pz; ok = true; break; } }

@@ -101,7 +101,7 @@ function planLandmarks() {
   for (const city in LANDMARKS) for (const [lon, lat, kind, o] of LANDMARKS[city]) {
     let x = lon2x(lon), z = lat2z(lat); const r = (R[kind] || 40) * (o.s || 1), wet = kind === 'port' || kind === 'marina';
     if (r && !wet) { let best = null;                   // nudge off roads: rings of 8 directions out to 3 radii
-      for (let k = 0; k <= 6 && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) { const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water && !airfieldAt(px, pz, r)) { best = [px, pz]; break; } }
+      for (let k = 0; k <= (airfieldAt(x, z, r) ? 30 : 6) && !best; k++) for (let a = 0; a < (k ? 8 : 1); a++) {          /* a landmark that falls on an airfield (runways are full size on the compressed map) looks farther for free ground */ const d = k * r * 0.5, px = x + Math.cos(a * 0.785) * d, pz = z + Math.sin(a * 0.785) * d; if (!nearRoad(px, pz, r * 0.8) && !groundAt(px, pz).water && !airfieldAt(px, pz, r)) { best = [px, pz]; break; } }
       if (best) [x, z] = best; }
     if (!wet && r && wetAt(x, z, r * 0.8)) { let ok = false;          // part of it would stand in the sea or a lake: move it inland, up to 500 m, or leave it out
       for (let k = 1; k <= 10 && !ok; k++) for (let q = 0; q < 8; q++) { const px = x + Math.cos(q * 0.785) * k * 50, pz = z + Math.sin(q * 0.785) * k * 50; if (!wetAt(px, pz, r * 0.8) && !nearRoad(px, pz, r * 0.7)) { x = px; z = pz; ok = true; break; } }
