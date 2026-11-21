@@ -393,7 +393,10 @@ same 60 m lattice (`uOrg`).
   `buildCities` or raise the coverage threshold `TH` in `tools/ghsl2bld.py`.
 - Terrain is formula-based (tables and Gaussian peaks in `rawHeight`), not a DEM. A real DEM could replace `rawHeight`
   through the same kind of embedded raster.
-- Audio has only been checked for errors, never listened to.
+- Audio has only been checked for errors and measured, never listened to. A phone speaker plays almost nothing below about 300 Hz, so the engine filters
+  stay above it (`Snd.update`: idle rumble from 420 Hz, the propeller's harmonics through a wide band at 520 Hz and up); measured above 350 Hz, the aerobatic
+  plane at idle went from near nothing to the level of a jet. `Snd.wake` (every touch and key) resumes a context the phone suspended; `Snd.sync` applies the
+  saved mute to a context that was started before the settings were read.
 - No licence file yet.
 
 ## Working style for this project

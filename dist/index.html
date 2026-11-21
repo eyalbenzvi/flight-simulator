@@ -4325,11 +4325,13 @@ const Snd = { ctx: null, muted: false,
     this.warnO = osc('square', 1300); this.warnG = gain(0); const wf = filt('lowpass', 2600, 0.7); this.warnO.connect(wf); wf.connect(this.warnG); this.warnG.connect(this.master);
   },
   update() {
-    const c = this.ctx; if (!c) return; const t = c.currentTime, n = Math.abs(S.n1), inside = S.cam === 0 ? 0.7 : 1, dead = S.crashed || S.paused ? 0 : 1, pr = PL.prop, lv = PL.sound || (PL.key === 'fighter' ? 1.5 : pr ? 0.25 : PL.key === 'bizjet' ? 0.8 : 1);
+    const c = this.ctx; if (!c) return; const t = c.currentTime, n = Math.abs(S.n1), inside = S.cam === 0 ? 0.7 : 1, dead = S.crashed || S.paused ? 0 : 1, pr = PL.prop, lv = PL.sound || (PL.key === 'fighter' ? 1.5 : pr ? 0.55 : PL.key === 'bizjet' ? 0.8 : 1);
     const set = (p, v) => p.setTargetAtTime(v, t, 0.08);
-    set(this.roarG.gain, (0.06 + 0.5 * n * n) * inside * dead * lv); set(this.roarF.frequency, 180 + 1500 * n + S.V * 2);
-    set(this.whG.gain, (pr ? 0.06 + 0.2 * n : 0.012 + 0.05 * n) * inside * dead);     // propeller: a low buzz instead of a fan whine
-    set(this.wh1.frequency, pr ? 58 + 62 * n : 150 + 520 * n); set(this.wh2.frequency, pr ? 117 + 124 * n : 227 + 790 * n); set(this.whF.frequency, pr ? 260 + 380 * n : 500 + 1900 * n);
+    // A phone's speaker plays almost nothing below about 300 Hz. The idle rumble and the propeller's buzz used to sit under that, so on a phone the
+    // aerobatic plane, and any jet at low power, seemed to have no sound at all: the filters now stay above it and the quiet end is louder
+    set(this.roarG.gain, (0.1 + 0.5 * n * n) * inside * dead * lv); set(this.roarF.frequency, 420 + 1300 * n + S.V * 2);
+    set(this.whG.gain, (pr ? 0.16 + 0.3 * n : 0.02 + 0.05 * n) * inside * dead);     // propeller: a low buzz instead of a fan whine
+    set(this.wh1.frequency, pr ? 78 + 70 * n : 150 + 520 * n); set(this.wh2.frequency, pr ? 157 + 141 * n : 227 + 790 * n); set(this.whF.frequency, pr ? 520 + 600 * n : 500 + 1900 * n); set(this.whF.Q, pr ? 0.8 : 2);          /* the propeller: the harmonics of a low engine note, let through wide */
     const vv = clamp(S.V / 250, 0, 1.3); set(this.windG.gain, 0.4 * vv * vv * dead + (S.gearPos > 0.05 ? 0.07 * vv : 0)); set(this.windF.frequency, 250 + 900 * vv);
     set(this.gearG.gain, S.gearPos > 0.01 && S.gearPos < 0.99 ? 0.07 : 0);
     let w = 0;
@@ -4344,7 +4346,10 @@ const Snd = { ctx: null, muted: false,
   /** Low thump: sonic boom and crashes. */
   boom() { const c = this.ctx; if (!c) return; const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime; s.buffer = this.buf; f.type = 'lowpass'; f.frequency.value = 140;
     g.gain.setValueAtTime(1.6, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1); s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + 1.2); },
-  toggle() { this.muted = !this.muted; if (this.master) this.master.gain.value = this.muted ? 0 : 0.7; }
+  toggle() { this.muted = !this.muted; this.sync(); },
+  sync() { if (this.master) this.master.gain.value = this.muted ? 0 : 0.7; },
+  /** Wake the sound: a phone suspends it after a call, another app's sound or a long pause, and only lets it start again from a touch. */
+  wake() { const c = this.ctx; if (c && S.started && !document.hidden && c.state !== 'running') { try { const p = c.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } }
 };
 
 // ---------- 14. Input ----------
@@ -4707,6 +4712,7 @@ function init() {
   const fly = $('fly'); fly.disabled = false; $('langB').style.visibility = ''; document.body.classList.add('ready', 'building'); applyLang();
   $('langB').addEventListener('click', () => { SAVE.lang = SAVE.lang === 'he' ? 'en' : 'he'; persist(); applyLang(); });
   fly.addEventListener('click', startFlight);
+  for (const ev of ['pointerdown', 'pointerup', 'touchend', 'keydown']) window.addEventListener(ev, () => Snd.wake(), { capture: true, passive: true });          // every touch checks that the sound is awake
   tapButton($('menuB'), () => { openMenu(); $('menuB').blur(); });
   tapButton($('modeB'), () => { OPEN.pause.add('lv'); openMenu(); $('modeB').blur(); });     // the level chip opens the menu at the levels, it does not switch level by itself
   $('resume').addEventListener('click', closeMenu); $('mClose').addEventListener('click', closeMenu);
@@ -4722,7 +4728,7 @@ async function buildWorld() {
   buildFun(); setupPicker(); setupLook(); buildShadow(); applyTOD(0); setupTouch(); selectPlane(PL.key); setMode(S.mode); setupCanvasGuard(); await breath();
   // settings from the last visit
   if (SAVE.gfx) applyGfx(SAVE.gfx);
-  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted;
+  if (SAVE.tod) S.tod = SAVE.tod; if (SAVE.wx) WX = SAVE.wx; if (SAVE.tod || SAVE.wx) applyTOD(S.tod); if (SAVE.cam !== undefined) S.cam = SAVE.cam; if (SAVE.names === false) S.names = false; if (SAVE.smoke !== undefined) S.smoke = SAVE.smoke; if (SAVE.legend === false) S.legend = false; Snd.muted = !!SAVE.muted; Snd.sync();          /* sync: the sound may already be running (FLY pressed while the world was being built) */
   shootPlanes(); await breath(); selectPlane(PL.key); spawn(START || FREE[0]); $('toast').style.display = 'none'; readAttitude(); drawMap(); SAVE.ready = true; WORLD.ready = true; document.body.classList.remove('building'); guardBack(); setInterval(() => { if (S.started) { persist(); saveFlight(); } }, 5000);
   renderPanel('start'); requestAnimationFrame(loop);
   if (WORLD.wantFly) { $('fly').classList.remove('busy'); startFlight(); }
