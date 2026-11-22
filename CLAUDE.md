@@ -315,8 +315,12 @@ What was done with that (round eight, softening):
     outline's own, as the old plank had them (the aerobatic plane's sunburst counts on that). `plankGeo` is the old plank, the fallback.
   - The fighter: the three-colour desert scheme drawn once from above (`camo`) and laid over fuselage, wings and tailplanes alike (`topUV`), panel
     lines, and a pointed radome that follows the nose (it was a ball on the tip).
-  - The other six have only the new sections so far. Next by hand: the airliner's wing-to-body fairing, engine pylons and panel lines; the bomber's
-    and the stealth jet's paint.
+  - Second pass, the other aircraft: a shared metal skin (`skinTex`: plates in slightly different tones, the lines between them, rivet rows, streaks;
+    near white so the material's colour tints it; `skinUV` lays it out in metres seen from above, `tileUV` scales a lathe's own coordinates) on the
+    wings and tailplanes of the airliner and the business jet, on Concorde's wing, over the whole stealth jet (the coating's tiles and seams) and
+    over the bomber's fuselage, wing and tailplane. The airliner and the business jet also have a wing-to-body fairing under the cabin and faint
+    ring and plate joints in the livery (`liveryMat`). The aerobatic plane kept its own paint. From the usual chase distance the skin is subtle; it
+    reads close up and in the cards. Any surface from `planform` that takes a map needs `skinUV` (its raw coordinates are metres).
 - Looked at and left as they are: the horizon (already soft), city lights at night, road edges (the texture already has a pale shoulder), the
   list of hand-made landmarks (dozens per city already).
 - Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).

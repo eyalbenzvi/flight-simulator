@@ -2687,6 +2687,19 @@ function airfoilLoft(pts, t, camber) {
   if (vol < 0) for (let k = 0; k < I.length; k += 3) { const q = I[k + 1]; I[k + 1] = I[k + 2]; I[k + 2] = q; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); const uv = []; for (let k = 0; k < P.length; k += 3) uv.push(P[k], P[k + 2]);          /* as the plank had them: the outline's own coordinates, which the painted wings count on */ g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(I); g.computeVertexNormals(); return g;
 }
+/** Metal skin, painted once per seed: plates in slightly different tones, the lines between them, rows of rivets, streaks along the airflow. Near
+    white, so the material's own colour tints it; it repeats (`skinUV` lays it out in metres, seen from above). */
+const SKIN = {};
+function skinTex(seed, k) {
+  if (SKIN[seed]) return SKIN[seed]; const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'), R = rng(seed * 77 + 5); k = k || 1;
+  x.fillStyle = '#e9e9e9'; x.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256;) { const h = (28 + R() * 30) | 0; for (let px = 0; px < 256;) { const w = (36 + R() * 56) | 0, v = (233 + (R() - 0.5) * 24 * k) | 0; x.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; x.fillRect(px, y, w, h); x.strokeStyle = 'rgba(40,44,50,' + 0.30 * k + ')'; x.lineWidth = 1; x.strokeRect(px + 0.5, y + 0.5, w, h); px += w; } y += h; }
+  x.fillStyle = 'rgba(30,34,40,' + 0.16 * k + ')'; for (let i = 0; i < 256; i += 8) for (let j = 6; j < 256; j += 64) x.fillRect(i, j, 1, 1);
+  for (let i = 0; i < 26; i++) { x.fillStyle = 'rgba(60,60,60,' + 0.035 * k + ')'; x.fillRect(R() * 256, R() * 256, 2 + R() * 3, 30 + R() * 90); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return SKIN[seed] = t;
+}
+function skinUV(geo, size, oz) { const P = geo.attributes.position, uv = new Float32Array(P.count * 2); for (let k = 0; k < P.count; k++) { uv[k * 2] = P.getX(k) / size; uv[k * 2 + 1] = (P.getZ(k) + (oz || 0)) / size; } geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return geo; }
+function tileUV(geo, ru, rv) { const U = geo.attributes.uv; for (let k = 0; k < U.count; k++) U.setXY(k, U.getX(k) * ru, U.getY(k) * rv); return geo; }
 function plankGeo(pts, t) {   // the old flat plank: kept for an outline the aerofoil cannot take
   const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
   const b = Math.min(t * 0.42, 0.14), g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 1.6, bevelOffset: -b * 1.6, bevelSegments: 2 }); g.rotateX(Math.PI / 2); g.translate(0, t / 2 - b, 0); return g;
@@ -2724,6 +2737,7 @@ function liveryMat(o, big) {
   const Y = z => H * (1 - (z - zN) / L), U = u => u * W, mPerU = 2 * Math.PI * R, du = m => m / mPerU * W, dz = m => m / L * H;
   x.fillStyle = hex(o.col); x.fillRect(0, 0, W, H); e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
   x.fillStyle = '#aab1b8'; x.fillRect(0, 0, U(0.13), H); x.fillRect(U(0.87), 0, U(0.13), H);                                                 // belly
+  x.fillStyle = 'rgba(50,60,72,.10)'; for (let z = zN + 1; z < zT; z += big ? 1.3 : 0.9) x.fillRect(0, Y(z), W, 1); for (const u of [0.06, 0.19, 0.37, 0.63, 0.81, 0.94]) x.fillRect(U(u), Y(o.z1 + o.tail * 0.5), 1, Y(o.z0 - R) - Y(o.z1 + o.tail * 0.5));          // the skin's ring and plate joints, faint
   for (const side of [0.25, 0.75]) { const sg = side < 0.5 ? 1 : -1, uw = side + sg * 0.045, ul = side - sg * 0.012;
     x.fillStyle = hex(o.acc); x.fillRect(U(ul) - du(0.11), Y(o.z1 + o.tail * 0.15), du(0.22), Y(o.z0 - R * 0.6) - Y(o.z1 + o.tail * 0.15));    // cheatline under the windows
     if (!big) { x.fillStyle = '#c9a44a'; x.fillRect(U(ul - sg * 0.02) - du(0.04), Y(o.z1 + o.tail * 0.15), du(0.08), Y(o.z0 - R * 0.6) - Y(o.z1 + o.tail * 0.15)); }
@@ -2788,11 +2802,13 @@ function buildAircraft() {
         : { col: 0xf4f1ea, wcol: 0xd9dcdf, acc: 0x1c2f52, R: 0.95, z0: -5.6, z1: 5.4, nose: 2.7, tail: 4.2, wing: [[0.7, -1.3], [8, 2.9], [8, 3.8], [3, 3.5], [0.7, 3.5]], wy: -0.6, wt: 0.24, dih: 0.07,
             ail: [6.2, 3.45, 2.6, 0.45], flap: [2.9, 3.4, 3.4, 0.65], eng: [1.72, 0.5, 5.0, 0.52, 2.7], rear: true, hs: [[0.1, 8.5], [3.3, 10.0], [3.3, 10.7], [0.1, 10.4]], hsy: 3.9, elev: [1.7, 10.35, 3.0, 0.45],
             fin: [[5.6, 0.5], [8.5, 3.95], [10.3, 3.95], [9.1, 0.5]], rud: [2.2, 9.65, 3.0, 0.55, -0.34], gn: -5.4, gm: [1.25, 1.9], wr: 0.3 };
-      const body = ph(o.col, 60), wingM = ph(o.wcol, 40), acc = ph(o.acc, 50), R = o.R, len = o.z1 - o.z0, zc = (o.z0 + o.z1) / 2;
+      const body = ph(o.col, 60), wingM = ph(o.wcol, 40), acc = ph(o.acc, 50), R = o.R, len = o.z1 - o.z0, zc = (o.z0 + o.z1) / 2, wsz = big ? 7 : 4; wingM.map = skinTex(1, 0.9);
+      // the wing-to-body fairing: the belly swells where the wing passes under the cabin
+      add(new THREE.SphereGeometry(1, 18, 12), ph(big ? 0xaab1b8 : o.col, 50), 0, o.wy - R * 0.1, (o.wing[0][1] + o.wing[4][1]) / 2).scale.set(R * 1.06, R * 0.36, (o.wing[4][1] - o.wing[0][1]) * 0.62);
       add(fuselage(o, big), liveryMat(o, big), 0, 0, 0);
       for (const s of [-1, 1]) {
         const wg = pivot(0, 0, 0); wg.rotation.z = s * o.dih; const tip = o.wing[1];
-        add(planform(o.wing.map(p => [s * p[0], p[1]]), o.wt), wingM, 0, o.wy, 0, wg);
+        add(skinUV(planform(o.wing.map(p => [s * p[0], p[1]]), o.wt), wsz), wingM, 0, o.wy, 0, wg);
         { const wl = add(finGeo([[0, 0], [R * 0.75, R * 1.25], [R * 1.15, R * 1.25], [R * 0.95, 0]], R * 0.07), acc, s * tip[0], o.wy, tip[1] + R * 0.05, wg); wl.rotation.z = -s * 0.12; }      // swept winglet
         M.wings = M.wings || []; M.wings.push([wg, s, o.dih]);
         surf(M.ail, s * o.ail[0], o.wy, o.ail[1], o.ail[2], o.wt * 0.28, o.ail[3], body, wg);
@@ -2804,7 +2820,7 @@ function buildAircraft() {
           for (const fx of [0.36, 0.62, 0.84]) add(new THREE.SphereGeometry(0.2, 8, 6), body, s * tip[0] * fx, o.wy - 0.28 + 1.0 * tip[0] * fx * o.dih, lerp(o.wing[4][1], o.wing[2][1], fx) - 0.5, wg).scale.set(0.9, 0.9, 5.2);   // flap-track fairings
           M.spoil = M.spoil || []; const sp2 = pivot(s * tip[0] * 0.5, o.wy + o.wt * 0.5 + 0.02, lerp(o.wing[4][1], o.wing[2][1], 0.5) - 1.7, wg); add(new THREE.BoxGeometry(tip[0] * 0.34, 0.04, 0.8), wingM, 0, 0, 0.4, sp2); M.spoil.push(sp2); }
         M.emit.push([s * ex, ey, ez + el / 2 + 1.5]);
-        add(planform(o.hs.map(p => [s * p[0], p[1]]), o.wt * 0.52), wingM, 0, o.hsy, 0);
+        add(skinUV(planform(o.hs.map(p => [s * p[0], p[1]]), o.wt * 0.52), wsz), wingM, 0, o.hsy, 0);
         surf(M.elev, s * o.elev[0], o.hsy, o.elev[1], o.elev[2], o.wt * 0.24, o.elev[3], body);
         lamp(s < 0 ? 0xff2020 : 0x20ff40, s * tip[0], o.wy + 1.55 * tip[0] * o.dih, tip[1] + 1.1, R * 0.11);
         M.strobes.push(lamp(0xffffff, s * (tip[0] + 0.1), o.wy + 1.6 * tip[0] * o.dih, tip[1] + 1.8, R * 0.18));
@@ -2882,7 +2898,7 @@ function buildAircraft() {
       M.beacon = lamp(0xff3030, 0, 3.8, 6.6, 0.1); M.strobes.push(lamp(0xffffff, 0, -0.75, 2, 0.12));
     } else if (key === 'concorde') {
       // ---- the supersonic airliner: a needle fuselage, an ogival delta wing with no tailplane, four engines in two boxes under it, a nose that droops for landing ----
-      const wht = ph(0xf4f5f6, 90), wng = ph(0xe6e9ec, 70), navy = ph(0x1b2f5e, 60), metal = ph(0x8b9199, 110), R = 1.45, zN = -33, zT = 28.6;
+      const wht = ph(0xf4f5f6, 90), wng = ph(0xeef0f2, 70), navy = ph(0x1b2f5e, 60), metal = ph(0x8b9199, 110), R = 1.45, zN = -33, zT = 28.6; wng.map = skinTex(2, 0.6);
       const prof = [[-33, 0.03], [-32.2, 0.16], [-30.5, 0.42], [-28, 0.74], [-25, 1.05], [-22, 1.28], [-19, 1.41], [-16, 1.45], [13, 1.45], [18, 1.28], [22.5, 0.92], [26, 0.5], [28.6, 0.1]];
       // the paint, on a canvas wrapped round the body: white, a thin dark-blue line under a row of very small windows, the visor panes
       const paint = (() => { const c = document.createElement('canvas'), c2 = document.createElement('canvas'); c.width = c2.width = 256; c.height = c2.height = 2048; const x = c.getContext('2d'), e = c2.getContext('2d'), Y = z => 2048 * (1 - (z - zN) / (zT - zN));
@@ -2902,8 +2918,8 @@ function buildAircraft() {
       for (const s of [-1, 1]) {
         // the ogee wing: a curved leading edge from far forward on the body out to a narrow tip, a nearly straight trailing edge
         const W = [[1.2, -18.5], [1.9, -13], [2.9, -6.5], [4.2, 0.5], [6.1, 8], [8.6, 14.2], [11.2, 18.6], [12.75, 20.6], [12.8, 20.95], [1.2, 22.85]];
-        add(planform(W.map(p => [s * p[0], p[1]]), 0.46), wng, 0, -0.95, 0);
-        add(planform([[s * 1.2, -12], [s * 3.6, 2], [s * 6.2, 12], [s * 7.4, 21.6], [s * 1.2, 22.6]], 0.34), wng, 0, -0.74, 0);          // the thicker inner wing
+        add(skinUV(planform(W.map(p => [s * p[0], p[1]]), 0.46), 9), wng, 0, -0.95, 0);
+        add(skinUV(planform([[s * 1.2, -12], [s * 3.6, 2], [s * 6.2, 12], [s * 7.4, 21.6], [s * 1.2, 22.6]], 0.34), 9), wng, 0, -0.74, 0);          // the thicker inner wing
         for (const [arr, ex2, wd] of [[M.elev, 3.1, 3.6], [M.elev, 6.9, 3.7], [M.ail, 10.7, 3.7]]) { const ev = surf(arr, s * ex2, -0.95, 22.75 - (ex2 - 1.2) * 0.164, wd, 0.14, 1.42, wht); ev.rotation.order = 'YXZ'; ev.rotation.y = s * 0.163; }          /* the elevons are the trailing edge */
         // two engines in one box under each wing: square intakes with a splitter, two round nozzles with clamshell petals
         const ex = s * 5.15, ey = -2.05; add(new THREE.BoxGeometry(2.75, 1.5, 10.6), wng, ex, ey, 14.6); add(new THREE.BoxGeometry(2.6, 1.3, 0.05), new THREE.MeshBasicMaterial({ color: 0x0c0e11 }), ex, ey, 9.28);
@@ -2928,10 +2944,11 @@ function buildAircraft() {
       //      pyramid of a body on it, a shallow belly, a sawtooth trailing edge, two canted fins, gridded intakes, slot exhausts ----
       const blk = new THREE.MeshPhongMaterial({ color: 0x25282c, shininess: 22, specular: 0x555b62, flatShading: true, side: THREE.DoubleSide }), blk2 = new THREE.MeshPhongMaterial({ color: 0x1b1d20, shininess: 12, flatShading: true, side: THREE.DoubleSide });
       const gold = new THREE.MeshPhongMaterial({ color: 0x4a3a12, shininess: 160, specular: 0xffe9a8, flatShading: true, side: THREE.DoubleSide }); AC.envMats.push(gold);
+      blk.map = blk2.map = skinTex(4, 1.5);          /* the coating's tiles and seams, faint on black */
       const ZS = 1.1, V = { N: [0, -0.2, -10], L0: [1.83, -0.2, -5.6], L1: [3.53, -0.2, -1.5], TL: [6.6, -0.2, 5.9], TT: [6.45, -0.2, 7.1], NO: [2.3, -0.2, 4.6], RE: [1.7, -0.2, 7.3], TC: [0, -0.15, 8.0],
         K0: [0, 0.35, -7.4], K1: [0, 1.55, -4.4], K2: [0, 1.6, -2.2], K3: [0, 1.2, 1.5], K4: [0, 0.55, 5.6], H1: [0.85, 0.95, -4.3], H2: [0.95, 1.0, -2.0], H3: [1.25, 0.55, 1.6], H4: [1.0, 0.3, 5.4],
         J1: [1.9, 0.05, -1.5], J2: [2.1, 0.05, 2.6], RT: [6.2, -0.05, 6.5], B0: [0, -0.85, -4.5], B1: [0, -0.9, 0], B2: [0, -0.7, 6.6], E1: [1.7, -0.85, -1.0], E2: [1.9, -0.85, 3.8] };
-      const facets = tris => { const P = []; for (const sg of [1, -1]) for (const t of tris) for (const n of t) { const v = V[n]; P.push(sg * v[0], v[1], v[2] * ZS); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.computeVertexNormals(); return g; };
+      const facets = tris => { const P = []; for (const sg of [1, -1]) for (const t of tris) for (const n of t) { const v = V[n]; P.push(sg * v[0], v[1], v[2] * ZS); } const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.computeVertexNormals(); return skinUV(g, 5.5); };
       add(facets([['N', 'K0', 'L0'], ['K0', 'H1', 'L0'], ['K1', 'K2', 'H2'], ['K1', 'H2', 'H1'], ['H1', 'H2', 'J1'], ['H1', 'J1', 'L0'], ['K2', 'K3', 'H3'], ['K2', 'H3', 'H2'], ['H2', 'H3', 'J2'], ['H2', 'J2', 'J1'], ['K3', 'K4', 'H4'], ['K3', 'H4', 'H3'],
         ['H3', 'H4', 'NO'], ['H3', 'NO', 'J2'], ['K4', 'TC', 'RE'], ['K4', 'RE', 'H4'], ['H4', 'RE', 'NO'], ['L0', 'L1', 'J1'], ['L1', 'J2', 'J1'], ['L1', 'TL', 'RT'], ['L1', 'RT', 'J2'], ['J2', 'RT', 'TT'], ['J2', 'TT', 'NO'], ['TL', 'TT', 'RT']]), blk, 0, 0, 0);
       add(facets([['N', 'L0', 'B0'], ['L0', 'E1', 'B0'], ['L0', 'L1', 'E1'], ['B0', 'E1', 'B1'], ['E1', 'E2', 'B1'], ['L1', 'E2', 'E1'], ['L1', 'TL', 'E2'], ['TL', 'TT', 'E2'], ['TT', 'NO', 'E2'], ['NO', 'RE', 'E2'], ['E2', 'RE', 'B2'], ['E2', 'B2', 'B1'], ['RE', 'TC', 'B2']]), blk2, 0, 0, 0);
@@ -2954,9 +2971,9 @@ function buildAircraft() {
     } else if (key === 'bomber') {
       // ---- the heavy bomber: a long slab fuselage, a huge shoulder wing swept 35 degrees that droops on the ground and bows upward in flight, eight
       //      engines in four twin pods on forward pylons, tip tanks, a tall fin, four twin-wheel trucks under the body and outrigger wheels near the tips ----
-      const grey = ph(0x60666d, 30), grey2 = ph(0x555b62, 25), dkg = ph(0x3f444a, 30), glassD = new THREE.MeshPhongMaterial({ color: 0x10161c, shininess: 150, specular: 0xbcd4e8 }); AC.envMats.push(glassD);
+      const grey = ph(0x6a7077, 30), grey2 = ph(0x555b62, 25), dkg = ph(0x3f444a, 30), glassD = new THREE.MeshPhongMaterial({ color: 0x10161c, shininess: 150, specular: 0xbcd4e8 }); grey.map = skinTex(3, 1.3); AC.envMats.push(glassD);
       { const prof = [[-24.2, 0.05], [-23.8, 0.5], [-23, 0.95], [-21.5, 1.33], [-19, 1.5], [9, 1.5], [15, 1.28], [20, 0.95], [23.4, 0.66], [24.4, 0.5]], g = new THREE.LatheGeometry(prof.map(p => new THREE.Vector2(p[1], p[0])), 22); g.rotateX(Math.PI / 2); g.scale(1, 1.28, 1);
-        const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i), y = p.getY(i); if (z > 9) p.setY(i, y + 0.75 * Math.pow((z - 9) / 15.4, 1.4)); if (z < -19) p.setY(i, y - 0.35 * Math.pow((-19 - z) / 5.2, 1.5)); } g.computeVertexNormals(); add(g, grey, 0, 0, 0); }
+        const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const z = p.getZ(i), y = p.getY(i); if (z > 9) p.setY(i, y + 0.75 * Math.pow((z - 9) / 15.4, 1.4)); if (z < -19) p.setY(i, y - 0.35 * Math.pow((-19 - z) / 5.2, 1.5)); } g.computeVertexNormals(); add(tileUV(g, 6, 16), grey, 0, 0, 0); }
       add(new THREE.SphereGeometry(1, 14, 10), dkg, 0, -0.32, -22.9).scale.set(0.98, 1.2, 1.5);                                                    // radome
       for (const k of [-1.5, -0.5, 0.5, 1.5]) { const w = add(new THREE.BoxGeometry(0.5, 0.62, 0.05), glassD, k * 0.56, 1.52, -21.25); w.rotation.set(-0.95, -k * 0.2, 0, 'YXZ'); }      // windscreen panes
       for (const sg of [-1, 1]) { add(new THREE.BoxGeometry(0.05, 0.5, 0.9), glassD, sg * 1.33, 1.2, -20.3).rotation.z = -sg * 0.35; add(new THREE.SphereGeometry(0.34, 8, 6), dkg, sg * 0.55, -1.85, -21.6).scale.set(1, 0.8, 1.6); }      // side windows, the two sensor blisters under the chin
@@ -2964,7 +2981,7 @@ function buildAircraft() {
       for (const s of [-1, 1]) {
         const wg = pivot(0, 1.25, -3); wg.rotation.z = -s * 0.055; M.wings = M.wings || []; M.wings.push([wg, s, -0.055, 3.2, 0.085]);          // drooped on the ground, bowed up in the air
         const LE = x => -5.5 + (x - 1.4) * 0.70;
-        add(planform([[s * 1.4, -5.5], [s * 28.2, LE(28.2)], [s * 28.2, LE(28.2) + 3.3], [s * 10.5, 8.6], [s * 1.4, 4.6]], 0.62), grey, 0, 0, 0, wg);
+        add(skinUV(planform([[s * 1.4, -5.5], [s * 28.2, LE(28.2)], [s * 28.2, LE(28.2) + 3.3], [s * 10.5, 8.6], [s * 1.4, 4.6]], 0.62), 8), grey, 0, 0, 0, wg);
         surf(M.flap, s * 6.2, -0.1, 4.5, 8.2, 0.2, 2.2, grey2, wg).rotation.y = -s * 0.414; surf(M.flap, s * 16.6, -0.1, 9.6, 7.4, 0.17, 1.7, grey2, wg).rotation.y = -s * 0.42;
         for (const f of M.flap.slice(-2)) f.rotation.order = 'YXZ';
         M.spoil = M.spoil || []; { const sp2 = pivot(s * 14.5, 0.33, 7.4, wg); sp2.rotation.order = 'YXZ'; sp2.rotation.y = -s * 0.5; add(new THREE.BoxGeometry(7, 0.05, 1.0), grey2, 0, 0, 0.5, sp2); M.spoil.push(sp2); }
@@ -2978,7 +2995,7 @@ function buildAircraft() {
         { const tk = [[0.03, -3.4], [0.34, -2.6], [0.5, -1], [0.5, 1.2], [0.3, 2.9], [0.04, 3.7]].map(q => new THREE.Vector2(q[0], q[1])), tg = new THREE.LatheGeometry(tk, 12); tg.rotateX(Math.PI / 2); add(tg, grey2, s * 25.4, -0.85, LE(25.4) + 1.2, wg); add(new THREE.BoxGeometry(0.12, 0.6, 2.2), grey2, s * 25.4, -0.4, LE(25.4) + 1.6, wg); }      // tip tank
         { add(new THREE.BoxGeometry(0.25, 0.7, 5), grey2, s * 5.2, -0.6, 0.4, wg); for (const k of [-1, 0, 1]) { add(cyl(0.26, 0.26, 5.2, 8), ph(0xd9dcdf, 40), s * 5.2 + k * 0.62, -1.15 - (k ? 0 : 0.4), 0.4, wg); add(cyl(0.02, 0.26, 0.9, 8), ph(0xd9dcdf, 40), s * 5.2 + k * 0.62, -1.15 - (k ? 0 : 0.4), -2.65, wg); } }      // a pylon with three cruise missiles
         { const ow = pivot(0, 0, 0, wg), x = s * 21.5, z = LE(21.5) + 2.2; add(new THREE.CylinderGeometry(0.07, 0.09, 3.0, 8), ph(0xd9dde2, 80), x, -1.75, z, ow); const wh = pivot(x, -3.35, z, ow); add(new THREE.CylinderGeometry(0.34, 0.34, 0.2, 14).rotateZ(Math.PI / 2), tyre, 0, 0, 0, wh); (M.wheels = M.wheels || []).push([wh, 0.34]); (M.outrig = M.outrig || []).push(ow); }      // outrigger wheel
-        add(planform([[s * 0.9, 17.2], [s * 8.0, 21.6], [s * 8.0, 23.5], [s * 0.9, 23.9]], 0.34), grey, 0, 0.75, 0); surf(M.elev, s * 4.4, 0.75, 23.4, 7, 0.14, 1.0, grey2);
+        add(skinUV(planform([[s * 0.9, 17.2], [s * 8.0, 21.6], [s * 8.0, 23.5], [s * 0.9, 23.9]], 0.34), 8), grey, 0, 0.75, 0); surf(M.elev, s * 4.4, 0.75, 23.4, 7, 0.14, 1.0, grey2);
         lamp(s < 0 ? 0xff2020 : 0x20ff40, s * 28.2, 0.1, LE(28.2) + 1.6, 0.2).userData.wing = 1; M.strobes.push(lamp(0xffffff, s * 1.6, -1.8, -2, 0.25));
         leg(s * 1.3, -8.6, 0.62, -1.2, M.gear = M.gear || pivot(0, 0, 0), grey2); leg(s * 1.3, 7.2, 0.62, -1.2, M.gear, grey2);
       }
