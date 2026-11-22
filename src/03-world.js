@@ -82,9 +82,10 @@ const cityMeshes = []; let cityLights = null, bldMat = null;
 /** Adds a procedural window grid (lit at night) to a building material. */
 /** Point lights stay points: near ones do not balloon into fog balls and far ones do not vanish (sizes in device pixels). */
 function clampPoints(mat, lo, hi) { mat.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>', 'gl_PointSize = clamp(gl_PointSize, ' + lo.toFixed(1) + ', ' + hi.toFixed(1) + ');\n#include <logdepthbuf_vertex>'); }; return mat; }
+const FACADE = { value: 1 };          // 0 leaves the drawn facade detail out (the ?perf=1 comparison switches it)
 function windowize(mat) {
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uLights = ENV.uLights; sh.uniforms.uSunD = ENV.sunDir; sh.uniforms.uSunC = ENV.sunCol; sh.uniforms.uSkyT = ENV.skyTop; sh.uniforms.uSkyH = ENV.skyHor;
+    sh.uniforms.uFac = FACADE; sh.uniforms.uLights = ENV.uLights; sh.uniforms.uSunD = ENV.sunDir; sh.uniforms.uSunC = ENV.sunCol; sh.uniforms.uSkyT = ENV.skyTop; sh.uniforms.uSkyH = ENV.skyHor;
     sh.vertexShader = 'varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vBp = position; vBn = normal;
       #ifdef USE_INSTANCING
@@ -93,16 +94,17 @@ function windowize(mat) {
       #else
         vBs = vec3(1.0); vBid = 0.0; vIn = 0.0; { vec4 wp4 = modelMatrix * vec4(position, 1.0); vWv = cameraPosition - wp4.xyz; vWn = mat3(modelMatrix) * normal; }
       #endif`);
-    sh.fragmentShader = 'uniform float uLights; uniform vec3 uSunD, uSunC, uSkyT, uSkyH; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'uniform float uLights, uFac; uniform vec3 uSunD, uSunC, uSkyT, uSkyH; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float side = step(abs(vBn.y), 0.5);
         vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
         float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
         // Facades with depth, drawn not built (they fade with the windows): on about half the blocks every other bay has a balcony, a parapet over the lower
         // window with the slab's edge lit and its shadow on the wall under it; every window has the shadow of its lintel; the ground floor is a darker glazed band under a coloured fascia.
-        float hG = vBp.y * vBs.y - 8.0, fNear = (1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w)) * vIn, bal = side * step(0.45, fract(vBid * 7.3)) * step(fract(floor(wc.x) * 0.5), 0.25);
-        win *= 1.0 - bal * step(wf.y, 0.46) * fNear;
-        float fx = 1.0 + (0.10 * bal * step(wf.y, 0.14) - 0.26 * bal * smoothstep(0.82, 0.99, wf.y) - 0.30 * win * smoothstep(0.64, 0.76, wf.y)) * fNear;
-        float gfl = side * fNear * step(0.0, hG) * step(hG, 3.5);
+        float hG = vBp.y * vBs.y - 8.0, fx = 1.0, gfl = 0.0;
+        if (uFac > 0.5) { float fNear = (1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w)) * vIn, bal = side * step(0.45, fract(vBid * 7.3)) * step(fract(floor(wc.x) * 0.5), 0.25);
+          win *= 1.0 - bal * step(wf.y, 0.46) * fNear;
+          fx = 1.0 + (0.10 * bal * step(wf.y, 0.14) - 0.26 * bal * smoothstep(0.82, 0.99, wf.y) - 0.30 * win * smoothstep(0.64, 0.76, wf.y)) * fNear;
+          gfl = side * fNear * step(0.0, hG) * step(hG, 3.5); }
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
         float wfade = 1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w);          // far away the windows blend into an even tone instead of sparkling
         diffuseColor.rgb *= mix(mix(1.0, 0.85, side), mix(1.0, 0.40 + 0.22 * wh, win), wfade) * mix(0.86, 1.0, side);
@@ -256,7 +258,7 @@ function buildCities() {
         else { if (R() < 0.7) at((R() - 0.5) * sx * 0.5, (R() - 0.5) * sz * 0.5, 4.2, 2.8, 3.6, 0xb9b4a8); const nT = 1 + Math.floor(R() * 2); for (let i = 0; i < nT; i++) { const ox = (R() - 0.5) * (sx - 6), oz = (R() - 0.5) * (sz - 4); at(ox, oz, 1.3, 1.5, 1.3, 0xeeeeea); at(ox + 1.9, oz, 2.0, 0.5, 1.4, 0x2c3440); } } }
       if (!out.length) continue; const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, out.length);
       out.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
-      im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 3000 }; scene.add(im); cityMeshes.push(im); } } catch (err) { console.warn('roof detail left out', err); }
+      im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 3000, kind: 'roof' }; scene.add(im); cityMeshes.push(im); } } catch (err) { console.warn('roof detail left out', err); }
   for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
     im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : BIGGRID ? 8500 : 6000 }; scene.add(im); cityMeshes.push(im); }
@@ -584,7 +586,7 @@ function buildForests() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const [key, a] of map) { const [bx, bz] = key.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK, n = a.length / 3, geo = g0.clone(); geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 600);
     const im = new THREE.InstancedMesh(geo, mat, n); for (let t = 0; t < n; t++) { const x = a[t * 3], z = a[t * 3 + 1], r = a[t * 3 + 2], s = 14 + r * 9; p.set(x, triHeight(x, z) - 1, z); sc.set(s, 13 + r * 8, s); q.setFromAxisAngle(tmpV.set(0, 1, 0), r * 6.283); m4.compose(p, q, sc); im.setMatrixAt(t, m4); im.setColorAt(t, col.setRGB(0.10 + r * 0.05, 0.21 + r * 0.09, 0.09 + r * 0.03)); }
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 5500 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 5500, kind: 'forest' }; scene.add(im); cityMeshes.push(im); }
   buildForests.count = total;
 }
 function updateScatter() {

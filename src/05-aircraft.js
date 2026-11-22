@@ -20,13 +20,38 @@ const PLANE_ORDER = ['airliner', 'bizjet', 'fighter', 'stunt', 'concorde', 'stea
 for (const k in PLANES) { const p = PLANES[k]; p.key = k; p.vs = Math.sqrt(2 * p.mass * G / (1.225 * p.S * (p.cl0 + p.cla * p.ast))); }
 let PL = PLANES.airliner;
 const AC = { root: new THREE.Group(), deck: new THREE.Group(), frame: new THREE.Group(), models: {}, m: null, livery: [], envMats: [], glow: [] };
-function planform(pts, t) {   // flat swept surface from (x, z) outline
-  const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
-  const b = Math.min(t * 0.42, 0.14), g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 1.6, bevelOffset: -b * 1.6, bevelSegments: 2 }); g.rotateX(Math.PI / 2); g.translate(0, t / 2 - b, 0); return g;       // rounded leading and trailing edges, not a sawn plank
+/**
+ * A lifting surface with a real section. The outline is a polygon of [span, chord] points (as the flat plank it replaces took it); at each station along
+ * the span the outline gives the leading and trailing edge, and between them stands an aerofoil (the NACA four-digit thickness curve, a little camber
+ * for wings), thick where the chord is long and thinning toward the tip. So a wing has a rounded nose, a fine trailing edge and a root deeper than its
+ * tip, in every aircraft at once. Returns the surface in (span, thickness, chord); null if the outline has no span.
+ */
+function airfoilLoft(pts, t, camber) {
+  const n = pts.length, lo = Math.min(...pts.map(p => p[0])), hi = Math.max(...pts.map(p => p[0])); if (!(hi - lo > 1e-3)) return null;
+  const cut = a => { let c0 = 1e9, c1 = -1e9; for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n], a0 = p[0], a1 = q[0]; if (a < Math.min(a0, a1) - 1e-7 || a > Math.max(a0, a1) + 1e-7) continue;
+      if (Math.abs(a1 - a0) < 1e-7) { c0 = Math.min(c0, p[1], q[1]); c1 = Math.max(c1, p[1], q[1]); continue; } const c = p[1] + (q[1] - p[1]) * (a - a0) / (a1 - a0); c0 = Math.min(c0, c); c1 = Math.max(c1, c); } return [c0, c1]; };
+  const st = [...new Set([...pts.map(p => +p[0].toFixed(4)), ...Array.from({ length: 9 }, (_, k) => +(lo + (hi - lo) * k / 8).toFixed(4))])].sort((a, b) => a - b).map(a => [a, cut(a)]).filter(e => e[1][1] >= e[1][0]);
+  if (st.length < 2) return null; const maxC = Math.max(...st.map(e => e[1][1] - e[1][0])) || 1, K = 8, R = 2 * K, P = [], I = [];
+  const th = u => 5 * (0.2969 * Math.sqrt(u) - 0.1260 * u - 0.3516 * u * u + 0.2843 * u * u * u - 0.1036 * u * u * u * u);
+  for (const [a, [c0, c1]] of st) { const ch = Math.max(c1 - c0, 0.02), T = t * 1.55 * (0.34 + 0.66 * ch / maxC);
+    for (let r = 0; r < R; r++) { const up = r <= K, k = up ? r : R - r, u = (1 - Math.cos(Math.PI * k / K)) / 2; P.push(a, t * 0.25 + (up ? 1 : -1) * T * th(u) + (camber || 0) * T * 2 * u * (1 - u), c0 + ch * u); } }
+  for (let s = 0; s < st.length - 1; s++) for (let r = 0; r < R; r++) { const a = s * R + r, b = s * R + (r + 1) % R, c = a + R, d = b + R; I.push(a, c, b, b, c, d); }
+  for (const [s, f] of [[0, 1], [st.length - 1, 0]]) for (let r = 1; r < R - 1; r++) { const o = s * R; if (f) I.push(o, o + r, o + r + 1); else I.push(o, o + r + 1, o + r); }
+  let vol = 0; for (let k = 0; k < I.length; k += 3) { const a = I[k] * 3, b = I[k + 1] * 3, c = I[k + 2] * 3; vol += P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c]); }
+  if (vol < 0) for (let k = 0; k < I.length; k += 3) { const q = I[k + 1]; I[k + 1] = I[k + 2]; I[k + 2] = q; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); const uv = []; for (let k = 0; k < P.length; k += 3) uv.push(P[k], P[k + 2]);          /* as the plank had them: the outline's own coordinates, which the painted wings count on */ g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(I); g.computeVertexNormals(); return g;
 }
-function finGeo(pts, t) {     // vertical surface from (z, y) outline
+function plankGeo(pts, t) {   // the old flat plank: kept for an outline the aerofoil cannot take
   const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
-  const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); g.rotateY(-Math.PI / 2); g.translate(t / 2, 0, 0); return g;
+  const b = Math.min(t * 0.42, 0.14), g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 1.6, bevelOffset: -b * 1.6, bevelSegments: 2 }); g.rotateX(Math.PI / 2); g.translate(0, t / 2 - b, 0); return g;
+}
+function planform(pts, t) {   // a wing, tailplane, strake or pylon from its (x, z) outline
+  return airfoilLoft(pts, t, 0.12) || plankGeo(pts, t);
+}
+function finGeo(pts, t) {     // a fin from its (z, y) outline: the same aerofoil, standing up, no camber
+  const g = airfoilLoft(pts.map(p => [p[1], p[0]]), t * 0.8, 0); if (g) { g.translate(0, -t * 0.2, 0); g.rotateZ(Math.PI / 2); return g; }
+  const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  const g2 = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); g2.rotateY(-Math.PI / 2); g2.translate(t / 2, 0, 0); return g2;
 }
 /** A tube-and-wing fuselage as one lathe: a rounded, slightly drooped nose, a constant section, an upswept tail cone. UV: u round the body
     (0 = belly, 0.25 = right side, 0.5 = top), v along it from the nose (0) to the tail (1). */
@@ -152,12 +177,22 @@ function buildAircraft() {
     } else if (key === 'fighter') {
       // ---- single-engine fighter: blended delta, bubble canopy, all-moving tailplanes, afterburner ----
       const g1 = ph(0x8d98a3, 70), g2 = ph(0x6c7884, 60), g3 = ph(0x9aa5b0, 80);
+      // paint: the three-colour desert scheme, sand with brown and pale green patches, drawn once seen from above and laid over the fuselage, the wings
+      // and the tailplanes alike (`topUV`), so the patches run across the joins as on the real aircraft; fine panel lines over it
+      const camo = (() => { const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d'), R = rng(7); x.fillStyle = '#b5a37e'; x.fillRect(0, 0, 512, 512);
+        for (const [colr, nn] of [['#806c52', 15], ['#8c9579', 13]]) { x.fillStyle = colr; for (let i = 0; i < nn; i++) { const cx = R() * 512, cy = R() * 512; x.beginPath(); for (let a = 0; a < 6.3; a += 0.45) { const r = 34 + R() * 44; x.lineTo(cx + Math.cos(a) * r * 1.5, cy + Math.sin(a) * r); } x.closePath(); x.fill(); } }
+        x.strokeStyle = 'rgba(30,30,30,.22)'; x.lineWidth = 1; for (let i = 0; i < 512; i += 37) { x.beginPath(); x.moveTo(0, i + 0.5); x.lineTo(512, i + 0.5); x.stroke(); } for (let i = 0; i < 512; i += 93) { x.beginPath(); x.moveTo(i + 0.5, 0); x.lineTo(i + 0.5, 512); x.stroke(); }
+        const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; })();
+      const gC = new THREE.MeshPhongMaterial({ map: camo, shininess: 38 }); AC.envMats.push(gC);
+      const topUV = (geo, oz) => { const P = geo.attributes.position, uv = new Float32Array(P.count * 2); for (let k = 0; k < P.count; k++) { uv[k * 2] = P.getX(k) / 22 + 0.5; uv[k * 2 + 1] = (P.getZ(k) + (oz || 0)) / 22 + 0.5; } geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return geo; };
       // fuselage: one lathe from the radome tip to the nozzle, wider than it is tall, with a raised spine behind the canopy
       { const pts = [], prof = [[-8.9, 0.02], [-8.2, 0.16], [-7.0, 0.34], [-5.6, 0.52], [-4.2, 0.66], [-2.6, 0.76], [0, 0.80], [2.5, 0.80], [4.6, 0.76], [6.0, 0.68], [6.7, 0.62]];
-        for (const [z, r] of prof) pts.push(new THREE.Vector2(r, z)); const fg = new THREE.LatheGeometry(pts, 20); fg.rotateX(Math.PI / 2); fg.scale(1.22, 0.9, 1);
+        for (const [z, r] of prof) pts.push(new THREE.Vector2(r, z)); const fg = new THREE.LatheGeometry(pts, 32); fg.rotateX(Math.PI / 2); fg.scale(1.22, 0.9, 1);
         const p = fg.attributes.position; for (let k = 0; k < p.count; k++) { const z = p.getZ(k), y = p.getY(k); if (z < -4.2) p.setY(k, y - 0.14 * Math.pow((-4.2 - z) / 4.7, 1.5)); if (y > 0 && z > -1.2 && z < 5.6) p.setY(k, y * (1 + 0.22 * Math.sin((z + 1.2) / 6.8 * Math.PI))); } fg.computeVertexNormals();
-        add(fg, g1, 0, 0, 0); }
-      add(new THREE.SphereGeometry(0.42, 10, 8), g2, 0, -0.12, -8.3).scale.set(1, 1, 2.2);                              // darker radome
+        add(topUV(fg), gC, 0, 0, 0);
+        // the radome: the nose itself in darker grey, a pointed cone that follows the body (it used to be a ball stuck on the tip)
+        const rp = [[-8.93, 0.012], [-8.2, 0.165], [-7.4, 0.29], [-6.7, 0.385]].map(q => new THREE.Vector2(q[1] * 1.012, q[0])), rg = new THREE.LatheGeometry(rp, 32); rg.rotateX(Math.PI / 2); rg.scale(1.22, 0.9, 1);
+        { const q = rg.attributes.position; for (let k = 0; k < q.count; k++) { const z = q.getZ(k); q.setY(k, q.getY(k) - 0.14 * Math.pow((-4.2 - z) / 4.7, 1.5)); } rg.computeVertexNormals(); } add(rg, ph(0x4f5961, 50), 0, 0, 0); }
       // chin intake: an open duct under the forward fuselage, dark inside, with a lip
       { const duct = new THREE.CylinderGeometry(0.5, 0.56, 3.4, 16, 1, true).rotateX(Math.PI / 2); add(duct, g1, 0, -0.82, -1.9).scale.set(1.25, 0.62, 1);
         add(new THREE.CylinderGeometry(0.47, 0.52, 3.3, 16, 1, true).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0c0e11, side: THREE.BackSide }), 0, -0.82, -1.9).scale.set(1.25, 0.62, 1);
@@ -178,8 +213,8 @@ function buildAircraft() {
         M.burner = new THREE.Group(); M.burner.position.set(0, 0, 9.4); M.g.add(M.burner);
         M.burner.add(new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.52, 5.5, 14, 1, true).rotateX(Math.PI / 2), bm(0xffa050))); M.burner.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.30, 4.2, 10, 1, true).rotateX(Math.PI / 2), bm(0xcfe2ff))).position.z = -0.6; }
       for (const s of [-1, 1]) {
-        add(planform([[s * 0.7, -1.3], [s * 4.75, 2.7], [s * 4.75, 3.6], [s * 0.7, 4.0]], 0.16), g1, 0, -0.05, 0);
-        add(planform([[s * 0.7, -5.2], [s * 1.55, -1.0], [s * 0.7, -1.0]], 0.12), g2, 0, -0.05, 0);                 // leading-edge strake, running forward to the cockpit
+        add(topUV(planform([[s * 0.7, -1.3], [s * 4.75, 2.7], [s * 4.75, 3.6], [s * 0.7, 4.0]], 0.16)), gC, 0, -0.05, 0);
+        add(topUV(planform([[s * 0.7, -5.2], [s * 1.55, -1.0], [s * 0.7, -1.0]], 0.12)), gC, 0, -0.05, 0);                 // leading-edge strake, running forward to the cockpit
         surf(M.ail, s * 2.7, -0.05, 3.75, 3.4, 0.07, 0.55, g2);
         add(cyl(0.07, 0.07, 2.6, 8), dark, s * 4.8, -0.05, 2.7);                                                    // wingtip rail
         add(cyl(0.085, 0.085, 2.3, 8), ph(0xe9ebee, 60), s * 4.8, -0.2, 2.6); add(cyl(0.01, 0.085, 0.45, 8), ph(0xe9ebee, 60), s * 4.8, -0.2, 1.25);      // a missile on the rail
@@ -189,7 +224,7 @@ function buildAircraft() {
       }
       add(cyl(0.015, 0.02, 1.1, 6), dark, 0, -0.16, -9.3);                                                           // pitot
       const tp = pivot(0, -0.05, 6.3); M.elev.push(tp);
-      for (const s of [-1, 1]) add(planform([[s * 0.6, -1.1], [s * 2.9, 0.3], [s * 2.9, 1.0], [s * 0.6, 0.8]], 0.1), g2, 0, 0, 0, tp);
+      for (const s of [-1, 1]) add(topUV(planform([[s * 0.6, -1.1], [s * 2.9, 0.3], [s * 2.9, 1.0], [s * 0.6, 0.8]], 0.1), 6.3), gC, 0, 0, 0, tp);
       add(finGeo([[3.3, 0.6], [6.2, 3.7], [7.1, 3.7], [6.9, 0.6]], 0.12), g2, 0, 0, 0);
       M.rud = pivot(0, 2.1, 6.95); add(new THREE.BoxGeometry(0.07, 2.5, 0.5), g1, 0, 0, 0.25, M.rud);
       M.gear = pivot(0, 0, 0); leg(0, -3.3, 0.2, -0.6, M.gear, g2); leg(-0.95, 1.6, 0.28, -0.3, M.gear, g2); leg(0.95, 1.6, 0.28, -0.3, M.gear, g2);

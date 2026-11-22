@@ -213,7 +213,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS, tPal, tSat, tLCf; uniform float uSat; uniform vec2 uSatK; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS, tPal, tSat, tLCf; uniform float uSat, uX; uniform vec2 uSatK; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -279,12 +279,12 @@ const TERRAIN_FS = `
         col=mix(col0,col,smoothstep(0.10,0.70,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
       }
       /* soft borders: half a cell away, to one side or the other, lies perhaps another class; the colour leans a third of the way toward it */
-      if(vDist<40000.0){ vec2 hd=uLCr.zw*30.0*(nD>0.5?1.0:-1.0)*(0.7+0.6*nC);
+      if(uX>0.5&&vDist<40000.0){ vec2 hd=uLCr.zw*30.0*(nD>0.5?1.0:-1.0)*(0.7+0.6*nC);
         float l1=floor(texture2D(tLC,uvL+vec2(hd.x,0.0)).r*255.0+0.5), l2=floor(texture2D(tLC,uvL+vec2(0.0,hd.y)).r*255.0+0.5);
         if(abs(l1-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l1+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); }
         if(abs(l2-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l2+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); } }
       /* far away a pixel covers many cells: the averaged cover stands in for the single cell, which could only flicker */
-      { float lf=smoothstep(4500.0,13000.0,vDist); if(lf>0.01){ vec4 fa=texture2D(tLCf,(P-uLCr.xy)*uLCr.zw); col=mix(col,mix(col0,fa.rgb*(0.88+0.24*nC),fa.a),lf); } } }
+      { float lf=smoothstep(4500.0,13000.0,vDist); if(uX>0.5&&lf>0.01){ vec4 fa=texture2D(tLCf,(P-uLCr.xy)*uLCr.zw); col=mix(col,mix(col0,fa.rgb*(0.88+0.24*nC),fa.a),lf); } } }
     col*=mix(1.0,sLum,0.38);          /* and what is painted over it (forest, fields, scrub) keeps the real picture's light and dark, so mapped land is not one flat tone */
     /* the beach: ground a few metres above the sea is sand, pale and dry higher up, darker and wet at the water's edge (only the open coasts lie between -3 and 5 m) */
     { float bh=vW.y+(nC-0.5)*2.2+(nD-0.5)*1.2, beach=(1.0-smoothstep(1.6,4.6,bh))*step(-3.0,vW.y); if(beach>0.01){ col=mix(col,mix(vec3(0.62,0.55,0.41),vec3(0.86,0.79,0.62),smoothstep(0.2,1.5,bh))*(0.93+0.14*nD),beach); urban*=1.0-beach; } }
@@ -423,7 +423,7 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uSatK: { value: new THREE.Vector2(1.0, 0.72) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uX: { value: 1 }, uSatK: { value: new THREE.Vector2(1.0, 0.72) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;

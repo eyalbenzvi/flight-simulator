@@ -304,6 +304,19 @@ What was done with that (round eight, softening):
     fascia. Not clearly seen in the pictures taken (the views were dominated by site models, which are not instanced): unconfirmed.
   - Not done: a finer terrain near the camera. It needs four times the vertices everywhere (about 60 MB more, a longer start-up) or a level-of-detail
     mesh with seams to hide; either would be felt. Artist-made aircraft need bought or commissioned models.
+- The phone after rounds ten and eleven (same Adreno 740): 48 frames a second as played on the fast coast pass and in the Jerusalem hills (57 and
+  56 late frames of 240), 60 over Tel Aviv, with the governor already at its last step (density down to 1.5). So those rounds cost what the player
+  feels, and nothing here could say which part. `?perf=1` now opens with "WHAT BRINGS IT BACK": the same two places as played, each time with one
+  extra off (far forest, roof detail, tree shadows, drawn facades via `FACADE`, plain terrain colour via `uSat` and `uX`, building shadows, all of
+  them). Wait for that table before cutting anything; `userData.kind` ('forest', 'roof') marks the meshes it hides.
+- Aircraft by hand, first pass (the owner: "do it yourself"):
+  - Every wing, tailplane, strake, pylon and fin has a real section (`airfoilLoft` behind `planform` and `finGeo`): the NACA thickness curve between the
+    outline's leading and trailing edge at each station, deep at the root and fine at the tip, a little camber on wings. Texture coordinates are the
+    outline's own, as the old plank had them (the aerobatic plane's sunburst counts on that). `plankGeo` is the old plank, the fallback.
+  - The fighter: the three-colour desert scheme drawn once from above (`camo`) and laid over fuselage, wings and tailplanes alike (`topUV`), panel
+    lines, and a pointed radome that follows the nose (it was a ball on the tip).
+  - The other six have only the new sections so far. Next by hand: the airliner's wing-to-body fairing, engine pylons and panel lines; the bomber's
+    and the stealth jet's paint.
 - Looked at and left as they are: the horizon (already soft), city lights at night, road edges (the texture already has a pale shoulder), the
   list of hand-made landmarks (dozens per city already).
 - Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).

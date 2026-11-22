@@ -915,7 +915,7 @@ const SHADER_VS = `
 /* Terrain surface: everything finer than the 277 m mesh is synthesised per pixel –
    relief shading from two noise scales, field patchwork, scrub, wadis, rock strata, snow, streets, cloud shadows. */
 const TERRAIN_FS = `
-  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS, tPal, tSat, tLCf; uniform float uSat; uniform vec2 uSatK; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
+  uniform sampler2D tNoise, tFields, tLC, tLCa, tBS, tPal, tSat, tLCf; uniform float uSat, uX; uniform vec2 uSatK; uniform vec3 sunDir, sunCol, skyCol, gndCol, fogCol; uniform float fogDen, uLights, uTime, uBS, uWet; uniform vec2 uOrg; uniform vec4 uLCr, uB;
   varying vec3 vW; varying vec3 vN; varying vec3 vCol; varying vec4 vZone; varying float vDist; varying vec2 vLit;
   #include <common>
   #include <logdepthbuf_pars_fragment>
@@ -981,12 +981,12 @@ const TERRAIN_FS = `
         col=mix(col0,col,smoothstep(0.10,0.70,lcA+(nD-0.5)*0.35));          // mapped areas feather into their surroundings instead of ending in 60 m steps
       }
       /* soft borders: half a cell away, to one side or the other, lies perhaps another class; the colour leans a third of the way toward it */
-      if(vDist<40000.0){ vec2 hd=uLCr.zw*30.0*(nD>0.5?1.0:-1.0)*(0.7+0.6*nC);
+      if(uX>0.5&&vDist<40000.0){ vec2 hd=uLCr.zw*30.0*(nD>0.5?1.0:-1.0)*(0.7+0.6*nC);
         float l1=floor(texture2D(tLC,uvL+vec2(hd.x,0.0)).r*255.0+0.5), l2=floor(texture2D(tLC,uvL+vec2(0.0,hd.y)).r*255.0+0.5);
         if(abs(l1-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l1+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); }
         if(abs(l2-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l2+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); } }
       /* far away a pixel covers many cells: the averaged cover stands in for the single cell, which could only flicker */
-      { float lf=smoothstep(4500.0,13000.0,vDist); if(lf>0.01){ vec4 fa=texture2D(tLCf,(P-uLCr.xy)*uLCr.zw); col=mix(col,mix(col0,fa.rgb*(0.88+0.24*nC),fa.a),lf); } } }
+      { float lf=smoothstep(4500.0,13000.0,vDist); if(uX>0.5&&lf>0.01){ vec4 fa=texture2D(tLCf,(P-uLCr.xy)*uLCr.zw); col=mix(col,mix(col0,fa.rgb*(0.88+0.24*nC),fa.a),lf); } } }
     col*=mix(1.0,sLum,0.38);          /* and what is painted over it (forest, fields, scrub) keeps the real picture's light and dark, so mapped land is not one flat tone */
     /* the beach: ground a few metres above the sea is sand, pale and dry higher up, darker and wet at the water's edge (only the open coasts lie between -3 and 5 m) */
     { float bh=vW.y+(nC-0.5)*2.2+(nD-0.5)*1.2, beach=(1.0-smoothstep(1.6,4.6,bh))*step(-3.0,vW.y); if(beach>0.01){ col=mix(col,mix(vec3(0.62,0.55,0.41),vec3(0.86,0.79,0.62),smoothstep(0.2,1.5,bh))*(0.93+0.14*nD),beach); urban*=1.0-beach; } }
@@ -1125,7 +1125,7 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uSatK: { value: new THREE.Vector2(1.0, 0.72) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uX: { value: 1 }, uSatK: { value: new THREE.Vector2(1.0, 0.72) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;
@@ -1279,9 +1279,10 @@ const cityMeshes = []; let cityLights = null, bldMat = null;
 /** Adds a procedural window grid (lit at night) to a building material. */
 /** Point lights stay points: near ones do not balloon into fog balls and far ones do not vanish (sizes in device pixels). */
 function clampPoints(mat, lo, hi) { mat.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>', 'gl_PointSize = clamp(gl_PointSize, ' + lo.toFixed(1) + ', ' + hi.toFixed(1) + ');\n#include <logdepthbuf_vertex>'); }; return mat; }
+const FACADE = { value: 1 };          // 0 leaves the drawn facade detail out (the ?perf=1 comparison switches it)
 function windowize(mat) {
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uLights = ENV.uLights; sh.uniforms.uSunD = ENV.sunDir; sh.uniforms.uSunC = ENV.sunCol; sh.uniforms.uSkyT = ENV.skyTop; sh.uniforms.uSkyH = ENV.skyHor;
+    sh.uniforms.uFac = FACADE; sh.uniforms.uLights = ENV.uLights; sh.uniforms.uSunD = ENV.sunDir; sh.uniforms.uSunC = ENV.sunCol; sh.uniforms.uSkyT = ENV.skyTop; sh.uniforms.uSkyH = ENV.skyHor;
     sh.vertexShader = 'varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vBp = position; vBn = normal;
       #ifdef USE_INSTANCING
@@ -1290,16 +1291,17 @@ function windowize(mat) {
       #else
         vBs = vec3(1.0); vBid = 0.0; vIn = 0.0; { vec4 wp4 = modelMatrix * vec4(position, 1.0); vWv = cameraPosition - wp4.xyz; vWn = mat3(modelMatrix) * normal; }
       #endif`);
-    sh.fragmentShader = 'uniform float uLights; uniform vec3 uSunD, uSunC, uSkyT, uSkyH; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = 'uniform float uLights, uFac; uniform vec3 uSunD, uSunC, uSkyT, uSkyH; varying vec3 vBp; varying vec3 vBn; varying vec3 vBs; varying float vBid; varying float vIn; varying vec3 vWv; varying vec3 vWn;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float side = step(abs(vBn.y), 0.5);
         vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
         float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
         // Facades with depth, drawn not built (they fade with the windows): on about half the blocks every other bay has a balcony, a parapet over the lower
         // window with the slab's edge lit and its shadow on the wall under it; every window has the shadow of its lintel; the ground floor is a darker glazed band under a coloured fascia.
-        float hG = vBp.y * vBs.y - 8.0, fNear = (1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w)) * vIn, bal = side * step(0.45, fract(vBid * 7.3)) * step(fract(floor(wc.x) * 0.5), 0.25);
-        win *= 1.0 - bal * step(wf.y, 0.46) * fNear;
-        float fx = 1.0 + (0.10 * bal * step(wf.y, 0.14) - 0.26 * bal * smoothstep(0.82, 0.99, wf.y) - 0.30 * win * smoothstep(0.64, 0.76, wf.y)) * fNear;
-        float gfl = side * fNear * step(0.0, hG) * step(hG, 3.5);
+        float hG = vBp.y * vBs.y - 8.0, fx = 1.0, gfl = 0.0;
+        if (uFac > 0.5) { float fNear = (1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w)) * vIn, bal = side * step(0.45, fract(vBid * 7.3)) * step(fract(floor(wc.x) * 0.5), 0.25);
+          win *= 1.0 - bal * step(wf.y, 0.46) * fNear;
+          fx = 1.0 + (0.10 * bal * step(wf.y, 0.14) - 0.26 * bal * smoothstep(0.82, 0.99, wf.y) - 0.30 * win * smoothstep(0.64, 0.76, wf.y)) * fNear;
+          gfl = side * fNear * step(0.0, hG) * step(hG, 3.5); }
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
         float wfade = 1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w);          // far away the windows blend into an even tone instead of sparkling
         diffuseColor.rgb *= mix(mix(1.0, 0.85, side), mix(1.0, 0.40 + 0.22 * wh, win), wfade) * mix(0.86, 1.0, side);
@@ -1453,7 +1455,7 @@ function buildCities() {
         else { if (R() < 0.7) at((R() - 0.5) * sx * 0.5, (R() - 0.5) * sz * 0.5, 4.2, 2.8, 3.6, 0xb9b4a8); const nT = 1 + Math.floor(R() * 2); for (let i = 0; i < nT; i++) { const ox = (R() - 0.5) * (sx - 6), oz = (R() - 0.5) * (sz - 4); at(ox, oz, 1.3, 1.5, 1.3, 0xeeeeea); at(ox + 1.9, oz, 2.0, 0.5, 1.4, 0x2c3440); } } }
       if (!out.length) continue; const [cx, cz, bs] = centre(k), geo = base.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, flatMat, out.length);
       out.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setHex(b[7])); });
-      im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 3000 }; scene.add(im); cityMeshes.push(im); } } catch (err) { console.warn('roof detail left out', err); }
+      im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 3000, kind: 'roof' }; scene.add(im); cityMeshes.push(im); } } catch (err) { console.warn('roof detail left out', err); }
   for (const [k, list] of houses) { const [cx, cz, bs] = centre(k), geo = GEO.house.clone(); geo.boundingSphere = bs; const im = new THREE.InstancedMesh(geo, houseMat, list.length);
     list.forEach((b, n) => { e.set(0, b[6], 0); q.setFromEuler(e); p.set(b[0], b[1], b[2]); sc.set(b[3], b[4], b[5]); m4.compose(p, q, sc); im.setMatrixAt(n, m4); im.setColorAt(n, cc.setRGB(b[7], b[7] - 0.02, b[7] - 0.07)); });
     im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: HIRES ? 11000 : BIGGRID ? 8500 : 6000 }; scene.add(im); cityMeshes.push(im); }
@@ -1781,7 +1783,7 @@ function buildForests() {
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const [key, a] of map) { const [bx, bz] = key.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK, n = a.length / 3, geo = g0.clone(); geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 600);
     const im = new THREE.InstancedMesh(geo, mat, n); for (let t = 0; t < n; t++) { const x = a[t * 3], z = a[t * 3 + 1], r = a[t * 3 + 2], s = 14 + r * 9; p.set(x, triHeight(x, z) - 1, z); sc.set(s, 13 + r * 8, s); q.setFromAxisAngle(tmpV.set(0, 1, 0), r * 6.283); m4.compose(p, q, sc); im.setMatrixAt(t, m4); im.setColorAt(t, col.setRGB(0.10 + r * 0.05, 0.21 + r * 0.09, 0.09 + r * 0.03)); }
-    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 5500 }; scene.add(im); cityMeshes.push(im); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 5500, kind: 'forest' }; scene.add(im); cityMeshes.push(im); }
   buildForests.count = total;
 }
 function updateScatter() {
@@ -2664,13 +2666,38 @@ const PLANE_ORDER = ['airliner', 'bizjet', 'fighter', 'stunt', 'concorde', 'stea
 for (const k in PLANES) { const p = PLANES[k]; p.key = k; p.vs = Math.sqrt(2 * p.mass * G / (1.225 * p.S * (p.cl0 + p.cla * p.ast))); }
 let PL = PLANES.airliner;
 const AC = { root: new THREE.Group(), deck: new THREE.Group(), frame: new THREE.Group(), models: {}, m: null, livery: [], envMats: [], glow: [] };
-function planform(pts, t) {   // flat swept surface from (x, z) outline
-  const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
-  const b = Math.min(t * 0.42, 0.14), g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 1.6, bevelOffset: -b * 1.6, bevelSegments: 2 }); g.rotateX(Math.PI / 2); g.translate(0, t / 2 - b, 0); return g;       // rounded leading and trailing edges, not a sawn plank
+/**
+ * A lifting surface with a real section. The outline is a polygon of [span, chord] points (as the flat plank it replaces took it); at each station along
+ * the span the outline gives the leading and trailing edge, and between them stands an aerofoil (the NACA four-digit thickness curve, a little camber
+ * for wings), thick where the chord is long and thinning toward the tip. So a wing has a rounded nose, a fine trailing edge and a root deeper than its
+ * tip, in every aircraft at once. Returns the surface in (span, thickness, chord); null if the outline has no span.
+ */
+function airfoilLoft(pts, t, camber) {
+  const n = pts.length, lo = Math.min(...pts.map(p => p[0])), hi = Math.max(...pts.map(p => p[0])); if (!(hi - lo > 1e-3)) return null;
+  const cut = a => { let c0 = 1e9, c1 = -1e9; for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n], a0 = p[0], a1 = q[0]; if (a < Math.min(a0, a1) - 1e-7 || a > Math.max(a0, a1) + 1e-7) continue;
+      if (Math.abs(a1 - a0) < 1e-7) { c0 = Math.min(c0, p[1], q[1]); c1 = Math.max(c1, p[1], q[1]); continue; } const c = p[1] + (q[1] - p[1]) * (a - a0) / (a1 - a0); c0 = Math.min(c0, c); c1 = Math.max(c1, c); } return [c0, c1]; };
+  const st = [...new Set([...pts.map(p => +p[0].toFixed(4)), ...Array.from({ length: 9 }, (_, k) => +(lo + (hi - lo) * k / 8).toFixed(4))])].sort((a, b) => a - b).map(a => [a, cut(a)]).filter(e => e[1][1] >= e[1][0]);
+  if (st.length < 2) return null; const maxC = Math.max(...st.map(e => e[1][1] - e[1][0])) || 1, K = 8, R = 2 * K, P = [], I = [];
+  const th = u => 5 * (0.2969 * Math.sqrt(u) - 0.1260 * u - 0.3516 * u * u + 0.2843 * u * u * u - 0.1036 * u * u * u * u);
+  for (const [a, [c0, c1]] of st) { const ch = Math.max(c1 - c0, 0.02), T = t * 1.55 * (0.34 + 0.66 * ch / maxC);
+    for (let r = 0; r < R; r++) { const up = r <= K, k = up ? r : R - r, u = (1 - Math.cos(Math.PI * k / K)) / 2; P.push(a, t * 0.25 + (up ? 1 : -1) * T * th(u) + (camber || 0) * T * 2 * u * (1 - u), c0 + ch * u); } }
+  for (let s = 0; s < st.length - 1; s++) for (let r = 0; r < R; r++) { const a = s * R + r, b = s * R + (r + 1) % R, c = a + R, d = b + R; I.push(a, c, b, b, c, d); }
+  for (const [s, f] of [[0, 1], [st.length - 1, 0]]) for (let r = 1; r < R - 1; r++) { const o = s * R; if (f) I.push(o, o + r, o + r + 1); else I.push(o, o + r + 1, o + r); }
+  let vol = 0; for (let k = 0; k < I.length; k += 3) { const a = I[k] * 3, b = I[k + 1] * 3, c = I[k + 2] * 3; vol += P[a] * (P[b + 1] * P[c + 2] - P[b + 2] * P[c + 1]) - P[a + 1] * (P[b] * P[c + 2] - P[b + 2] * P[c]) + P[a + 2] * (P[b] * P[c + 1] - P[b + 1] * P[c]); }
+  if (vol < 0) for (let k = 0; k < I.length; k += 3) { const q = I[k + 1]; I[k + 1] = I[k + 2]; I[k + 2] = q; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); const uv = []; for (let k = 0; k < P.length; k += 3) uv.push(P[k], P[k + 2]);          /* as the plank had them: the outline's own coordinates, which the painted wings count on */ g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(I); g.computeVertexNormals(); return g;
 }
-function finGeo(pts, t) {     // vertical surface from (z, y) outline
+function plankGeo(pts, t) {   // the old flat plank: kept for an outline the aerofoil cannot take
   const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
-  const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); g.rotateY(-Math.PI / 2); g.translate(t / 2, 0, 0); return g;
+  const b = Math.min(t * 0.42, 0.14), g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b * 1.6, bevelOffset: -b * 1.6, bevelSegments: 2 }); g.rotateX(Math.PI / 2); g.translate(0, t / 2 - b, 0); return g;
+}
+function planform(pts, t) {   // a wing, tailplane, strake or pylon from its (x, z) outline
+  return airfoilLoft(pts, t, 0.12) || plankGeo(pts, t);
+}
+function finGeo(pts, t) {     // a fin from its (z, y) outline: the same aerofoil, standing up, no camber
+  const g = airfoilLoft(pts.map(p => [p[1], p[0]]), t * 0.8, 0); if (g) { g.translate(0, -t * 0.2, 0); g.rotateZ(Math.PI / 2); return g; }
+  const s = new THREE.Shape(); s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  const g2 = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: false }); g2.rotateY(-Math.PI / 2); g2.translate(t / 2, 0, 0); return g2;
 }
 /** A tube-and-wing fuselage as one lathe: a rounded, slightly drooped nose, a constant section, an upswept tail cone. UV: u round the body
     (0 = belly, 0.25 = right side, 0.5 = top), v along it from the nose (0) to the tail (1). */
@@ -2796,12 +2823,22 @@ function buildAircraft() {
     } else if (key === 'fighter') {
       // ---- single-engine fighter: blended delta, bubble canopy, all-moving tailplanes, afterburner ----
       const g1 = ph(0x8d98a3, 70), g2 = ph(0x6c7884, 60), g3 = ph(0x9aa5b0, 80);
+      // paint: the three-colour desert scheme, sand with brown and pale green patches, drawn once seen from above and laid over the fuselage, the wings
+      // and the tailplanes alike (`topUV`), so the patches run across the joins as on the real aircraft; fine panel lines over it
+      const camo = (() => { const c = document.createElement('canvas'); c.width = c.height = 512; const x = c.getContext('2d'), R = rng(7); x.fillStyle = '#b5a37e'; x.fillRect(0, 0, 512, 512);
+        for (const [colr, nn] of [['#806c52', 15], ['#8c9579', 13]]) { x.fillStyle = colr; for (let i = 0; i < nn; i++) { const cx = R() * 512, cy = R() * 512; x.beginPath(); for (let a = 0; a < 6.3; a += 0.45) { const r = 34 + R() * 44; x.lineTo(cx + Math.cos(a) * r * 1.5, cy + Math.sin(a) * r); } x.closePath(); x.fill(); } }
+        x.strokeStyle = 'rgba(30,30,30,.22)'; x.lineWidth = 1; for (let i = 0; i < 512; i += 37) { x.beginPath(); x.moveTo(0, i + 0.5); x.lineTo(512, i + 0.5); x.stroke(); } for (let i = 0; i < 512; i += 93) { x.beginPath(); x.moveTo(i + 0.5, 0); x.lineTo(i + 0.5, 512); x.stroke(); }
+        const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; })();
+      const gC = new THREE.MeshPhongMaterial({ map: camo, shininess: 38 }); AC.envMats.push(gC);
+      const topUV = (geo, oz) => { const P = geo.attributes.position, uv = new Float32Array(P.count * 2); for (let k = 0; k < P.count; k++) { uv[k * 2] = P.getX(k) / 22 + 0.5; uv[k * 2 + 1] = (P.getZ(k) + (oz || 0)) / 22 + 0.5; } geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return geo; };
       // fuselage: one lathe from the radome tip to the nozzle, wider than it is tall, with a raised spine behind the canopy
       { const pts = [], prof = [[-8.9, 0.02], [-8.2, 0.16], [-7.0, 0.34], [-5.6, 0.52], [-4.2, 0.66], [-2.6, 0.76], [0, 0.80], [2.5, 0.80], [4.6, 0.76], [6.0, 0.68], [6.7, 0.62]];
-        for (const [z, r] of prof) pts.push(new THREE.Vector2(r, z)); const fg = new THREE.LatheGeometry(pts, 20); fg.rotateX(Math.PI / 2); fg.scale(1.22, 0.9, 1);
+        for (const [z, r] of prof) pts.push(new THREE.Vector2(r, z)); const fg = new THREE.LatheGeometry(pts, 32); fg.rotateX(Math.PI / 2); fg.scale(1.22, 0.9, 1);
         const p = fg.attributes.position; for (let k = 0; k < p.count; k++) { const z = p.getZ(k), y = p.getY(k); if (z < -4.2) p.setY(k, y - 0.14 * Math.pow((-4.2 - z) / 4.7, 1.5)); if (y > 0 && z > -1.2 && z < 5.6) p.setY(k, y * (1 + 0.22 * Math.sin((z + 1.2) / 6.8 * Math.PI))); } fg.computeVertexNormals();
-        add(fg, g1, 0, 0, 0); }
-      add(new THREE.SphereGeometry(0.42, 10, 8), g2, 0, -0.12, -8.3).scale.set(1, 1, 2.2);                              // darker radome
+        add(topUV(fg), gC, 0, 0, 0);
+        // the radome: the nose itself in darker grey, a pointed cone that follows the body (it used to be a ball stuck on the tip)
+        const rp = [[-8.93, 0.012], [-8.2, 0.165], [-7.4, 0.29], [-6.7, 0.385]].map(q => new THREE.Vector2(q[1] * 1.012, q[0])), rg = new THREE.LatheGeometry(rp, 32); rg.rotateX(Math.PI / 2); rg.scale(1.22, 0.9, 1);
+        { const q = rg.attributes.position; for (let k = 0; k < q.count; k++) { const z = q.getZ(k); q.setY(k, q.getY(k) - 0.14 * Math.pow((-4.2 - z) / 4.7, 1.5)); } rg.computeVertexNormals(); } add(rg, ph(0x4f5961, 50), 0, 0, 0); }
       // chin intake: an open duct under the forward fuselage, dark inside, with a lip
       { const duct = new THREE.CylinderGeometry(0.5, 0.56, 3.4, 16, 1, true).rotateX(Math.PI / 2); add(duct, g1, 0, -0.82, -1.9).scale.set(1.25, 0.62, 1);
         add(new THREE.CylinderGeometry(0.47, 0.52, 3.3, 16, 1, true).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0c0e11, side: THREE.BackSide }), 0, -0.82, -1.9).scale.set(1.25, 0.62, 1);
@@ -2822,8 +2859,8 @@ function buildAircraft() {
         M.burner = new THREE.Group(); M.burner.position.set(0, 0, 9.4); M.g.add(M.burner);
         M.burner.add(new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.52, 5.5, 14, 1, true).rotateX(Math.PI / 2), bm(0xffa050))); M.burner.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.30, 4.2, 10, 1, true).rotateX(Math.PI / 2), bm(0xcfe2ff))).position.z = -0.6; }
       for (const s of [-1, 1]) {
-        add(planform([[s * 0.7, -1.3], [s * 4.75, 2.7], [s * 4.75, 3.6], [s * 0.7, 4.0]], 0.16), g1, 0, -0.05, 0);
-        add(planform([[s * 0.7, -5.2], [s * 1.55, -1.0], [s * 0.7, -1.0]], 0.12), g2, 0, -0.05, 0);                 // leading-edge strake, running forward to the cockpit
+        add(topUV(planform([[s * 0.7, -1.3], [s * 4.75, 2.7], [s * 4.75, 3.6], [s * 0.7, 4.0]], 0.16)), gC, 0, -0.05, 0);
+        add(topUV(planform([[s * 0.7, -5.2], [s * 1.55, -1.0], [s * 0.7, -1.0]], 0.12)), gC, 0, -0.05, 0);                 // leading-edge strake, running forward to the cockpit
         surf(M.ail, s * 2.7, -0.05, 3.75, 3.4, 0.07, 0.55, g2);
         add(cyl(0.07, 0.07, 2.6, 8), dark, s * 4.8, -0.05, 2.7);                                                    // wingtip rail
         add(cyl(0.085, 0.085, 2.3, 8), ph(0xe9ebee, 60), s * 4.8, -0.2, 2.6); add(cyl(0.01, 0.085, 0.45, 8), ph(0xe9ebee, 60), s * 4.8, -0.2, 1.25);      // a missile on the rail
@@ -2833,7 +2870,7 @@ function buildAircraft() {
       }
       add(cyl(0.015, 0.02, 1.1, 6), dark, 0, -0.16, -9.3);                                                           // pitot
       const tp = pivot(0, -0.05, 6.3); M.elev.push(tp);
-      for (const s of [-1, 1]) add(planform([[s * 0.6, -1.1], [s * 2.9, 0.3], [s * 2.9, 1.0], [s * 0.6, 0.8]], 0.1), g2, 0, 0, 0, tp);
+      for (const s of [-1, 1]) add(topUV(planform([[s * 0.6, -1.1], [s * 2.9, 0.3], [s * 2.9, 1.0], [s * 0.6, 0.8]], 0.1), 6.3), gC, 0, 0, 0, tp);
       add(finGeo([[3.3, 0.6], [6.2, 3.7], [7.1, 3.7], [6.9, 0.6]], 0.12), g2, 0, 0, 0);
       M.rud = pivot(0, 2.1, 6.95); add(new THREE.BoxGeometry(0.07, 2.5, 0.5), g1, 0, 0, 0.25, M.rud);
       M.gear = pivot(0, 0, 0); leg(0, -3.3, 0.2, -0.6, M.gear, g2); leg(-0.95, 1.6, 0.28, -0.3, M.gear, g2); leg(0.95, 1.6, 0.28, -0.3, M.gear, g2);
@@ -4521,6 +4558,18 @@ async function perfRun() {
     { const prN = RES.pr; renderer.setPixelRatio(prN * 0.5); resize(); r.half = draw(N); renderer.setPixelRatio(prN); resize(); } await raf();
     r.noTerr = without(terr, N); r.noWater = without(water, N); await raf(); r.noBld = without(bld, N); r.noSky = without(skyG, N); r.onlyTerr = without(scene.children.filter(m => !isTerr(m) && m.type !== 'HemisphereLight' && m.type !== 'DirectionalLight'), N);
     POST.on = post0; rows.push(r); await raf(); }
+  // What brings the frame rate back: the same two places as played, each time with one of the newer extras switched off (the governor and the automatic
+  // resolution held still). The answer is in which line returns to 60.
+  const ab = []; { const lv = DET.lvl, fx0 = RES.fixed; DET.lvl = 5; RES.fixed = RES.pr; setMode(0); S.cam = 1;
+    const far0 = new Map(), hide = kind => { for (const m of cityMeshes) if (m.userData.kind === kind) { far0.set(m, m.userData.far); m.userData.far = 0; } }, show = () => { for (const [m, fr] of far0) m.userData.far = fr; far0.clear(); };
+    const U = TERRAIN_MAT.uniforms, sat0 = U.uSat.value, bs0 = U.uBS.value, V = [['all on', () => {}, () => {}], ['no far forest', () => hide('forest'), show], ['no roof detail', () => hide('roof'), show],
+      ['no tree shadows', () => { scatter.tsh.visible = scatter.bsh.visible = false; }, () => { scatter.tsh.visible = scatter.bsh.visible = true; }], ['no drawn facades', () => { FACADE.value = 0; }, () => { FACADE.value = 1; }],
+      ['plain terrain colour', () => { U.uSat.value = 0; U.uX.value = 0; }, () => { U.uSat.value = sat0; U.uX.value = 1; }], ['no building shadows', () => { U.uBS.value = 0; }, () => { U.uBS.value = bs0; }], ['all of these off', () => { hide('forest'); hide('roof'); scatter.tsh.visible = scatter.bsh.visible = false; FACADE.value = 0; U.uSat.value = 0; U.uX.value = 0; U.uBS.value = 0; }, () => { show(); scatter.tsh.visible = scatter.bsh.visible = true; FACADE.value = 1; U.uSat.value = sat0; U.uX.value = 1; U.uBS.value = bs0; }]];
+    for (const [name, lon, lat, agl, hdg, fast] of [['low and fast up the coast', 34.80, 32.00, 150, 20, 1], ['Jerusalem hills', 35.08, 31.78, 600, 90, 0]]) { const row = { name, v: [] };
+      for (const [vn, off, on] of V) { say('comparing: ' + name + ', ' + vn + ' …'); spawn({ type: 'air', lon, lat, agl, hdg, spd: fast ? 280 : 115, thr: fast ? 1 : undefined, label: name }); off(); PERF.busy = false; for (let i = 0; i < 45; i++) await raf();
+        const t0 = performance.now(); let tP = t0, late = 0; for (let i = 0; i < 150; i++) { await raf(); const tN = performance.now(); if (tN - tP > 25) late++; tP = tN; } row.v.push([vn, (performance.now() - t0) / 150, late]); on(); PERF.busy = true; }
+      ab.push(row); }
+    DET.lvl = lv; RES.fixed = fx0; PERF.ab = ab; PERF.abInfo = 'density x' + RES.pr + ', draw distance ' + Math.round(DET.far * 100) + '%'; }
   RES.fixed = fixed0; setMode(mode0); S.cam = cam0;
   const f = v => (v < 10 ? ' ' : '') + v.toFixed(1), dbg = gl.getExtension('WEBGL_debug_renderer_info'), buf = renderer.getDrawingBufferSize(new THREE.Vector2());
   let out = 'FRAME TIME, ms per frame (16.7 = 60 fps, 33 = 30 fps)\nthe lines under AS PLAYED wait for the chip after every frame: they compare parts, and read higher than play\n' + (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'gpu unknown') + '\nscreen ' + innerWidth + 'x' + innerHeight + ' css, drawn ' + buf.x + 'x' + buf.y + ' (x' + pr0 + '), post pass ' + (post0 ? 'on' : 'off') + ', detail ' + DET.lvl + ', terrain grid ' + NX + 'x' + NZ + '\n';
@@ -4528,6 +4577,7 @@ async function perfRun() {
     out += '\n' + r.name.toUpperCase() + '\n  AS PLAYED          ' + f(r.real) + '   = ' + Math.round(1000 / r.real) + ' frames a second (the screen caps this); detail step ' + r.det + ', density x' + r.pr + '\n  late frames        ' + r.late + ' of 240 came over 25 ms, the worst ' + f(r.worst) + '; game code at its worst ' + f(r.jsMax) + '\n  whole frame        ' + f(r.full) + '\n  no post pass       ' + f(r.noPost) + '   (post pass costs ' + f(r.full - r.noPost) + ')\n  quarter the pixels ' + f(r.half) + '   -> about ' + Math.round(pixShare * 100) + '% of the drawing time is per pixel'
       + '\n  without terrain    ' + f(r.noTerr) + '   (terrain costs ' + f(r.noPost - r.noTerr) + ')\n  without water      ' + f(r.noWater) + '   (water ' + f(r.noPost - r.noWater) + ')\n  without buildings  ' + f(r.noBld) + '   (buildings ' + f(r.noPost - r.noBld) + ')\n  without sky/clouds ' + f(r.noSky) + '   (sky ' + f(r.noPost - r.noSky) + ')\n  terrain alone      ' + f(r.onlyTerr)
       + '\n  triangles ' + r.tris.toLocaleString('en') + ', draw calls ' + r.calls + ', sending them ' + f(r.submit) + ' ms\n    of which terrain ' + r.gT[0].toLocaleString('en') + ' / ' + r.gT[1] + ', buildings and sites ' + r.gB[0].toLocaleString('en') + ' / ' + r.gB[1] + ', water ' + r.gW[0].toLocaleString('en') + ' / ' + r.gW[1] + ', the rest ' + (r.tris - r.gT[0] - r.gB[0] - r.gW[0]).toLocaleString('en') + ' / ' + (r.calls - r.gT[1] - r.gB[1] - r.gW[1]) + '\n  game code (flight, map, HUD) ' + f(r.js) + ' ms\n'; }
+  { let t2 = 'WHAT BRINGS IT BACK (as played, ' + PERF.abInfo + '; ms a frame, late frames of 150)\n'; for (const r of PERF.ab) { t2 += r.name.toUpperCase() + '\n'; for (const [vn, ms, late] of r.v) t2 += '  ' + (vn + '                      ').slice(0, 22) + f(ms) + '  ' + late + ' late\n'; } out = t2 + '\n' + out; }
   out += '\n' + L('Take a screenshot of this and send it. Tap to close.', 'צלמו את המסך הזה ושלחו. נגיעה סוגרת.'); say(out); PERF.result = rows; PERF.text = out; box.addEventListener('click', () => box.remove()); PERF.busy = false;
 }
 if (PERF.on) { const iv = setInterval(() => { if (typeof WORLD !== 'undefined' && WORLD.ready && S.started && !S.paused && !S.crashed) { clearInterval(iv); setTimeout(perfRun, 2500); } }, 500); }
