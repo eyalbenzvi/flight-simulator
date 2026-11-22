@@ -180,7 +180,16 @@ function buildCities() {
     if (bh > 0 && bh < 40) ht = st === 3 ? Math.min(bh, 10) : bh;                                           // the tallest tagged building in the cell
     const x = X0 + (i + 0.5) * 60 + (sd - 0.5) * 3, z = Z0 + (j + 0.5) * 60 + (s2 - 0.5) * 3, g = groundAt(x, z); if (g.water || wetAt(x, z, 34) || airfieldAt(x, z, 40) || landmarkAt(x, z, st === 3 ? 26 : 24)) continue;          /* not in the sea, and not on a mapped lake or reservoir either */
     const y = heightAt(x, z);
-    if (st === 3) { for (let k = 0; k < 1 + Math.min(2, szc); k++) { const a = nh2 * 6.283 + k * 2.1, hx = x + Math.cos(a) * 17, hz = z + Math.sin(a) * 17; let ux = hx, uz = hz; if (nearRoad(ux, uz, 10)) { ux = x - Math.cos(a) * 17; uz = z - Math.sin(a) * 17; if (nearRoad(ux, uz, 10)) { ux = x; uz = z; if (nearRoad(ux, uz, 9)) continue; } } push(houses, ux, uz, [ux, heightAt(ux, uz) - 1, uz, 12 + s2 * 7, 8 + s3 * 3, 10 + sd * 6, (nh1 < 0.5 ? 0 : 0.785) + (s3 < 0.5 ? 0 : 1.5708), 0.93 + s2 * 0.07]); } }
+    if (st === 3) {
+      // A house cell as it is mapped (`BD_PNG`): the houses run the way the real ones do, in two rows along that line as along a street, they stand where
+      // in the cell the real ones stand, and there are more of them where there are more (one for every four real houses, up to six; small phones
+      // keep one to three). Where the map has no buildings for the cell the neighbourhood's direction is used, as before.
+      const bq = window.BDR ? BDR.d : null, real = bq && bq[o + 2] > 0, th = real && bq[o] ? (bq[o] - 1) * DEG : (nh1 < 0.5 ? 0 : 0.785), ux = Math.cos(th), uz = -Math.sin(th);
+      const hn = real && BIGGRID ? clamp(Math.round(bq[o + 2] / 4), 1, 6) : 1 + Math.min(2, szc), m = Math.ceil(hn / 2);
+      const cx = x + (real ? (((bq[o + 1] >> 4) + 0.5) / 16 - 0.5) * 30 : 0), cz = z + (real ? (((bq[o + 1] & 15) + 0.5) / 16 - 0.5) * 30 : 0);
+      for (let k = 0; k < hn; k++) { const al = ((k >> 1) - (m - 1) / 2) * 19, ac = hn > 1 ? (k & 1 ? 10.5 : -10.5) : 0, hx = cx + al * ux - ac * uz, hz = cz + al * uz + ac * ux;
+        if (nearRoad(hx, hz, 9) || wetAt(hx, hz, 8) || landmarkAt(hx, hz, 10)) continue; const kr = hash2(i * 3.1 + k, j * 1.7 + k * 5.3);
+        push(houses, hx, hz, [hx, heightAt(hx, hz) - 1, hz, 12 + kr * 6, 8 + s3 * 3, 9 + s2 * 4, th + (kr < 0.2 ? 1.5708 : 0), 0.93 + kr * 0.07]); } }
     else if (st === 5) {                                                                                      // sheds and factories: wide, low, flat, no windows
       for (let k = 0; k < (cov > 0.3 ? 2 : 1); k++) { const bw = 34 + sd * 18 - k * 8, bd = 26 + s3 * 16 - k * 6, ox = k ? (s2 - 0.5) * 30 : 0, oz = k ? (sd - 0.5) * 30 : 0, f = fit(x + ox, z + oz, bw, bd); if (!f || obstBox(f[0], f[1], bw * f[2] / 2, bd * f[2] / 2)) continue;
         const by = heightAt(f[0], f[1]); push(flat, f[0], f[1], [f[0], by - 4, f[1], bw * f[2], ht + 4, bd * f[2], 0, IND[((s3 + k * 0.37) * IND.length | 0) % IND.length]]); addObst(f[0], f[1], bw * f[2], bd * f[2], 0, by - 4, by + ht); } }
