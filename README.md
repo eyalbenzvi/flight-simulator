@@ -69,7 +69,7 @@ python3 tools/smoke_test.py dist/index.html
 
 ## Data sources and credit
 
-- Ground colour: NASA Blue Marble Next Generation, through NASA GIBS (public domain; NASA Earth Observatory / EOSDIS). Rebuild with
+- Ground colour: the Landsat WELD annual true-colour composite of 2000, through NASA GIBS (public domain; NASA / USGS, EOSDIS). Rebuild with
   `python3 tools/sat2js.py` → `src/sat.js`.
 - Terrain elevation: Mapzen / AWS Open Data "Terrain Tiles" (<https://registry.opendata.aws/terrain-tiles/>), which here are NASA SRTM on land
   and GEBCO at sea. Rebuild with `python3 tools/dem2js.py` (it fetches about 40 small tiles into `raw/dem/`) → `src/dem.js`.

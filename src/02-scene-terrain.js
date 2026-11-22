@@ -150,7 +150,7 @@ function landCoverTexture() {
     a[o] = C === A && C !== D && A !== B ? A : P; a[o + 1] = A === B && A !== C && B !== D ? B : P; a[o + w * 2] = D === C && D !== B && C !== A ? C : P; a[o + w * 2 + 1] = B === D && B !== A && D !== C ? D : P; }
   const t = new THREE.DataTexture(a, w * 2, h * 2, THREE.LuminanceFormat, THREE.UnsignedByteType); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t;
 }
-/** The real colour of the land from orbit, coarse (`SAT_JPG`, NASA Blue Marble, 512 x 1024 over the map window, water filled from the land beside it):
+/** The real colour of the land from orbit (`SAT_JPG`, NASA / USGS Landsat, 2048 x 4096 over the map window, about 130 m of real ground a pixel, water filled from the land beside it):
     the terrain's base tint. `?sat=0` leaves it out. */
 function satTexture() {
   const R = window.SATR; if (!R) { const t = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat); t.needsUpdate = true; return t; }
@@ -234,7 +234,7 @@ const TERRAIN_FS = `
     vec3 N=normalize(vec3(vN.x-g.x, vN.y, vN.z-g.y));
     float slope=1.0-N.y;
     /* the ground's base colour leans on the real one, seen from orbit: true desert hues and their patterns, the real greens and browns of the hills */
-    vec3 vC=vCol; if(uSat>0.5){ vec2 su=(P-uB.xy)/(uB.zw-uB.xy); if(su.x>0.0&&su.x<1.0&&su.y>0.0&&su.y<1.0){ vec3 st=texture2D(tSat,su).rgb; vC=mix(vCol,st*uSatK.x,uSatK.y); } }
+    vec3 vC=vCol; float sLum=1.0; if(uSat>0.5){ vec2 su=(P-uB.xy)/(uB.zw-uB.xy); if(su.x>0.0&&su.x<1.0&&su.y>0.0&&su.y<1.0){ vec3 st=texture2D(tSat,su).rgb; vC=mix(vCol,st*uSatK.x,uSatK.y); sLum=clamp(dot(st,vec3(0.3333))/0.70,0.62,1.3); } }
     vec3 col=vC*(0.80+0.40*nA)*(1.0+(nE-0.5)*0.26*close);
     col=mix(col, vC*mix(vec3(0.93,0.80,0.66),vec3(1.10,1.04,0.94),nA)*(1.0+(nE-0.5)*0.26*close), arid);          // desert: the patches differ in hue (ochre to cream), not in grey value
     { float c2=1.0-smoothstep(30.0,650.0,vDist); if(c2>0.01){ float nF=nz(mat2(0.6,0.8,-0.8,0.6)*P/29.0+0.19), nG=nz(P/8.3+0.61); col*=1.0+((nF-0.5)*0.30+(nG-0.5)*0.16*(1.0-smoothstep(10.0,160.0,vDist)))*c2*(0.5+0.5*rough); } }      // low and close: stones, tufts and furrows, so the ground stays sharp right under the aircraft
@@ -285,6 +285,7 @@ const TERRAIN_FS = `
         if(abs(l2-lc)>0.5){ vec4 pc=texture2D(tPal,vec2((l2+0.5)/32.0,0.5)); col=mix(col,mix(col0,pc.rgb*(0.85+0.3*nC),pc.a),0.36); } }
       /* far away a pixel covers many cells: the averaged cover stands in for the single cell, which could only flicker */
       { float lf=smoothstep(4500.0,13000.0,vDist); if(lf>0.01){ vec4 fa=texture2D(tLCf,(P-uLCr.xy)*uLCr.zw); col=mix(col,mix(col0,fa.rgb*(0.88+0.24*nC),fa.a),lf); } } }
+    col*=mix(1.0,sLum,0.38);          /* and what is painted over it (forest, fields, scrub) keeps the real picture's light and dark, so mapped land is not one flat tone */
     /* the beach: ground a few metres above the sea is sand, pale and dry higher up, darker and wet at the water's edge (only the open coasts lie between -3 and 5 m) */
     { float bh=vW.y+(nC-0.5)*2.2+(nD-0.5)*1.2, beach=(1.0-smoothstep(1.6,4.6,bh))*step(-3.0,vW.y); if(beach>0.01){ col=mix(col,mix(vec3(0.62,0.55,0.41),vec3(0.86,0.79,0.62),smoothstep(0.2,1.5,bh))*(0.93+0.14*nD),beach); urban*=1.0-beach; } }
     float outside=max(max(uB.x-P.x,P.x-uB.z),max(uB.y-P.y,P.y-uB.w));
@@ -422,7 +423,7 @@ function buildTerrain() {
   const cAttr = new THREE.BufferAttribute(col, 3), zAttr = new THREE.BufferAttribute(zone, 4), lAttr = TLIT.attr = new THREE.BufferAttribute(new Float32Array(nv * 2).fill(1), 2);
   noiseTex = noiseTexture(HIRES ? 512 : 256, 8, 0, 1, HIRES ? 6 : 5);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uSatK: { value: new THREE.Vector2(1.35, 0.6) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
+    uniforms: { tNoise: { value: noiseTex }, tFields: { value: fieldsTexture() }, tLC: { value: landCoverTexture() }, tPal: { value: landCoverPalette() }, tLCf: { value: landCoverFar() }, tSat: { value: satTexture() }, uSat: { value: window.SATR ? 1 : 0 }, uSatK: { value: new THREE.Vector2(1.0, 0.72) }, tLCa: { value: landCoverMask() }, tBS: { value: null }, uWet: { value: 0 }, uBS: { value: 0 }, uB: { value: new THREE.Vector4(X0, Z0, X1, Z1) }, uLCr: { value: new THREE.Vector4(X0, Z0, 1 / (LCR.w * 60), 1 / (LCR.h * 60)) }, uOrg: { value: new THREE.Vector2(X0, Z0) }, sunDir: ENV.sunDir, sunCol: ENV.sunCol, skyCol: ENV.skyCol, gndCol: ENV.gndCol, fogCol: ENV.fogCol, fogDen: ENV.fogDen, uLights: ENV.uLights, uTime: ENV.uTime },
     vertexShader: SHADER_VS, fragmentShader: TERRAIN_FS.replace("__UB__", "330.0").replace("__UC__", "34.0")
   });
   mat.extensions = { derivatives: false, fragDepth: true, drawBuffers: false, shaderTextureLOD: false }; TERRAIN_MAT = mat;

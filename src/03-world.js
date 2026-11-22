@@ -97,9 +97,16 @@ function windowize(mat) {
       { float side = step(abs(vBn.y), 0.5);
         vec2 wc = vec2((abs(vBn.x) > 0.5 ? vBp.z * vBs.z : vBp.x * vBs.x) / 3.6, vBp.y * vBs.y / 3.4), wf = fract(wc);
         float win = side * step(0.22, wf.x) * step(wf.x, 0.80) * step(0.30, wf.y) * step(wf.y, 0.78);
+        // Facades with depth, drawn not built (they fade with the windows): on about half the blocks every other bay has a balcony, a parapet over the lower
+        // window with the slab's edge lit and its shadow on the wall under it; every window has the shadow of its lintel; the ground floor is a darker glazed band under a coloured fascia.
+        float hG = vBp.y * vBs.y - 8.0, fNear = (1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w)) * vIn, bal = side * step(0.45, fract(vBid * 7.3)) * step(fract(floor(wc.x) * 0.5), 0.25);
+        win *= 1.0 - bal * step(wf.y, 0.46) * fNear;
+        float fx = 1.0 + (0.10 * bal * step(wf.y, 0.14) - 0.26 * bal * smoothstep(0.82, 0.99, wf.y) - 0.30 * win * smoothstep(0.64, 0.76, wf.y)) * fNear;
+        float gfl = side * fNear * step(0.0, hG) * step(hG, 3.5);
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
         float wfade = 1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w);          // far away the windows blend into an even tone instead of sparkling
         diffuseColor.rgb *= mix(mix(1.0, 0.85, side), mix(1.0, 0.40 + 0.22 * wh, win), wfade) * mix(0.86, 1.0, side);
+        diffuseColor.rgb *= fx; diffuseColor.rgb = mix(diffuseColor.rgb, hG > 2.9 ? mix(vec3(0.62, 0.20, 0.16), vec3(0.20, 0.36, 0.52), step(0.5, fract(vBid * 3.1))) : vec3(0.15, 0.18, 0.21), gfl * (hG > 2.9 ? 0.55 : 0.7 * step(0.10, wf.x) * step(wf.x, 0.90)));
         diffuseColor.rgb *= mix(1.0, 0.70 + 0.30 * smoothstep(0.0, 8.0, vBp.y * vBs.y - 8.0), side * vIn);          // the foot of a wall is in shade (blocks stand 8 m into the ground)
         // glass is glass: each pane reflects the sky (more at a grazing angle), and some panes, each tilted a hair differently, flash the sun as the aircraft passes
         { vec3 Vd = normalize(vWv), Nw = normalize(vWn), R = reflect(-Vd, Nw); R.xz += (vec2(wh, fract(wh * 7.7)) - 0.5) * 0.07; R = normalize(R);
@@ -561,6 +568,24 @@ function buildScatter() {
   const mkSh = host => { const m = new THREE.InstancedMesh(GEO.treeShade, shMat, host.instanceMatrix.count); m.instanceMatrix = host.instanceMatrix; m.frustumCulled = false; m.count = 0; m.renderOrder = 1; scene.add(m); return m; };
   scatter = { bm: mk(GEO.crown, BIGGRID ? 6500 : 2600), tm: mk(GEO.tree, BIGGRID ? 9000 : 3200), hm: mk(GEO.house, 650), sm: mk(GEO.stone, 550), wm: mk(GEO.tower, 40), mm: mk(GEO.minaret, 40), x: 1e9, z: 1e9, col: new THREE.Color(), e: new THREE.Euler() };
   scatter.tsh = mkSh(scatter.tm); scatter.bsh = mkSh(scatter.bm);
+}
+/**
+ * The forest from afar (capable devices). Trees near the camera reach 1.5 km; beyond that a forest was a flat green carpet. Every cell mapped as forest
+ * gets three clumps of low-poly trees, built once, in 6 km buckets that are drawn within 5.5 km through the same distance cull as the buildings (so the
+ * detail governor thins them with the rest). Nothing per frame.
+ */
+function buildForests() {
+  if (!BIGGRID || !LCR) return; const BK = 6000, map = new Map(), w = LCR.w, h = LCR.h, m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color(); let total = 0;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { if (LCR.d[(j * w + i) * 4] !== 1) continue;
+    for (let k = 0; k < 3; k++) { const x = X0 + (i + hash2(i * 1.31 + k * 7.1, j * 2.17 + 3.3)) * 60, z = Z0 + (j + hash2(i * 2.71 + 1.9, j * 1.13 + k * 5.7)) * 60; if (nearRoad(x, z, 9) || obstBox(x, z, 7, 7) || airfieldAt(x, z, 10)) continue;
+      const key = Math.floor(x / BK) + ':' + Math.floor(z / BK); let a = map.get(key); if (!a) map.set(key, a = []); a.push(x, z, hash2(i * 3.3 + k, j * 4.1)); total++; } }
+  const cone = (r, hh, y, x, z) => new THREE.ConeGeometry(r, hh, 6, 1, true).translate(x, y + hh / 2, z), g0 = mergeGeo([[cone(0.34, 0.9, 0.08, 0, 0), 1, 1, 1], [cone(0.27, 0.72, 0.06, 0.36, 0.18), 0.9, 0.9, 0.9], [cone(0.24, 0.62, 0.05, -0.30, 0.26), 1.06, 1.06, 1.06], [cone(0.22, 0.56, 0.05, 0.05, -0.38), 0.95, 0.95, 0.95]]);
+  { const P = g0.attributes.position, C = g0.attributes.color; for (let n = 0; n < P.count; n++) { const f = 0.50 + 0.46 * Math.min(1, P.getY(n)); C.setXYZ(n, C.getX(n) * f, C.getY(n) * f, C.getZ(n) * f); } }
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  for (const [key, a] of map) { const [bx, bz] = key.split(':').map(Number), cx = (bx + 0.5) * BK, cz = (bz + 0.5) * BK, n = a.length / 3, geo = g0.clone(); geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, heightAt(cx, cz), cz), BK * 0.71 + 600);
+    const im = new THREE.InstancedMesh(geo, mat, n); for (let t = 0; t < n; t++) { const x = a[t * 3], z = a[t * 3 + 1], r = a[t * 3 + 2], s = 14 + r * 9; p.set(x, triHeight(x, z) - 1, z); sc.set(s, 13 + r * 8, s); q.setFromAxisAngle(tmpV.set(0, 1, 0), r * 6.283); m4.compose(p, q, sc); im.setMatrixAt(t, m4); im.setColorAt(t, col.setRGB(0.10 + r * 0.05, 0.21 + r * 0.09, 0.09 + r * 0.03)); }
+    im.matrixAutoUpdate = false; im.userData = { x: cx, z: cz, half: BK / 2, far: 5500 }; scene.add(im); cityMeshes.push(im); }
+  buildForests.count = total;
 }
 function updateScatter() {
   // The scatter is rebuilt every 170 m of flight, and a low, fast jet covers that twice a second: done in one go it held a frame back each time (the
