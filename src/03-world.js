@@ -100,6 +100,7 @@ function windowize(mat) {
         float wh = fract(sin(dot(floor(wc) + vBid * 91.0, vec2(12.9898, 78.233))) * 43758.5453);
         float wfade = 1.0 - smoothstep(600.0, 2400.0, 1.0 / gl_FragCoord.w);          // far away the windows blend into an even tone instead of sparkling
         diffuseColor.rgb *= mix(mix(1.0, 0.85, side), mix(1.0, 0.40 + 0.22 * wh, win), wfade) * mix(0.86, 1.0, side);
+        diffuseColor.rgb *= mix(1.0, 0.70 + 0.30 * smoothstep(0.0, 8.0, vBp.y * vBs.y - 8.0), side * vIn);          // the foot of a wall is in shade (blocks stand 8 m into the ground)
         // glass is glass: each pane reflects the sky (more at a grazing angle), and some panes, each tilted a hair differently, flash the sun as the aircraft passes
         { vec3 Vd = normalize(vWv), Nw = normalize(vWn), R = reflect(-Vd, Nw); R.xz += (vec2(wh, fract(wh * 7.7)) - 0.5) * 0.07; R = normalize(R);
           float fr = pow(1.0 - max(dot(Vd, Nw), 0.0), 4.0), gls = win * wfade; vec3 skyR = mix(uSkyH, uSkyT, pow(max(R.y, 0.0), 0.5));
@@ -200,13 +201,23 @@ function buildCities() {
       for (let k = 0; k < n; k++) {                                                                           // dense cells: two or three blocks
         let bw = (st === 4 ? 30 + sd * 10 : ht < 10 ? 20 + sd * 14 : 26 + sd * 16) * szk * kk, bd = (st === 4 ? 30 + s2 * 10 : ht < 10 ? 20 + s2 * 14 : 26 + s2 * 16) * szk * kk;
         // two or three blocks stand side by side along one axis, each within its own slot of the 60 m cell (they used to be staggered on a diagonal and ran through each other)
+        // the way the real buildings of this cell run (`BD_PNG`), folded to within 45 degrees of the lattice; a row of blocks runs that way, each block turned with it
+        const bq2 = window.BDR ? BDR.d : null, tr0 = bq2 && bq2[o] ? (bq2[o] - 1) * DEG : 0, thR = tr0 - Math.round(tr0 / 1.5708) * 1.5708, turn = BIGGRID && Math.abs(thR) > 0.14 && st !== 4;
         const alongX = nh1 < 0.5, slot = 54 / n; if (n === 1 && st === 1) { if (alongX) { bw *= 1.14; bd *= 0.86; } else { bw *= 0.86; bd *= 1.14; } } if (n > 1) { if (alongX) bw = Math.min(bw, slot - 4); else bd = Math.min(bd, slot - 4); }
-        const ox = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
+        const ox0 = n === 1 || !alongX ? 0 : (k - (n - 1) / 2) * slot, oz0 = n === 1 || alongX ? 0 : (k - (n - 1) / 2) * slot, ox = turn ? ox0 * Math.cos(thR) + oz0 * Math.sin(thR) : ox0, oz = turn ? -ox0 * Math.sin(thR) + oz0 * Math.cos(thR) : oz0, f = fit(x + ox, z + oz, bw, bd); if (!f) continue;
         let w2 = bw * f[2], d2 = bd * f[2]; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) { w2 *= 0.7; d2 *= 0.7; if (obstBox(f[0], f[1], w2 / 2, d2 / 2)) continue; }       // something stands there already: a smaller block, or none
         const by = heightAt(f[0], f[1]), h2 = ht * (k ? 0.9 + ((s2 + k * 0.3) % 1) * 0.2 : 1);
         // a block that stands alone in its cell turns to face the nearest street (when its turned corners stay clear of the road and of its neighbours)
-        let rot = n === 1 && st !== 4 ? roadDirAt(f[0], f[1], 130) : 0; if (rot) { const rr = Math.hypot(w2, d2) / 2; if (nearRoad(f[0], f[1], rr - 3) || obstBox(f[0], f[1], rr, rr) || landmarkAt(f[0], f[1], rr)) rot = 0; }
-        push(boxes, f[0], f[1], [f[0], by - 8, f[1], w2, h2 + 8, d2, rot, pal[(((s2 < 0.7 ? nh2 : s3 + k * 0.29) * pal.length) | 0) % pal.length]]); addObst(f[0], f[1], w2, d2, rot, by - 8, by + h2); } }
+        let rot = n === 1 && st !== 4 ? roadDirAt(f[0], f[1], 130) : 0; if (!rot && turn) rot = thR; if (rot) { const rr = Math.hypot(w2, d2) / 2; if (nearRoad(f[0], f[1], rr - 3) || obstBox(f[0], f[1], rr, rr) || landmarkAt(f[0], f[1], rr)) rot = 0; }
+        // A block is not always a box (capable devices): an L with a lower wing, a tower on a podium, or a slab with two balcony stacks down its front.
+        // Every part stays inside the footprint that was tested and registered, so nothing new can touch a road or a neighbour.
+        const colr = pal[(((s2 < 0.7 ? nh2 : s3 + k * 0.29) * pal.length) | 0) % pal.length], sv = hash2(i * 2.3 + k * 1.1 + 5.5, j * 3.1 + 2.5), cr = Math.cos(rot), sr = Math.sin(rot);
+        const part = (px0, pz0, pw, ph, pd, c2, plain) => { const qx = f[0] + px0 * cr + pz0 * sr, qz = f[1] - px0 * sr + pz0 * cr; push(boxes, qx, qz, [qx, by - 8, qz, pw, ph + 8, pd, rot, c2, plain]); };
+        if (!BIGGRID || st === 4 || Math.min(w2, d2) < 16 || h2 < 9 || sv > 0.72) part(0, 0, w2, h2, d2, colr, 0);
+        else if (sv < 0.28) { const sg = sv < 0.14 ? 1 : -1; part(0, -d2 * 0.225, w2, h2, d2 * 0.55, colr, 0); part(sg * w2 * 0.275, d2 * 0.275, w2 * 0.45, Math.max(6, h2 * (0.62 + sv)), d2 * 0.45, colr, 0); }
+        else if (sv < 0.50 && h2 > 20) { part(0, 0, w2, Math.min(8, h2 * 0.3), d2, colr, 1); part(0, 0, w2 * 0.72, h2, d2 * 0.72, colr, 0); }
+        else { part(0, -d2 * 0.05, w2, h2, d2 * 0.9, colr, 0); for (const sx2 of [-0.27, 0.27]) part(sx2 * w2, d2 * 0.43, w2 * 0.2, Math.max(4, h2 - 3), d2 * 0.14, 0xe9e6de, 1); }
+        addObst(f[0], f[1], w2, d2, rot, by - 8, by + h2); } }
     if (sd < 0.75 && st !== 6) LP.push(x + (s2 - 0.5) * 40, y + 5 + ht * 0.5 * s3, z + (s3 - 0.5) * 40);
   }
   // small localities the satellite raster missed (desert kibbutzim, hilltop villages): a cluster of red-roofed houses at the listed point
@@ -232,7 +243,7 @@ function buildCities() {
   // What stands on the roofs, seen from low down (not on small phones): a tall block ends in a set-back top floor, sometimes with a mast; a lower one
   // carries its stair house and the white boiler tanks with their dark collectors that every Israeli roof has. Small plain boxes, drawn only near.
   if (BIGGRID) try { for (const [k, list] of boxes) { const out = [];
-      for (const b of list) { const sx = b[3], H = b[4], sz = b[5]; if (H < 9 || Math.min(sx, sz) < 10) continue;
+      for (const b of list) { const sx = b[3], H = b[4], sz = b[5]; if (b[8] || H < 9 || Math.min(sx, sz) < 10) continue;
         const R = rng(Math.round(Math.abs(b[0] * 13.7 + b[2] * 7.3)) + 1), ry = b[6] || 0, co = Math.cos(ry), si = Math.sin(ry), top = b[1] + H, at = (ox, oz, wd, ht, dp, colr) => out.push([b[0] + ox * co + oz * si, top, b[2] - ox * si + oz * co, wd, ht, dp, ry, colr]);
         if (H > 34) { at(0, 0, sx * 0.62, 4 + R() * 5, sz * 0.62, 0x8f959b); if (R() < 0.5) at((R() - 0.5) * sx * 0.3, (R() - 0.5) * sz * 0.3, 2.2, 7 + R() * 8, 2.2, 0x6f757c); }
         else { if (R() < 0.7) at((R() - 0.5) * sx * 0.5, (R() - 0.5) * sz * 0.5, 4.2, 2.8, 3.6, 0xb9b4a8); const nT = 1 + Math.floor(R() * 2); for (let i = 0; i < nT; i++) { const ox = (R() - 0.5) * (sx - 6), oz = (R() - 0.5) * (sz - 4); at(ox, oz, 1.3, 1.5, 1.3, 0xeeeeea); at(ox + 1.9, oz, 2.0, 0.5, 1.4, 0x2c3440); } } }
