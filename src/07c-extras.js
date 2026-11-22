@@ -140,6 +140,23 @@ function skinTraffic() {          // called once the other aircraft exist (they 
   AIT.forEach((a, i) => { const M = AC.models[i % 3 === 1 ? 'bizjet' : 'airliner'], c = M.g.clone(true); c.visible = true; const gi = M.g.children.indexOf(M.gear); if (gi >= 0) c.children[gi].visible = false;
     for (const l of M.land || []) { const li = M.g.children.indexOf(l); if (li >= 0) c.children[li].visible = false; } while (a.g.children.length) a.g.remove(a.g.children[0]); a.g.add(c); });
 }
+/**
+ * Ben Gurion is in use: every two minutes an airliner takes off from runway 26 and another comes down the approach to runway 12, lands and rolls out.
+ * They are the airliner model, wheels down, moved along a script (not flown, not solid). While the player is low near the field they stay away:
+ * the runway is his.
+ */
+const GLIFE = { on: false, dep: null, arr: null, t: 0 };
+function updateGroundLife(dt) {
+  if (!AC.models || !AC.models.airliner || RUNWAYS.length < 2) return;
+  if (!GLIFE.on) { GLIFE.on = true; for (const k of ['dep', 'arr']) { const c = AC.models.airliner.g.clone(true); c.visible = false; scene.add(c); GLIFE[k] = c; } }
+  GLIFE.t += dt; const T = 120, H = PLANES.airliner.gearH || 3.2, ap = AIRPORTS[RUNWAYS[0].ap], busy = Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < 3500 && S.ra < 900;
+  { const rw = RUNWAYS[0], t = GLIFE.t % T, g = GLIFE.dep, yaw = -rw.hdg * DEG; let s, y = 0, pit = 0, on = t < 72 && !busy;      // roll, rotate at 70 m/s, climb away
+    if (t < 27) s = 1.3 * t * t; else { const u = t - 27; s = 948 + 70 * u + 0.5 * 0.5 * Math.min(u, 20) * Math.min(u, 20) + Math.max(0, u - 20) * 10; y = 0.5 * 1.1 * Math.min(u, 12) * Math.min(u, 12) + Math.max(0, u - 12) * 13.2; pit = 0.19 * Math.min(1, u / 4); }
+    g.visible = on; if (on) { g.position.set(rw.tx + rw.dx * (150 + s), rw.elev + H + y, rw.tz + rw.dz * (150 + s)); g.rotation.set(pit, yaw, 0, 'YXZ'); } }
+  { const rw = RUNWAYS[1], t = (GLIFE.t + 60) % T, g = GLIFE.arr, yaw = -rw.hdg * DEG; let s, y = 0, pit = -0.03, on = t < 86 && !busy;      // four kilometres out on a three-degree path, a flare, a landing roll
+    if (t < 60) { s = -4000 + 70 * t; y = Math.max(0, (200 - s) * 0.0524); if (y < 12) { pit = 0.07; y *= 0.8; } } else { const u = t - 60, v = Math.max(8, 70 - 2.4 * u); s = 200 + (70 * 70 - v * v) / 4.8 + (v <= 8 ? (u - 25.8) * 8 : 0); pit = 0; }
+    g.visible = on; if (on) { g.position.set(rw.tx + rw.dx * s, rw.elev + H + y, rw.tz + rw.dz * s); g.rotation.set(pit, yaw, 0, 'YXZ'); } }
+}
 function buildSkyLife() {
   // balloons: a striped envelope and a basket
   { const prof = [[0.2, -9], [3.2, -7.4], [7.4, -3], [9, 1.5], [8.2, 5.6], [5.4, 8.4], [0.1, 9.6]].map(p => new THREE.Vector2(p[0], p[1])), env = new THREE.LatheGeometry(prof, 16), n = env.attributes.position.count, col = new Float32Array(n * 3);
@@ -184,7 +201,7 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
-  updateSkyLife(dt);
+  updateSkyLife(dt); if (run) updateGroundLife(dt);
   // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
   if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
     if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');

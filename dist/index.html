@@ -24,6 +24,7 @@
 html,body{overscroll-behavior:none;height:100%;margin:0;overflow:hidden;background:#06090d;color:var(--ink);font-family:var(--face);
   -webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
 #gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+#cloudIn{position:fixed;inset:0;pointer-events:none;opacity:0;background:#e8e8f2}
 #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse 75% 70% at 50% 46%, rgba(6,12,28,0) 55%, rgba(6,12,28,.32) 100%)} body.photo #vig{background:radial-gradient(ellipse 75% 70% at 50% 46%, rgba(6,12,28,0) 50%, rgba(6,12,28,.5) 100%)}
 #hud{position:fixed;inset:0;pointer-events:none;display:none}
 #hud button,#modeB,#map,#stick,#thrT,#card,#photoBar{pointer-events:auto}
@@ -303,6 +304,7 @@ details.sec summary small{margin-inline-start:auto;padding:2px 10px;border-radiu
 <body>
 <canvas id="gl"></canvas>
 <div id="vig"></div>
+<div id="cloudIn"></div>
 
 <div id="hud">
   <button id="menuB" aria-label="Menu" title="Menu">☰</button>
@@ -1723,12 +1725,21 @@ function buildRoads() {
   for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
     if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
   // traffic: light points that drive along the roads (headlights at night)
-  const n = 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);
+  const n = BIGGRID ? 900 : 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);          /* more cars on the roads where the device can take it: they are points */
   const cum = []; let tot = 0; for (const p of roadPaths) cum.push(tot += p.length);          // cars spread by road length
   for (let i = 0; i < n; i++) { const t = R() * tot; let lo = 0, hi = cum.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < t) lo = m + 1; else hi = m; } const p = roadPaths[lo]; cars.push({ p, s: R() * (p.length - 2), v: (R() < 0.5 ? -1 : 1) * (22 + R() * 12) / 45 }); }
   const tg = new THREE.BufferGeometry(), tc = new Float32Array(n * 3).fill(1); tg.setAttribute('position', new THREE.BufferAttribute(tp, 3)); tg.setAttribute('color', new THREE.BufferAttribute(tc, 3));
   traffic = { cars, pts: new THREE.Points(tg, clampPoints(new THREE.PointsMaterial({ size: 9, map: lightDot(), color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, fog: false }), 1.6, 9)) };
   traffic.pts.frustumCulled = false; scene.add(traffic.pts);
+}
+/** The freighters sail (they used to lie at anchor with a wake behind them): six metres a second along their heading, and a slow turn back when the
+    water ahead runs out or they are five kilometres from where they started. */
+const SHIPS = [];
+function updateShips(dt) {
+  for (const s of SHIPS) { const fx = -Math.sin(s.hdg), fz = -Math.cos(s.hdg), p = s.g.position; s.t = (s.t || 0) - dt;
+    if (s.t <= 0) { s.t = 3; const away = Math.hypot(p.x - s.x0, p.z - s.z0) > 5000 && (p.x - s.x0) * fx + (p.z - s.z0) * fz > 0, g = groundAt(p.x + fx * 700, p.z + fz * 700); if (away || !g.water || g.h > -6) s.want = s.hdg + Math.PI; }
+    const d = s.want - s.hdg; if (Math.abs(d) > 0.002) { s.hdg += Math.sign(d) * Math.min(Math.abs(d), 0.035 * dt); s.g.rotation.y = s.hdg; }
+    p.x += fx * 6 * dt; p.z += fz * 6 * dt; }
 }
 function updateTraffic(dt) {
   const a = traffic.pts.geometry.attributes.position, arr = a.array, ca = traffic.pts.geometry.attributes.color, col = ca.array, night = ENV.uLights.value > 0.3, cx = camera.position.x, cz = camera.position.z;
@@ -1877,7 +1888,7 @@ function buildDetails() {
     x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); return new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }); })();
   const hull = [lam(0x2c3e55), lam(0x7a2d2a), lam(0x1f2a33)], wht = lam(0xf2f2ee), box = [lam(0xc65b3a), lam(0x3c78a8), lam(0x6d9a4b)], R3 = rng(57);
   for (const [lo, la, hdg] of [[34.93, 32.87, 0.5], [34.90, 32.90, 0.7], [34.955, 32.845, 0.3], [34.60, 31.86, 1.1], [34.57, 31.90, 1.3], [34.50, 31.70, 0.2], [34.70, 32.12, 0], [34.74, 32.45, 0.1], [34.965, 29.50, 0.35], [34.955, 29.44, 0.4]]) {
-    const x = lon2x(lo), z = lat2z(la); if (!groundAt(x, z).water) continue; const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = hdg; scene.add(g);
+    const x = lon2x(lo), z = lat2z(la); if (!groundAt(x, z).water) continue; const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = hdg; scene.add(g); SHIPS.push({ g, x0: x, z0: z, hdg, want: hdg });
     // a hull with a pointed, flared bow and a rounded stern, a red boot line, a bridge with a funnel, rows of containers, and a foam wake behind
     { const hg = new THREE.BoxGeometry(30, 14, 190, 2, 1, 12), hp = hg.attributes.position; for (let k = 0; k < hp.count; k++) { const zz = hp.getZ(k), yy = hp.getY(k), bow = clamp((-zz - 55) / 40, 0, 1), st = clamp((zz - 80) / 15, 0, 1); hp.setX(k, hp.getX(k) * (1 - bow * bow * 0.96) * (1 - st * 0.35) * (yy < 0 ? 0.82 : 1)); if (bow > 0 && yy > 0) hp.setZ(k, zz - bow * 9); }
       hg.computeVertexNormals(); const h = new THREE.Mesh(hg, hull[(R3() * 3) | 0]); h.position.y = 4; g.add(h); const bl = new THREE.Mesh(new THREE.BoxGeometry(25.5, 2.2, 150), lam(0x8c2a22)); bl.position.set(0, -1.6, 12); g.add(bl); }
@@ -2542,12 +2553,27 @@ function puffTexture() {
     g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
   return new THREE.CanvasTexture(c);
 }
-const clouds = new THREE.Group(); let cloudMat = null, glare = null;
+const clouds = new THREE.Group(), CLOUDS = []; let cloudMat = null, glare = null;
+/**
+ * Inside a cloud. The puffs are flat cards that fade as the camera reaches them, so a cloud used to dissolve the moment one flew into it. Now the
+ * camera's place is tested against every cloud's body (as the shader draws it: drifting, grown in a storm), and inside one the view whitens to the
+ * cloud's own colour (`#cloudIn`, under the instruments): thin at the edge, nearly blind in the middle, clear again on the far side.
+ */
+function cloudAt(x, y, z) {
+  if (!cloudMat) return 0; const U = cloudMat.uniforms, sp = U.uSpan.value, dr = U.uDrift.value, gr = U.uGrow.value; let f = 0;
+  for (let i = 0; i < CLOUDS.length; i += 4) { const big = CLOUDS[i + 3], cy = CLOUDS[i + 1]; if (y < cy - 220 * big || y > cy + 640 * big) continue;
+    const cx = sp.x + (((CLOUDS[i] + dr - sp.x) % sp.y) + sp.y) % sp.y, dx = (x - cx) / (1000 * big * gr), dz = (z - CLOUDS[i + 2]) / (760 * big * gr), dy = (y - (cy + 170 * big)) / (430 * big), q = dx * dx + dz * dz + dy * dy; if (q < 1) f = Math.max(f, 1 - q * q); }
+  return f * clamp(U.uOp.value * 1.1, 0, 1);
+}
+function updateCloudIn() {
+  const el = document.getElementById('cloudIn'); if (!el) return; const p = camera.position, f = S.started ? cloudAt(p.x, p.y, p.z) : 0; updateCloudIn.f = lerp(updateCloudIn.f || 0, f, 0.12); const v = updateCloudIn.f;
+  if (v < 0.01) { if (el.style.opacity !== '0') el.style.opacity = '0'; return; } const c = cloudMat.uniforms.uCol.value, k = 232; el.style.background = 'rgb(' + Math.round(clamp(c.r, 0, 1) * k) + ',' + Math.round(clamp(c.g, 0, 1) * k) + ',' + Math.round(clamp(c.b, 0, 1) * (k + 10)) + ')'; el.style.opacity = (v * 0.93).toFixed(3);
+}
 function buildSkyObjects() {
   // Clouds: every puff of every cloud in one instanced, camera-facing mesh (one draw call instead of 180 sprites). A puff is lit on its sun side and
   // top and grey-blue underneath, the bases are flat, the rim glows toward a low sun, and puffs fade out as the camera flies into them.
   const NC = HIRES ? 110 : 54, PER = HIRES ? 10 : 7, R = rng(42), aC = new Float32Array(NC * PER * 4), aO = new Float32Array(NC * PER * 4); let n = 0;
-  for (let i = 0; i < NC; i++) { const cx = lerp(X0 - 8000, X1 + 8000, R()), cz = lerp(Z0, Z1, R() * R() * 0.9), cy = 1500 + R() * 1700, big = 0.7 + R() * R() * 1.6;     // more cloud in the north
+  for (let i = 0; i < NC; i++) { const cx = lerp(X0 - 8000, X1 + 8000, R()), cz = lerp(Z0, Z1, R() * R() * 0.9), cy = 1500 + R() * 1700, big = 0.7 + R() * R() * 1.6; CLOUDS.push(cx, cy, cz, big);     // more cloud in the north
     for (let k = 0; k < PER; k++) { const a = R() * 6.283, rr = Math.sqrt(R()) * 900 * big, up = R() * R() * 520 * big * (1 - rr / (1100 * big)), sz = (520 + R() * 620) * big * (1 - up / (1400 * big));
       aC[n * 4] = cx; aC[n * 4 + 1] = cy; aC[n * 4 + 2] = cz; aC[n * 4 + 3] = sz; aO[n * 4] = Math.cos(a) * rr; aO[n * 4 + 1] = up; aO[n * 4 + 2] = Math.sin(a) * rr * 0.7; aO[n * 4 + 3] = R(); n++; } }
   const cg = new THREE.InstancedBufferGeometry(); cg.index = new THREE.PlaneGeometry(1, 1).index; cg.setAttribute('position', new THREE.PlaneGeometry(1, 1).attributes.position); cg.setAttribute('uv', new THREE.PlaneGeometry(1, 1).attributes.uv);
@@ -4481,6 +4507,23 @@ function skinTraffic() {          // called once the other aircraft exist (they 
   AIT.forEach((a, i) => { const M = AC.models[i % 3 === 1 ? 'bizjet' : 'airliner'], c = M.g.clone(true); c.visible = true; const gi = M.g.children.indexOf(M.gear); if (gi >= 0) c.children[gi].visible = false;
     for (const l of M.land || []) { const li = M.g.children.indexOf(l); if (li >= 0) c.children[li].visible = false; } while (a.g.children.length) a.g.remove(a.g.children[0]); a.g.add(c); });
 }
+/**
+ * Ben Gurion is in use: every two minutes an airliner takes off from runway 26 and another comes down the approach to runway 12, lands and rolls out.
+ * They are the airliner model, wheels down, moved along a script (not flown, not solid). While the player is low near the field they stay away:
+ * the runway is his.
+ */
+const GLIFE = { on: false, dep: null, arr: null, t: 0 };
+function updateGroundLife(dt) {
+  if (!AC.models || !AC.models.airliner || RUNWAYS.length < 2) return;
+  if (!GLIFE.on) { GLIFE.on = true; for (const k of ['dep', 'arr']) { const c = AC.models.airliner.g.clone(true); c.visible = false; scene.add(c); GLIFE[k] = c; } }
+  GLIFE.t += dt; const T = 120, H = PLANES.airliner.gearH || 3.2, ap = AIRPORTS[RUNWAYS[0].ap], busy = Math.hypot(S.pos.x - ap.x, S.pos.z - ap.z) < 3500 && S.ra < 900;
+  { const rw = RUNWAYS[0], t = GLIFE.t % T, g = GLIFE.dep, yaw = -rw.hdg * DEG; let s, y = 0, pit = 0, on = t < 72 && !busy;      // roll, rotate at 70 m/s, climb away
+    if (t < 27) s = 1.3 * t * t; else { const u = t - 27; s = 948 + 70 * u + 0.5 * 0.5 * Math.min(u, 20) * Math.min(u, 20) + Math.max(0, u - 20) * 10; y = 0.5 * 1.1 * Math.min(u, 12) * Math.min(u, 12) + Math.max(0, u - 12) * 13.2; pit = 0.19 * Math.min(1, u / 4); }
+    g.visible = on; if (on) { g.position.set(rw.tx + rw.dx * (150 + s), rw.elev + H + y, rw.tz + rw.dz * (150 + s)); g.rotation.set(pit, yaw, 0, 'YXZ'); } }
+  { const rw = RUNWAYS[1], t = (GLIFE.t + 60) % T, g = GLIFE.arr, yaw = -rw.hdg * DEG; let s, y = 0, pit = -0.03, on = t < 86 && !busy;      // four kilometres out on a three-degree path, a flare, a landing roll
+    if (t < 60) { s = -4000 + 70 * t; y = Math.max(0, (200 - s) * 0.0524); if (y < 12) { pit = 0.07; y *= 0.8; } } else { const u = t - 60, v = Math.max(8, 70 - 2.4 * u); s = 200 + (70 * 70 - v * v) / 4.8 + (v <= 8 ? (u - 25.8) * 8 : 0); pit = 0; }
+    g.visible = on; if (on) { g.position.set(rw.tx + rw.dx * s, rw.elev + H + y, rw.tz + rw.dz * s); g.rotation.set(pit, yaw, 0, 'YXZ'); } }
+}
 function buildSkyLife() {
   // balloons: a striped envelope and a basket
   { const prof = [[0.2, -9], [3.2, -7.4], [7.4, -3], [9, 1.5], [8.2, 5.6], [5.4, 8.4], [0.1, 9.6]].map(p => new THREE.Vector2(p[0], p[1])), env = new THREE.LatheGeometry(prof, 16), n = env.attributes.position.count, col = new Float32Array(n * 3);
@@ -4525,7 +4568,7 @@ function updateExtras(dt, run, moved) {
       o.position.set(arr[i * 3] - uz * off, arr[i * 3 + 1] - 1.0, arr[i * 3 + 2] + ux * off);          /* the light dots ride 3.8 m over the ground, the road surface 2.2 to 3 m */ o.rotation.set(0, Math.atan2(-ux, -uz), 0); o.scale.setScalar(i % 9 === 0 ? 1.35 : 1); o.updateMatrix(); m.setMatrixAt(n++, o.matrix); if (lights < 0.3) arr[i * 3 + 1] -= 40; }
     m.count = n; m.instanceMatrix.needsUpdate = true; }
   if (!run) return;
-  updateSkyLife(dt);
+  updateSkyLife(dt); if (run) updateGroundLife(dt);
   // daring flying is answered: a low pass, a pass between towers, skimming the sea (one short message with a chime, at most every 20 s)
   if (!S.onGround && !S.crashed && !S.land && S.airTime > 15 && TNOW - (XT.dareT || -99) > 20) { const fast = S.V > PL.vs * 1.25, wet = groundAt(S.pos.x, S.pos.z).water; let msg = '';
     if (fast && S.ra > 8 && obstacleTop(S.pos.x, S.pos.z) > S.pos.y + 12 && lcAt(S.pos.x, S.pos.z) !== 9 && urbanAt(S.pos.x, S.pos.z) > 0.05) msg = L('Between the towers!', 'בין המגדלים!');
@@ -5129,8 +5172,9 @@ function loop(now) {
   if ((run || !S.started) && cloudMat) cloudMat.uniforms.uDrift.value += 6 * dt;
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far * DET.far; }   // distance cull, to the nearest edge of each bucket
-  updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
+  updateScatter(); if (run || !S.started) { updateTrains(sdt); updateShips(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
   updateExtras(dt, run, run || !S.started); updateWeapons(sdt, run);
+  updateCloudIn();
   if (PERF.on) { PERF.acc(performance.now() - pT); if (PERF.busy) return; }          /* ?perf=1: the measurement draws its own frames */
   renderFrame();
 }

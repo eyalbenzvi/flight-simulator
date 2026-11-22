@@ -362,8 +362,9 @@ function loop(now) {
   if ((run || !S.started) && cloudMat) cloudMat.uniforms.uDrift.value += 6 * dt;
   if (!loop.cull || loop.cullN !== cityMeshes.length + LMK.meshes.length + SITE.meshes.length) { loop.cull = [...cityMeshes, ...LMK.meshes, ...SITE.meshes]; loop.cullN = loop.cull.length; }      // one list, not a new one every frame
   for (const m of loop.cull) { const u = m.userData, dx = Math.max(0, Math.abs(camera.position.x - u.x) - (u.half || 0)), dz = Math.max(0, Math.abs(camera.position.z - u.z) - (u.half || 0)); m.visible = Math.hypot(dx, dz) < u.far * DET.far; }   // distance cull, to the nearest edge of each bucket
-  updateScatter(); if (run || !S.started) { updateTrains(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
+  updateScatter(); if (run || !S.started) { updateTrains(sdt); updateShips(sdt); updateAIT(sdt); updateWeather(sdt); todTick(sdt); updateTraffic(sdt); for (const h of turbines) h.rotation.z += h.userData.v * sdt; }
   updateExtras(dt, run, run || !S.started); updateWeapons(sdt, run);
+  updateCloudIn();
   if (PERF.on) { PERF.acc(performance.now() - pT); if (PERF.busy) return; }          /* ?perf=1: the measurement draws its own frames */
   renderFrame();
 }

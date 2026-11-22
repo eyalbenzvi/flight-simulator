@@ -526,12 +526,21 @@ function buildRoads() {
   for (const r of roadLines().filter(r => /^[1-9][0-9]{0,2}$/.test(r.ref) && r.D.length > 40).sort((a, b) => b.D.length - a.D.length)) { const [x, z] = r.D[r.D.length >> 1];
     if (!ROADLBL.some(o => o.n === r.ref && Math.hypot(o.x - x, o.z - z) < 9000)) ROADLBL.push({ x, z, n: r.ref, cls: r.cls === 2 ? 2 : 1 }); }
   // traffic: light points that drive along the roads (headlights at night)
-  const n = 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);
+  const n = BIGGRID ? 900 : 560, R = rng(99), cars = [], tp = new Float32Array(n * 3);          /* more cars on the roads where the device can take it: they are points */
   const cum = []; let tot = 0; for (const p of roadPaths) cum.push(tot += p.length);          // cars spread by road length
   for (let i = 0; i < n; i++) { const t = R() * tot; let lo = 0, hi = cum.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < t) lo = m + 1; else hi = m; } const p = roadPaths[lo]; cars.push({ p, s: R() * (p.length - 2), v: (R() < 0.5 ? -1 : 1) * (22 + R() * 12) / 45 }); }
   const tg = new THREE.BufferGeometry(), tc = new Float32Array(n * 3).fill(1); tg.setAttribute('position', new THREE.BufferAttribute(tp, 3)); tg.setAttribute('color', new THREE.BufferAttribute(tc, 3));
   traffic = { cars, pts: new THREE.Points(tg, clampPoints(new THREE.PointsMaterial({ size: 9, map: lightDot(), color: 0xffffff, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, fog: false }), 1.6, 9)) };
   traffic.pts.frustumCulled = false; scene.add(traffic.pts);
+}
+/** The freighters sail (they used to lie at anchor with a wake behind them): six metres a second along their heading, and a slow turn back when the
+    water ahead runs out or they are five kilometres from where they started. */
+const SHIPS = [];
+function updateShips(dt) {
+  for (const s of SHIPS) { const fx = -Math.sin(s.hdg), fz = -Math.cos(s.hdg), p = s.g.position; s.t = (s.t || 0) - dt;
+    if (s.t <= 0) { s.t = 3; const away = Math.hypot(p.x - s.x0, p.z - s.z0) > 5000 && (p.x - s.x0) * fx + (p.z - s.z0) * fz > 0, g = groundAt(p.x + fx * 700, p.z + fz * 700); if (away || !g.water || g.h > -6) s.want = s.hdg + Math.PI; }
+    const d = s.want - s.hdg; if (Math.abs(d) > 0.002) { s.hdg += Math.sign(d) * Math.min(Math.abs(d), 0.035 * dt); s.g.rotation.y = s.hdg; }
+    p.x += fx * 6 * dt; p.z += fz * 6 * dt; }
 }
 function updateTraffic(dt) {
   const a = traffic.pts.geometry.attributes.position, arr = a.array, ca = traffic.pts.geometry.attributes.color, col = ca.array, night = ENV.uLights.value > 0.3, cx = camera.position.x, cz = camera.position.z;
@@ -680,7 +689,7 @@ function buildDetails() {
     x.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); return new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }); })();
   const hull = [lam(0x2c3e55), lam(0x7a2d2a), lam(0x1f2a33)], wht = lam(0xf2f2ee), box = [lam(0xc65b3a), lam(0x3c78a8), lam(0x6d9a4b)], R3 = rng(57);
   for (const [lo, la, hdg] of [[34.93, 32.87, 0.5], [34.90, 32.90, 0.7], [34.955, 32.845, 0.3], [34.60, 31.86, 1.1], [34.57, 31.90, 1.3], [34.50, 31.70, 0.2], [34.70, 32.12, 0], [34.74, 32.45, 0.1], [34.965, 29.50, 0.35], [34.955, 29.44, 0.4]]) {
-    const x = lon2x(lo), z = lat2z(la); if (!groundAt(x, z).water) continue; const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = hdg; scene.add(g);
+    const x = lon2x(lo), z = lat2z(la); if (!groundAt(x, z).water) continue; const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = hdg; scene.add(g); SHIPS.push({ g, x0: x, z0: z, hdg, want: hdg });
     // a hull with a pointed, flared bow and a rounded stern, a red boot line, a bridge with a funnel, rows of containers, and a foam wake behind
     { const hg = new THREE.BoxGeometry(30, 14, 190, 2, 1, 12), hp = hg.attributes.position; for (let k = 0; k < hp.count; k++) { const zz = hp.getZ(k), yy = hp.getY(k), bow = clamp((-zz - 55) / 40, 0, 1), st = clamp((zz - 80) / 15, 0, 1); hp.setX(k, hp.getX(k) * (1 - bow * bow * 0.96) * (1 - st * 0.35) * (yy < 0 ? 0.82 : 1)); if (bow > 0 && yy > 0) hp.setZ(k, zz - bow * 9); }
       hg.computeVertexNormals(); const h = new THREE.Mesh(hg, hull[(R3() * 3) | 0]); h.position.y = 4; g.add(h); const bl = new THREE.Mesh(new THREE.BoxGeometry(25.5, 2.2, 150), lam(0x8c2a22)); bl.position.set(0, -1.6, 12); g.add(bl); }

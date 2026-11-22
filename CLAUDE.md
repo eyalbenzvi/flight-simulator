@@ -321,6 +321,17 @@ What was done with that (round eight, softening):
     over the bomber's fuselage, wing and tailplane. The airliner and the business jet also have a wing-to-body fairing under the cabin and faint
     ring and plate joints in the livery (`liveryMat`). The aerobatic plane kept its own paint. From the usual chase distance the skin is subtle; it
     reads close up and in the cards. Any surface from `planform` that takes a map needs `skinUV` (its raw coordinates are metres).
+- Life on the ground and at sea (all scripted, none solid, nothing to tap):
+  - Ben Gurion is in use (`GLIFE`, `updateGroundLife` in `src/07c-extras.js`): every two minutes an airliner (a clone of the model, wheels down) rolls
+    from runway 26, rotates at 70 m/s and climbs out, and another comes down a three-degree path to runway 12, flares, lands and rolls out. Both are
+    hidden while the player is within 3.5 km of the field and under 900 m: the runway is his. Checked by sampling the scripts (on the centreline,
+    right heights, hidden when due).
+  - The ten freighters sail (`SHIPS`, `updateShips` in `src/03-world.js`): 6 m/s along their heading, a slow turn back when the water ahead shoals
+    or 5 km from their start.
+  - 900 cars instead of 560 on `BIGGRID` devices (they are points).
+- Inside a cloud (`CLOUDS`, `cloudAt`, `updateCloudIn` in `src/04-sky.js`, `#cloudIn` under the HUD): the camera's place is tested against every
+  cloud's body (with the shader's drift and storm growth) and inside one the view whitens to the cloud's colour, thin at the edge and nearly blind
+  in the middle. It is an overlay, not a volume: the aircraft whitens with the world, and a saved photo does not include it.
 - Looked at and left as they are: the horizon (already soft), city lights at night, road edges (the texture already has a pale shoulder), the
   list of hand-made landmarks (dozens per city already).
 - Not done, and why: rounded terrain between grid points (the drawn mesh must stay equal to `triHeight`, which everything stands on); real elevation data (a project of its own: data to fetch, then every airfield, site, road, river and the autoland to refit).

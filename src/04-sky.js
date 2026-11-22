@@ -32,12 +32,27 @@ function puffTexture() {
     g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); }
   return new THREE.CanvasTexture(c);
 }
-const clouds = new THREE.Group(); let cloudMat = null, glare = null;
+const clouds = new THREE.Group(), CLOUDS = []; let cloudMat = null, glare = null;
+/**
+ * Inside a cloud. The puffs are flat cards that fade as the camera reaches them, so a cloud used to dissolve the moment one flew into it. Now the
+ * camera's place is tested against every cloud's body (as the shader draws it: drifting, grown in a storm), and inside one the view whitens to the
+ * cloud's own colour (`#cloudIn`, under the instruments): thin at the edge, nearly blind in the middle, clear again on the far side.
+ */
+function cloudAt(x, y, z) {
+  if (!cloudMat) return 0; const U = cloudMat.uniforms, sp = U.uSpan.value, dr = U.uDrift.value, gr = U.uGrow.value; let f = 0;
+  for (let i = 0; i < CLOUDS.length; i += 4) { const big = CLOUDS[i + 3], cy = CLOUDS[i + 1]; if (y < cy - 220 * big || y > cy + 640 * big) continue;
+    const cx = sp.x + (((CLOUDS[i] + dr - sp.x) % sp.y) + sp.y) % sp.y, dx = (x - cx) / (1000 * big * gr), dz = (z - CLOUDS[i + 2]) / (760 * big * gr), dy = (y - (cy + 170 * big)) / (430 * big), q = dx * dx + dz * dz + dy * dy; if (q < 1) f = Math.max(f, 1 - q * q); }
+  return f * clamp(U.uOp.value * 1.1, 0, 1);
+}
+function updateCloudIn() {
+  const el = document.getElementById('cloudIn'); if (!el) return; const p = camera.position, f = S.started ? cloudAt(p.x, p.y, p.z) : 0; updateCloudIn.f = lerp(updateCloudIn.f || 0, f, 0.12); const v = updateCloudIn.f;
+  if (v < 0.01) { if (el.style.opacity !== '0') el.style.opacity = '0'; return; } const c = cloudMat.uniforms.uCol.value, k = 232; el.style.background = 'rgb(' + Math.round(clamp(c.r, 0, 1) * k) + ',' + Math.round(clamp(c.g, 0, 1) * k) + ',' + Math.round(clamp(c.b, 0, 1) * (k + 10)) + ')'; el.style.opacity = (v * 0.93).toFixed(3);
+}
 function buildSkyObjects() {
   // Clouds: every puff of every cloud in one instanced, camera-facing mesh (one draw call instead of 180 sprites). A puff is lit on its sun side and
   // top and grey-blue underneath, the bases are flat, the rim glows toward a low sun, and puffs fade out as the camera flies into them.
   const NC = HIRES ? 110 : 54, PER = HIRES ? 10 : 7, R = rng(42), aC = new Float32Array(NC * PER * 4), aO = new Float32Array(NC * PER * 4); let n = 0;
-  for (let i = 0; i < NC; i++) { const cx = lerp(X0 - 8000, X1 + 8000, R()), cz = lerp(Z0, Z1, R() * R() * 0.9), cy = 1500 + R() * 1700, big = 0.7 + R() * R() * 1.6;     // more cloud in the north
+  for (let i = 0; i < NC; i++) { const cx = lerp(X0 - 8000, X1 + 8000, R()), cz = lerp(Z0, Z1, R() * R() * 0.9), cy = 1500 + R() * 1700, big = 0.7 + R() * R() * 1.6; CLOUDS.push(cx, cy, cz, big);     // more cloud in the north
     for (let k = 0; k < PER; k++) { const a = R() * 6.283, rr = Math.sqrt(R()) * 900 * big, up = R() * R() * 520 * big * (1 - rr / (1100 * big)), sz = (520 + R() * 620) * big * (1 - up / (1400 * big));
       aC[n * 4] = cx; aC[n * 4 + 1] = cy; aC[n * 4 + 2] = cz; aC[n * 4 + 3] = sz; aO[n * 4] = Math.cos(a) * rr; aO[n * 4 + 1] = up; aO[n * 4 + 2] = Math.sin(a) * rr * 0.7; aO[n * 4 + 3] = R(); n++; } }
   const cg = new THREE.InstancedBufferGeometry(); cg.index = new THREE.PlaneGeometry(1, 1).index; cg.setAttribute('position', new THREE.PlaneGeometry(1, 1).attributes.position); cg.setAttribute('uv', new THREE.PlaneGeometry(1, 1).attributes.uv);
